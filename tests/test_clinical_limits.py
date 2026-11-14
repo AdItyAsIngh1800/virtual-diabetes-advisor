@@ -22,7 +22,7 @@ from app.core.exceptions import ClinicalLimitError
 
 STATUSES: tuple[DiabetesStatus, ...] = get_args(DiabetesStatus)
 KINDS: tuple[GlucoseLimitKind, ...] = get_args(GlucoseLimitKind)
-SOURCE_TAGS = ("ADA-2", "ADA-6", "ADA-13", "TIR", "IHSG")
+SOURCE_TAGS = ("ADA-2", "ADA-6", "ADA-13", "ADA-13-2026", "TIR", "IHSG")
 DEFAULT_BAND = 0.05  # mirrors Settings.pre_breach_band default
 
 
@@ -35,8 +35,8 @@ DEFAULT_BAND = 0.05  # mirrors Settings.pre_breach_band default
         ("diabetes", "fasting_high", 130, 100, 180),
         ("diabetes", "post_meal_high", 180, 140, 250),
         ("diabetes", "low", 70, 70, 80),
-        ("no_diabetes", "fasting_high", 100, 100, 125),
-        ("no_diabetes", "post_meal_high", 140, 140, 199),
+        ("no_diabetes", "fasting_high", 112, 100, 125),
+        ("no_diabetes", "post_meal_high", 160, 140, 199),
         ("no_diabetes", "low", 70, 70, 70),
     ],
 )

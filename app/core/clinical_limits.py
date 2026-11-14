@@ -16,6 +16,11 @@ Sources (abbreviations used in the comments below):
             Standards of Care in Diabetes-2025." Diabetes Care 2025;48(Suppl. 1).
     ADA-13: American Diabetes Association. "13. Older Adults: Standards of Care in
             Diabetes-2025." Diabetes Care 2025;48(Suppl. 1).
+    ADA-13-2026: ADA Professional Practice Committee for Diabetes. "13. Older
+            Adults: Standards of Care in Diabetes-2026." Diabetes Care
+            2026;49(Suppl. 1):S277-S296. doi:10.2337/dc26-S013. Used for the
+            older-adult health-status categories (Table 13.2), checked against the
+            published text; the 2025 edition could not be retrieved to re-verify.
     TIR:    Battelino T, et al. "Clinical Targets for Continuous Glucose Monitoring
             Data Interpretation: Recommendations From the International Consensus
             on Time in Range." Diabetes Care 2019;42(8):1593-1603.
@@ -55,6 +60,24 @@ HYPO_LEVEL_2_MG_DL = 54.0
 PREPRANDIAL_TARGET_LOW_DM_MG_DL = 80.0
 
 # ---------------------------------------------------------------------------
+# Demographics
+# ---------------------------------------------------------------------------
+
+# ADA-13: "older adults" are people with diabetes aged >= 65 years; Table 13.1 gives
+# them individualised (often relaxed) glycaemic goals and prioritises avoiding
+# hypoglycaemia. Used by the threshold engine's bounded age adjustment (R2).
+OLDER_ADULT_MIN_AGE_YEARS = 65
+# ADA-13-2026 Table 13.2: "complex/intermediate" health is defined by *multiple*
+# coexisting chronic illnesses (or >= 2 ADL impairments, or mild-moderate cognitive
+# impairment); the table footnote defines "multiple" as at least three.
+COMPLEX_HEALTH_MIN_CONDITIONS = 3
+# ADA-13-2026 Table 13.2: fasting/preprandial goal 90-150 mg/dL for older adults with
+# complex/intermediate health (healthy older adults: 80-130, i.e. the standard goal).
+COMPLEX_HEALTH_FASTING_LOW_MG_DL = 90.0
+# ADA-13-2026 Table 13.2: upper end of the complex/intermediate fasting goal above.
+COMPLEX_HEALTH_FASTING_HIGH_MG_DL = 150.0
+
+# ---------------------------------------------------------------------------
 # Adults with diabetes (upper limits)
 # ---------------------------------------------------------------------------
 
@@ -82,6 +105,11 @@ NORMAL_FASTING_MAX_MG_DL = 100.0
 # ADA-2: impaired fasting glucose is 100-125 mg/dL; >= 126 mg/dL meets the diagnostic
 # criterion for diabetes. A non-diabetic fasting limit never reaches the diagnostic cut.
 IFG_MAX_MG_DL = 125.0
+# ADA-2 range 100-125 mg/dL (above). DESIGN CHOICE, not an ADA value: the base for
+# people without diabetes sits near the middle of the cited range (midpoint 112.5,
+# rounded down) instead of on its floor, so the risk-model tier has room to tighten
+# it toward the floor (R2). The clamp keeps every personalised value in 100-125.
+NO_DM_FASTING_BASE_MG_DL = 112.0
 # ADA-2: 2-h plasma glucose during a 75-g OGTT < 140 mg/dL is normal. PROXY: ADA
 # gives no post-meal target for people without diabetes; the team agreed (2026-11-15)
 # to use this diagnostic OGTT cut-off as the post-meal base. Also the tightest
@@ -91,6 +119,11 @@ OGTT_2H_NORMAL_MAX_MG_DL = 140.0
 # is diagnostic for diabetes. PROXY as above: hard max for the non-diabetic
 # post-meal limit.
 IGT_MAX_MG_DL = 199.0
+# ADA-2 2-h OGTT range 140-199 mg/dL (above, used as proxy). DESIGN CHOICE, not an
+# ADA value: the post-meal base for people without diabetes sits inside the range at
+# 160 (below the 169.5 midpoint, staying closer to normal), so the risk tier can
+# tighten it toward the 140 floor (R2). The clamp keeps every value in 140-199.
+NO_DM_POST_MEAL_BASE_MG_DL = 160.0
 
 
 class GlucoseLimit(BaseModel):
@@ -179,7 +212,7 @@ _LIMITS: tuple[GlucoseLimit, ...] = (
         status="no_diabetes",
         kind="fasting_high",
         direction="upper",
-        base_mg_dl=NORMAL_FASTING_MAX_MG_DL,
+        base_mg_dl=NO_DM_FASTING_BASE_MG_DL,
         hard_min_mg_dl=NORMAL_FASTING_MAX_MG_DL,
         hard_max_mg_dl=IFG_MAX_MG_DL,
         source="ADA Standards of Care 2025, Sec. 2 (FPG criteria)",
@@ -188,7 +221,7 @@ _LIMITS: tuple[GlucoseLimit, ...] = (
         status="no_diabetes",
         kind="post_meal_high",
         direction="upper",
-        base_mg_dl=OGTT_2H_NORMAL_MAX_MG_DL,
+        base_mg_dl=NO_DM_POST_MEAL_BASE_MG_DL,
         hard_min_mg_dl=OGTT_2H_NORMAL_MAX_MG_DL,
         hard_max_mg_dl=IGT_MAX_MG_DL,
         source="ADA Standards of Care 2025, Sec. 2 (2-h OGTT criteria, used as proxy)",
