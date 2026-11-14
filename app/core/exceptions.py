@@ -33,3 +33,11 @@ class ClinicalLimitError(DiabetesAdvisorError):
 
 class AuditLogImmutableError(DiabetesAdvisorError):
     """Raised when code tries to update or delete an append-only audit row (R5)."""
+
+
+class ThresholdComputationError(DiabetesAdvisorError):
+    """Raised when a personal threshold cannot be computed or applied (R2/R3).
+
+    Examples: a reading needs a limit the user has no threshold for yet, or the
+    inputs to a revision are inconsistent (a previous threshold for another limit).
+    """
