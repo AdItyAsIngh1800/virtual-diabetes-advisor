@@ -51,7 +51,8 @@ class Settings(BaseSettings):
         public_base_url: Public HTTPS URL of this API (webhook callback / media links).
             Optional until Phase 5 webhook setup; read it via
             :meth:`require_public_base_url` there.
-        anthropic_api_key: API key for the Claude-backed help chat.
+        anthropic_api_key: API key for the Claude-backed help chat. Optional until
+            Phase 7; read it via :meth:`require_anthropic_api_key` there.
         pre_breach_band: Fraction of a limit that defines the pre-breach band (R3).
         advisory_cooldown_hours: Minimum hours between repeat advisories (R3 de-dup).
         log_level: Root log level.
@@ -83,7 +84,9 @@ class Settings(BaseSettings):
     # Optional: only the Phase 5 webhook/media setup needs a public URL, so local
     # dev, tests and batch jobs must start without one.
     public_base_url: HttpUrl | None = None
-    anthropic_api_key: SecretStr
+    # Optional: only the Phase 7 help chat calls Claude; read it via
+    # require_anthropic_api_key() there.
+    anthropic_api_key: SecretStr | None = None
 
     # --- Threshold engine / advisory behaviour ---------------------------------
     # R3: pre-breach band. 0.05 => warn when a reading is within 5% of a limit
@@ -116,10 +119,10 @@ class Settings(BaseSettings):
             raise ValueError("GRAPH_API_VERSION must look like 'v21.0' or '21.0'")
         return f"v{match.group(1)}.{match.group(2)}"
 
-    @field_validator("public_base_url", mode="before")
+    @field_validator("public_base_url", "anthropic_api_key", mode="before")
     @classmethod
-    def _blank_url_is_unset(cls, value: object) -> object:
-        """Treat a blank ``PUBLIC_BASE_URL=`` line in ``.env`` as not set.
+    def _blank_is_unset(cls, value: object) -> object:
+        """Treat a blank optional line in ``.env`` (e.g. ``PUBLIC_BASE_URL=``) as not set.
 
         Args:
             value: Raw value from the environment.
@@ -157,6 +160,24 @@ class Settings(BaseSettings):
                 "PUBLIC_BASE_URL is required for WhatsApp webhook setup but is not set"
             )
         return str(self.public_base_url).rstrip("/")
+
+    def require_anthropic_api_key(self) -> SecretStr:
+        """Return the Anthropic API key, failing loudly if it is not configured.
+
+        Call this from the Phase 7 help chat when building the Claude client. The
+        key stays wrapped; unwrap it with ``get_secret_value()`` only at that point.
+
+        Returns:
+            The key as a :class:`pydantic.SecretStr`.
+
+        Raises:
+            ConfigurationError: If ``ANTHROPIC_API_KEY`` is not set.
+        """
+        if self.anthropic_api_key is None:
+            raise ConfigurationError(
+                "ANTHROPIC_API_KEY is required for the help chat but is not set"
+            )
+        return self.anthropic_api_key
 
 
 def load_settings(env_file: Path | None = ENV_FILE) -> Settings:
