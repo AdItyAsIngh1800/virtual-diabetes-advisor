@@ -17,3 +17,15 @@ class DataValidationError(DiabetesAdvisorError):
 
 class ModelNotTrainedError(DiabetesAdvisorError):
     """Raised when the risk model artifact is missing and inference is requested."""
+
+
+class ConfigurationError(DiabetesAdvisorError):
+    """Raised when required settings are missing or invalid.
+
+    The message names the offending variables only, never their values, so it is
+    safe to log even when the variable holds a secret.
+    """
+
+
+class ClinicalLimitError(DiabetesAdvisorError):
+    """Raised when a clinical limit is requested that has no cited source."""
