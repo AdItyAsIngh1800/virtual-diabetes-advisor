@@ -77,7 +77,7 @@ UNSCORED_MODEL_VERSION: Final = "unscored"
 # Demographic adjustment (R2)
 # ---------------------------------------------------------------------------
 
-# ADA-13-2026 Table 13.2 (constants in clinical_limits): healthy older adults keep the
+# ADA-13 (2026) Table 13.2 (constants in clinical_limits): healthy older adults keep the
 # standard 80-130 fasting goal, so they get no adjustment. Older adults with
 # complex/intermediate health have a 90-150 goal. Our category comes from a survey
 # proxy (see COMPLEX_HEALTH_PROXY_FIELDS), so the fasting limit relaxes only half-way
@@ -95,13 +95,14 @@ _COMPLEX_OLDER_ADULT_ADJ_MG_DL: Final[Mapping[GlucoseLimitKind, Decimal]] = Mapp
         "low": Decimal(5),
     }
 )
-# PROXY for ADA-13-2026 "complex/intermediate" health (multiple = at least 3 coexisting
+# PROXY for ADA-13 (2026) Table 13.2 "complex/intermediate" health (multiple = at least 3 coexisting
 # chronic illnesses, or >= 2 ADL impairments, or cognitive impairment) built from the
 # BRFSS answers we hold. Team decision 2026-11-15. Limits of the proxy: hypertension,
 # myocardial infarction (here: coronary disease or heart attack) and stroke are on
-# ADA's example list; high cholesterol is not; difficulty walking is a functional
-# limitation standing in for the ADL criterion. Unknown answers (None) count as "no",
-# so an incomplete profile falls back to the standard (stricter) targets.
+# the Table 13.2 footnote's example list; high cholesterol is not; difficulty walking
+# is a functional limitation standing in for the ADL criterion. Unknown answers
+# (None) count as "no", so an incomplete profile falls back to the standard (stricter)
+# targets.
 COMPLEX_HEALTH_PROXY_FIELDS: Final[tuple[str, ...]] = (
     "high_bp",
     "high_chol",
@@ -109,8 +110,9 @@ COMPLEX_HEALTH_PROXY_FIELDS: Final[tuple[str, ...]] = (
     "stroke",
     "diff_walk",
 )
-# ADA Standards of Care 2025 set no sex-specific glycaemic goals, so the sex term is 0
-# for both codes. It is kept as an explicit term so the formula's shape matches the
+# ADA Standards of Care 2026: no sex-specific glycaemic goals in Sec. 13 Table 13.2
+# (checked); Sec. 6 is UNVERIFIED for 2026 (full text not retrievable). So the sex
+# term is 0 for both codes. It is kept as an explicit term so the formula's shape matches the
 # spec and a cited value can be added in one place.
 _SEX_ADJ_MG_DL: Final[Mapping[int, Decimal]] = MappingProxyType({0: _ZERO, 1: _ZERO})
 # Bounds on the *total* demographic term, per direction. Demographics only ever
@@ -134,7 +136,7 @@ _DEMO_ADJ_BOUNDS: Final[Mapping[LimitDirection, tuple[Decimal, Decimal]]] = Mapp
 # clamp floor by this fraction of (base - hard_min): low stays at the base, moderate
 # goes half-way, high reaches the floor (fasting 112 -> 106 -> 100, post-meal
 # 160 -> 150 -> 140). Bound: the fraction is at most 1, so this term alone can never
-# go below the cited floor (ADA-2 normal fasting / 2-h OGTT values).
+# go below the cited floor (ADA 2026 Sec. 2 Table 2.2: normal fasting / 2-h OGTT values).
 RISK_TIGHTENING_FRACTION: Final[Mapping[RiskTier, Decimal]] = MappingProxyType(
     {"low": _ZERO, "moderate": Decimal("0.5"), "high": Decimal(1)}
 )
@@ -231,7 +233,7 @@ class ThresholdInputs(BaseModel):
 
     @property
     def is_complex_older_adult(self) -> bool:
-        """Whether ADA-13's complex/intermediate older-adult goals apply (proxy).
+        """Whether ADA 2026 Table 13.2's complex/intermediate older-adult goals apply (proxy).
 
         Returns:
             ``True`` for people with diabetes aged >= 65 with >= 3 proxy conditions.
@@ -550,9 +552,9 @@ def demographic_adjustment(limit: GlucoseLimit, inputs: ThresholdInputs) -> Deci
 
     The age term applies only to older adults with diabetes whose profile indicates
     complex/intermediate health (:attr:`ThresholdInputs.is_complex_older_adult`).
-    Healthy older adults keep the standard targets (ADA-13-2026 Table 13.2), and
-    the diagnostic cut-offs used for people without diabetes (ADA-2) do not change
-    with age.
+    Healthy older adults keep the standard targets (ADA 2026 Table 13.2), and
+    the diagnostic cut-offs used for people without diabetes (ADA 2026 Tables 2.1,
+    2.2) do not change with age.
 
     Args:
         limit: The cited limit being personalised.
@@ -996,7 +998,7 @@ def classify_reading(
 
     Fasting readings use ``fasting_high`` + ``low``, post-meal readings
     ``post_meal_high`` + ``low``, random readings ``low`` only. Readings below
-    54 mg/dL (ADA Level 2 hypoglycaemia) also set ``escalate``.
+    54 mg/dL (ADA 2026 Sec. 6 Level 2 hypoglycaemia) also set ``escalate``.
 
     Args:
         reading: The reading.
@@ -1011,7 +1013,8 @@ def classify_reading(
     """
     fraction = _to_decimal(get_settings().pre_breach_band if band is None else band)
     value = reading.value_mg_dl
-    # ADA-6 / IHSG (clinical_limits): Level 2 hypoglycaemia is strictly < 54 mg/dL.
+    # ADA 2026 Sec. 6 (table UNVERIFIED) / IHSG (clinical_limits): Level 2
+    # hypoglycaemia is strictly < 54 mg/dL.
     escalate = value < _to_decimal(HYPO_LEVEL_2_MG_DL)
 
     low = _require_threshold(thresholds, "low")
