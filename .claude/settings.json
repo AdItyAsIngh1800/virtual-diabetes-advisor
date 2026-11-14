@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": { "pyright-lsp@claude-plugins-official": true },
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": ["Bash(uv run *)", "Bash(uv add *)", "Bash(uv sync*)", "Bash(pytest*)", "Bash(ruff *)", "Bash(mypy *)", "Bash(npm run *)", "Bash(npx shadcn@latest add *)", "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)"],
+    "deny": ["Read(./.env)", "Read(./.env.*)", "Bash(git push --force*)"]
+  },
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [{ "type": "command", "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/py_quality.py\"", "timeout": 60 }]
+    }]
+  }
+}
