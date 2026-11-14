@@ -19,6 +19,8 @@ from app.ml.schema import age_to_bucket
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "app" / "db" / "migrations"
 CORE_SQL = (MIGRATIONS / "0001_core_schema.sql").read_text()
+# Later migrations may ALTER TABLE ... ADD COLUMN; the ORM must mirror those too.
+ALL_SQL = "\n".join(p.read_text() for p in sorted(MIGRATIONS.glob("*.sql")))
 
 # Lines inside a CREATE TABLE block that are table constraints, not columns.
 _CONSTRAINT_PREFIXES = ("check", "constraint", "primary key", "unique", "foreign key", "--")
@@ -47,7 +49,7 @@ def _sql_columns(table: str, body: str) -> set[str]:
         if name in {"check", "case", "when", "else", "end", "references"}:
             continue
         columns.add(name)
-    added = re.findall(rf"alter table public\.{table}\s+add column (\w+)", CORE_SQL)
+    added = re.findall(rf"alter table public\.{table}\s+add column (\w+)", ALL_SQL)
     return columns | set(added)
 
 

@@ -312,6 +312,8 @@ class ThresholdHistory(Base):
     trend_slope_mg_dl_per_day: Mapped[Decimal | None] = mapped_column(Numeric(7, 3))
     trend_p_value: Mapped[Decimal | None] = mapped_column(Numeric(6, 5))
     trend_n_readings: Mapped[int | None] = mapped_column(Integer)
+    # Added in 0004: EWMA level of the readings behind the trend fields.
+    ewma_mg_dl: Mapped[Decimal | None] = mapped_column(_GLUCOSE)
     reason: Mapped[ThresholdReason] = mapped_column(_choice(ThresholdReason), nullable=False)
     source_citation: Mapped[str] = mapped_column(Text, nullable=False)
     batch_run_id: Mapped[uuid.UUID | None] = mapped_column(
