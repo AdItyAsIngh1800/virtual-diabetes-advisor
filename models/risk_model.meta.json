@@ -1,0 +1,144 @@
+{
+  "version": "risk-20261114-204228",
+  "trained_at": "2026-11-14T20:42:28.186773+00:00",
+  "model_name": "gradient_boosting",
+  "training_rows": 160631,
+  "prevalence": 0.152946815994422,
+  "features": [
+    "HighBP",
+    "HighChol",
+    "CholCheck",
+    "BMI",
+    "Smoker",
+    "Stroke",
+    "HeartDiseaseorAttack",
+    "PhysActivity",
+    "Fruits",
+    "Veggies",
+    "HvyAlcoholConsump",
+    "AnyHealthcare",
+    "NoDocbcCost",
+    "GenHlth",
+    "MentHlth",
+    "PhysHlth",
+    "DiffWalk",
+    "Sex",
+    "Age",
+    "Education",
+    "Income"
+  ],
+  "decision_threshold": 0.10753794014453888,
+  "tier_cutoffs": {
+    "moderate": 0.152946815994422,
+    "high": 0.38236703998605504
+  },
+  "candidates": {
+    "logistic_regression": {
+      "roc_auc": 0.8097828619465334,
+      "pr_auc": 0.4069858569913822,
+      "recall": 0.7555091185410334,
+      "precision": 0.32173772348515495,
+      "f1": 0.451290780141844,
+      "brier": 0.1825553874118582,
+      "threshold": 0.5,
+      "confusion": [
+        [
+          20773,
+          8384
+        ],
+        [
+          1287,
+          3977
+        ]
+      ]
+    },
+    "random_forest": {
+      "roc_auc": 0.8153460811362614,
+      "pr_auc": 0.4312169357781566,
+      "recall": 0.7315729483282675,
+      "precision": 0.3364494146426699,
+      "f1": 0.4609216038300419,
+      "brier": 0.16685087333058732,
+      "threshold": 0.5,
+      "confusion": [
+        [
+          21562,
+          7595
+        ],
+        [
+          1413,
+          3851
+        ]
+      ]
+    },
+    "gradient_boosting": {
+      "roc_auc": 0.8175729351150303,
+      "pr_auc": 0.43880313218304307,
+      "recall": 0.7745060790273556,
+      "precision": 0.3201664834301869,
+      "f1": 0.4530503389265474,
+      "brier": 0.1782228648662567,
+      "threshold": 0.5,
+      "confusion": [
+        [
+          20500,
+          8657
+        ],
+        [
+          1187,
+          4077
+        ]
+      ]
+    }
+  },
+  "validation": {
+    "roc_auc": 0.8174324369650396,
+    "pr_auc": 0.4377929044879776,
+    "recall": 0.8763297872340425,
+    "precision": 0.2777911598217512,
+    "f1": 0.42185642432556014,
+    "brier": 0.10532200497701188,
+    "threshold": 0.10753794014453888,
+    "confusion": [
+      [
+        17164,
+        11993
+      ],
+      [
+        651,
+        4613
+      ]
+    ]
+  },
+  "test": {
+    "roc_auc": 0.8224071333238943,
+    "pr_auc": 0.4529185948236778,
+    "recall": 0.8824311490978157,
+    "precision": 0.27732346445412764,
+    "f1": 0.42201834862385323,
+    "brier": 0.10415337042770587,
+    "threshold": 0.10753794014453888,
+    "confusion": [
+      [
+        17050,
+        12107
+      ],
+      [
+        619,
+        4646
+      ]
+    ]
+  },
+  "top_features": {
+    "BMI": 0.10148,
+    "GenHlth": 0.08168,
+    "Age": 0.03687,
+    "HighChol": 0.03033,
+    "HighBP": 0.02509,
+    "Sex": 0.00808,
+    "HvyAlcoholConsump": 0.00645,
+    "CholCheck": 0.00322,
+    "Income": 0.00305,
+    "Education": 0.00153
+  }
+}
