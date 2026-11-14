@@ -29,3 +29,7 @@ class ConfigurationError(DiabetesAdvisorError):
 
 class ClinicalLimitError(DiabetesAdvisorError):
     """Raised when a clinical limit is requested that has no cited source."""
+
+
+class AuditLogImmutableError(DiabetesAdvisorError):
+    """Raised when code tries to update or delete an append-only audit row (R5)."""
