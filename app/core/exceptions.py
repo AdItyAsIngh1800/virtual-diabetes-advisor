@@ -43,6 +43,47 @@ class BatchAlreadyRunningError(DiabetesAdvisorError):
     """
 
 
+class WhatsAppDeliveryError(DiabetesAdvisorError):
+    """Raised when a WhatsApp Cloud API call fails or is not allowed (R3/R4).
+
+    Graph API errors are parsed into the attributes below so callers can record
+    ``code`` on the advisory row and decide whether a later retry makes sense.
+
+    Attributes:
+        http_status: HTTP status of the last response, or ``None`` if no response
+            arrived (network error) or no request was made (guard block).
+        code: Graph ``error.code`` (e.g. ``131047`` re-engagement required).
+        subcode: Graph ``error.error_subcode``, if any.
+        fbtrace_id: Meta's trace id, quoted when asking Meta support.
+        retryable: ``True`` for transient failures (5xx, rate limits, connect errors).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        http_status: int | None = None,
+        code: int | None = None,
+        subcode: int | None = None,
+        fbtrace_id: str | None = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+        self.code = code
+        self.subcode = subcode
+        self.fbtrace_id = fbtrace_id
+        self.retryable = retryable
+
+
+class RecipientBlockedError(WhatsAppDeliveryError):
+    """Raised by the send guard before any HTTP call, when a recipient is not allowed.
+
+    Examples: a demo patient still on a fictional 555 number, or a number outside
+    ``ALLOWED_TEST_NUMBERS`` while WhatsApp runs on Meta's test number. Never retryable.
+    """
+
+
 class ThresholdComputationError(DiabetesAdvisorError):
     """Raised when a personal threshold cannot be computed or applied (R2/R3).
 

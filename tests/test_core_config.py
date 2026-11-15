@@ -21,6 +21,8 @@ REQUIRED_ENV = {
     "GRAPH_API_VERSION": "v21.0",
 }
 OPTIONAL_ENV = (
+    "WHATSAPP_TEST_MODE",
+    "ALLOWED_TEST_NUMBERS",
     "PUBLIC_BASE_URL",
     "ANTHROPIC_API_KEY",
     "PRE_BREACH_BAND",
@@ -70,6 +72,8 @@ def test_defaults(env: pytest.MonkeyPatch) -> None:
     assert s.batch_scheduler_enabled is True
     assert s.admin_api_key is None
     assert s.log_level == "INFO"
+    assert s.whatsapp_test_mode is True
+    assert s.allowed_test_numbers == ()
 
 
 def test_defaults_can_be_overridden(env: pytest.MonkeyPatch) -> None:

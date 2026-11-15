@@ -11,12 +11,13 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, HttpUrl, SecretStr, ValidationError, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from app.core.exceptions import ConfigurationError
+from app.core.phones import normalise_e164
 
 # Repo root: app/core/config.py -> parents[2]. Anchoring the path means the app finds
 # .env no matter which directory uvicorn / pytest / the batch job is started from.
@@ -48,6 +49,10 @@ class Settings(BaseSettings):
         whatsapp_verify_token: Shared token Meta echoes during webhook verification.
         whatsapp_app_secret: App secret used to verify ``X-Hub-Signature-256`` on webhooks.
         graph_api_version: Graph API version, normalised to ``vMAJOR.MINOR``.
+        whatsapp_test_mode: ``True`` while the Meta app sends from its free test
+            number. Every send is then limited to ``allowed_test_numbers``.
+        allowed_test_numbers: E.164 numbers allowed to receive messages in test mode
+            (``ALLOWED_TEST_NUMBERS``, comma-separated in ``.env``).
         public_base_url: Public HTTPS URL of this API (webhook callback / media links).
             Optional until Phase 5 webhook setup; read it via
             :meth:`require_public_base_url` there.
@@ -85,6 +90,13 @@ class Settings(BaseSettings):
     whatsapp_verify_token: SecretStr
     whatsapp_app_secret: SecretStr
     graph_api_version: str
+    # R3 send guard. Defaults to test mode so a fresh checkout can only ever message the
+    # allowlisted numbers; set WHATSAPP_TEST_MODE=false once a real business number is
+    # live. Meta's test number itself accepts at most 5 verified recipients.
+    whatsapp_test_mode: bool = True
+    # NoDecode: read "+91..., +44..." as plain text and split it in the validator below,
+    # instead of pydantic-settings expecting a JSON list.
+    allowed_test_numbers: Annotated[tuple[str, ...], NoDecode] = ()
 
     # --- Public URL + LLM ------------------------------------------------------
     # Optional: only the Phase 5 webhook/media setup needs a public URL, so local
@@ -134,6 +146,30 @@ class Settings(BaseSettings):
         if match is None:
             raise ValueError("GRAPH_API_VERSION must look like 'v21.0' or '21.0'")
         return f"v{match.group(1)}.{match.group(2)}"
+
+    @field_validator("allowed_test_numbers", mode="before")
+    @classmethod
+    def _parse_allowed_numbers(cls, value: object) -> object:
+        """Split a comma-separated ``ALLOWED_TEST_NUMBERS`` and normalise each to E.164.
+
+        Args:
+            value: Raw value: a comma-separated string from the environment, or a
+                sequence when constructed in code.
+
+        Returns:
+            A tuple of compact E.164 numbers without duplicates, in input order.
+
+        Raises:
+            ValueError: If any entry is not an E.164 number.
+        """
+        if isinstance(value, str):
+            items: list[str] = value.split(",")
+        elif isinstance(value, list | tuple):
+            items = [str(item) for item in value]
+        else:
+            return value
+        numbers = [normalise_e164(item) for item in items if item.strip()]
+        return tuple(dict.fromkeys(numbers))
 
     @field_validator("public_base_url", "anthropic_api_key", "admin_api_key", mode="before")
     @classmethod
