@@ -72,8 +72,13 @@ class Settings(BaseSettings):
         advisory_audio_url_ttl_seconds: Lifetime of a signed voice-advisory URL.
         public_base_url: Public HTTPS URL of this API (the ngrok URL the phone opens).
             Optional; read it via :meth:`require_public_base_url` where it is needed.
-        anthropic_api_key: API key for the Claude-backed help chat. Optional until
-            Phase 7; read it via :meth:`require_anthropic_api_key` there.
+        anthropic_api_key: API key for the optional Claude rephrasing step of the help
+            chat; read it via :meth:`require_anthropic_api_key`. Without it the chat
+            returns approved knowledge-base text directly.
+        chat_llm_model: Claude model used for that rephrasing.
+        chat_kb_min_similarity: Minimum TF-IDF similarity for a KB entry to answer a
+            chat question (below it: "I don't know" + practitioner connect).
+        chat_audio_max_bytes: Largest accepted voice-message upload.
         pre_breach_band: Fraction of a limit that defines the pre-breach band (R3).
         advisory_cooldown_hours: Minimum hours between repeat advisories (R3 de-dup).
         admin_api_key: Shared secret for ``POST /admin/batch-run`` (sent in the
@@ -128,8 +133,24 @@ class Settings(BaseSettings):
     # tests and batch jobs must start without one.
     public_base_url: HttpUrl | None = None
     # Optional: only the Phase 7 help chat calls Claude; read it via
-    # require_anthropic_api_key() there.
+    # require_anthropic_api_key() there. Without it the chat answers with the approved
+    # knowledge-base text directly (R4 works with no LLM at all).
     anthropic_api_key: SecretStr | None = None
+    # Claude model that may rephrase a retrieved KB answer (never used for red flags,
+    # readings or anything outside the retrieved entries).
+    chat_llm_model: str = Field(default="claude-opus-5-5", min_length=1)
+
+    # --- Help chat (R4) -----------------------------------------------------------
+    # Minimum TF-IDF cosine similarity for a KB entry to answer a question. Below it the
+    # chat says it does not know and offers practitioner connect. 0.15 was measured on
+    # the seeded diabetes-basics KB (scripts/kb_seed.py, Nov 2026): 16 paraphrased
+    # in-scope questions scored 0.16-0.38 and all hit the right entry; 18 off-topic or
+    # out-of-scope ones (jokes, weather, dosing, "what is diabetes") scored at most 0.143.
+    # Raise it to answer less often (safer), lower it to answer more.
+    chat_kb_min_similarity: float = Field(default=0.15, gt=0.0, lt=1.0)
+    # Voice messages: ~60 s of MediaRecorder opus/aac is 250-500 KB; 2 MB leaves room for
+    # browsers that record at higher bitrates while stopping uploads that are minutes long.
+    chat_audio_max_bytes: int = Field(default=2 * 1024 * 1024, ge=64 * 1024, le=10 * 1024 * 1024)
 
     # --- Threshold engine / advisory behaviour ---------------------------------
     # R3: pre-breach band. 0.05 => warn when a reading is within 5% of a limit
