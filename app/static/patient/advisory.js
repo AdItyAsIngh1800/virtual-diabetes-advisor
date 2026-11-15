@@ -134,6 +134,13 @@ async function init() {
     }
   });
   $("play").addEventListener("click", () => { play().catch((err) => say(err.message || String(err), true)); });
+  // R4: practitioner connect. The chat page sends the request (with this advisory's id,
+  // which the API only accepts if it is the signed-in patient's own advisory).
+  $("doctor").addEventListener("click", () => {
+    const id = location.pathname.split("/").filter(Boolean).pop();
+    const query = UUID.test(id || "") ? `&advisory_id=${id}` : "";
+    location.assign(`/app/?connect=1${query}`);
+  });
 
   const res = await fetch("/api/app-config");
   if (!res.ok) {

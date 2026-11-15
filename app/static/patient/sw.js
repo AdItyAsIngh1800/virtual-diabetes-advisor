@@ -1,4 +1,5 @@
-// Service worker for the patient app (scope /app/): shows Web Push alerts (R3).
+// Service worker for the app (scope /app/): shows Web Push alerts (R3) and chat /
+// handoff notifications (R4) for patients and practitioners.
 "use strict";
 
 const FALLBACK_URL = "/app/";
@@ -25,7 +26,7 @@ function targetFor(data) {
   return sameOriginUrl(data.url);
 }
 
-// Payload: {advisory_id, title, body, url} (app/services/notifications.py).
+// Payload: {advisory_id, title, body, url[, tag]} (app/services/notifications.py).
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -37,8 +38,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",
-      // Same tag = a repeat of the same advisory replaces the earlier notification.
-      tag: data.advisory_id || "diabetes-advisor",
+      // Same tag = a repeat of the same advisory (or new messages in the same
+      // practitioner conversation, tag "handoff-<id>") replaces the earlier notification.
+      tag: data.tag || data.advisory_id || "diabetes-advisor",
       renotify: true,
       icon: "/app/icon-192.png",
       badge: "/app/icon-192.png",

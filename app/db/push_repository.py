@@ -118,6 +118,27 @@ def find_patient_by_auth_user(session: Session, auth_user_id: uuid.UUID) -> User
     )
 
 
+def find_staff_by_auth_user(session: Session, auth_user_id: uuid.UUID) -> User | None:
+    """Return the active practitioner/admin user linked to a Supabase login.
+
+    Practitioners subscribe to Web Push to hear about new handoffs (R4).
+
+    Args:
+        session: Open session.
+        auth_user_id: ``auth.users.id`` from a verified session.
+
+    Returns:
+        The user, or ``None``.
+    """
+    return session.scalar(
+        select(User).where(
+            User.auth_user_id == auth_user_id,
+            User.role.in_(("practitioner", "admin")),
+            User.is_active,
+        )
+    )
+
+
 def upsert_subscription(
     session: Session,
     *,

@@ -5,8 +5,9 @@
   patient.
 * ``DELETE /api/push/subscribe`` - revoke it ("turn alerts off").
 
-Subscribe/unsubscribe need a Supabase session whose login is linked to a patient
-(``users.auth_user_id``); a patient can only ever touch their own subscriptions.
+Subscribe/unsubscribe need a Supabase session whose login is linked to a patient or a
+practitioner (``users.auth_user_id``); a user can only ever touch their own
+subscriptions.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from app.core.exceptions import ConfigurationError
 from app.db.models import User
 from app.db.push_repository import (
     find_patient_by_auth_user,
+    find_staff_by_auth_user,
     revoke_subscription,
     upsert_subscription,
 )
@@ -90,23 +92,29 @@ class SubscribeOut(BaseModel):
     subscription_id: uuid.UUID
 
 
-def _linked_patient(session: Session, auth_user: AuthUser) -> User:
-    """Return the patient linked to the login, or refuse.
+def _linked_user(session: Session, auth_user: AuthUser) -> User:
+    """Return the patient (or practitioner) linked to the login, or refuse.
+
+    Practitioners subscribe too, to be alerted about new handoffs (R4). Advisories are
+    only ever pushed to the advisory's own patient, so a practitioner's devices never
+    receive patient alerts.
 
     Args:
         session: Open session.
         auth_user: Verified Supabase user.
 
     Returns:
-        The patient.
+        The user.
 
     Raises:
-        HTTPException: 403 if the login has no linked active patient.
+        HTTPException: 403 if the login has no linked active patient or practitioner.
     """
-    patient = find_patient_by_auth_user(session, auth_user.id)
-    if patient is None:
+    user = find_patient_by_auth_user(session, auth_user.id) or find_staff_by_auth_user(
+        session, auth_user.id
+    )
+    if user is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_LINKED)
-    return patient
+    return user
 
 
 @router.get("/public-key")
@@ -152,7 +160,7 @@ def subscribe(
         HTTPException: 401 without a valid session, 403 if the login is not linked.
     """
     with session_factory() as session:
-        patient = _linked_patient(session, auth_user)
+        patient = _linked_user(session, auth_user)
         subscription_id = upsert_subscription(
             session,
             user_id=patient.id,
@@ -186,7 +194,7 @@ def unsubscribe(
         HTTPException: 401 without a valid session, 403 if the login is not linked.
     """
     with session_factory() as session:
-        patient = _linked_patient(session, auth_user)
+        patient = _linked_user(session, auth_user)
         revoked = revoke_subscription(
             session, user_id=patient.id, endpoint=body.endpoint, at=datetime.now(UTC)
         )

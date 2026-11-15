@@ -1,10 +1,12 @@
 """The minimal patient web app at ``/app`` and the config it bootstraps from (R3).
 
 ``app/static/patient`` holds a plain HTML/JS page (Supabase email login, "Enable
-alerts"), the advisory page ``advisory.html`` (served at ``/app/advisory/{id}``), the
-service worker ``sw.js`` and ``manifest.webmanifest``. It is a test
-harness for Web Push, not the R6 dashboard (``web/``). Serving it from FastAPI keeps
-it same-origin with ``/api``, so the ngrok https URL covers both.
+alerts", the help chat with hold-to-record voice), the advisory page ``advisory.html``
+(served at ``/app/advisory/{id}``), the practitioner page ``practitioner.html`` (served
+at ``/app/practitioner``), the service worker ``sw.js`` and ``manifest.webmanifest``.
+It is a small test harness for Web Push and chat, not the R6 dashboard (``web/``).
+Serving it from FastAPI keeps it same-origin with ``/api``, so the ngrok https URL
+covers both.
 """
 
 from __future__ import annotations
@@ -81,6 +83,18 @@ def advisory_page(advisory_id: uuid.UUID) -> FileResponse:
     """
     del advisory_id  # read by the page's script from location.pathname
     return FileResponse(STATIC_DIR / "advisory.html", media_type="text/html")
+
+
+@router.get(f"{APP_PATH}/practitioner", include_in_schema=False)
+def practitioner_page() -> FileResponse:
+    """Serve the practitioner page (R4): open handoffs, conversation, reply, resolve.
+
+    Access is checked by the ``/api/practitioner/*`` routes; the page holds no data.
+
+    Returns:
+        ``practitioner.html``.
+    """
+    return FileResponse(STATIC_DIR / "practitioner.html", media_type="text/html")
 
 
 def mount_patient_app(app: FastAPI) -> None:

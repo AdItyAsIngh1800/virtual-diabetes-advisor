@@ -6,8 +6,10 @@ every ``BATCH_INTERVAL_MINUTES`` (default 15) and the advisory dispatcher (R3) e
 ``BATCH_SCHEDULER_ENABLED=false``. Every batch run is followed by a dispatch, so new
 advisories go out at once. ``POST /admin/batch-run`` triggers a run on demand.
 ``/api/push/*`` manages Web Push subscriptions, ``/api/advisories/{id}`` serves one
-advisory to its patient, and ``/app`` serves the patient web app (Supabase login,
-"Enable alerts", the advisory page); see ``app.api``.
+advisory to its patient, ``/api/chat`` and ``/api/practitioner/*`` are the two-way help
+chat and practitioner connect (R4), and ``/app`` serves the patient web app (Supabase
+login, "Enable alerts", chat, the advisory page) and ``/app/practitioner``; see
+``app.api``.
 Scheduled and manual runs cannot overlap: the second gets ``BatchAlreadyRunningError``.
 """
 
@@ -21,7 +23,7 @@ from datetime import UTC
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 
-from app.api import admin, advisories, patient_app, push
+from app.api import admin, advisories, chat, patient_app, push
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BatchAlreadyRunningError
 from app.core.logging import configure_logging
@@ -119,12 +121,14 @@ def create_app() -> FastAPI:
     """Build the FastAPI application.
 
     Returns:
-        The app with the admin, push, advisory and patient-app routes mounted.
+        The app with the admin, push, advisory, chat/practitioner and patient-app
+        routes mounted.
     """
     app = FastAPI(title="Virtual Diabetes Advisor", version="0.1.0", lifespan=lifespan)
     app.include_router(admin.router)
     app.include_router(push.router)
     app.include_router(advisories.router)
+    app.include_router(chat.router)
     # Before mount_patient_app: the /app static mount would otherwise swallow
     # /app/advisory/{id}.
     app.include_router(patient_app.router)

@@ -219,7 +219,10 @@ def test_advisory_page_is_served_for_a_uuid(repo: FakeRepo) -> None:
     assert "text/html" in response.headers["content-type"]
     for marker in ('id="play"', "Talk to a doctor", "/app/advisory.js"):
         assert marker in response.text
-    assert 'id="doctor" type="button" disabled' in response.text  # Phase 7
+    # Phase 7 (R4): the button is live and opens the chat's practitioner connect.
+    assert 'id="doctor" type="button">' in response.text
+    assert "disabled" not in response.text.split('id="doctor"', 1)[1].split(">", 1)[0]
+    assert "/app/?connect=1" in client.get("/app/advisory.js").text
     assert client.get("/app/advisory/not-a-uuid").status_code == 422
 
 
@@ -241,5 +244,6 @@ def test_service_worker_opens_the_advisory_page(repo: FakeRepo) -> None:
 def test_app_listens_on_private_realtime_topic(repo: FakeRepo) -> None:
     client, _ = client_for()
     app_js = client.get("/app/app.js").text
-    assert "advisories:${session.user.id}" in app_js
-    assert "private: true" in app_js
+    assert "advisories:${uid}" in app_js
+    assert "chat:${uid}" in app_js  # R4: practitioner replies
+    assert "private: true" in client.get("/app/common.js").text

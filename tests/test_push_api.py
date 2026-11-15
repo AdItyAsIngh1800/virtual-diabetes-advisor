@@ -81,11 +81,17 @@ class FakeRepo:
 
     def __init__(self) -> None:
         self.patient = User(id=uuid.uuid4(), role="patient", auth_user_id=LOGIN.id)
+        self.practitioner: User | None = None
         self.linked = True
         self.rows: dict[str, dict[str, Any]] = {}
 
     def find_patient_by_auth_user(self, _session: object, auth_user_id: uuid.UUID) -> User | None:
         return self.patient if self.linked and auth_user_id == LOGIN.id else None
+
+    def find_staff_by_auth_user(self, _session: object, auth_user_id: uuid.UUID) -> User | None:
+        if self.practitioner is not None and auth_user_id == self.practitioner.auth_user_id:
+            return self.practitioner
+        return None
 
     def upsert_subscription(self, _session: object, **row: Any) -> uuid.UUID:
         existing = self.rows.get(row["endpoint"])
@@ -106,7 +112,12 @@ class FakeRepo:
 @pytest.fixture
 def repo(monkeypatch: pytest.MonkeyPatch) -> FakeRepo:
     fake = FakeRepo()
-    for name in ("find_patient_by_auth_user", "upsert_subscription", "revoke_subscription"):
+    for name in (
+        "find_patient_by_auth_user",
+        "find_staff_by_auth_user",
+        "upsert_subscription",
+        "revoke_subscription",
+    ):
         monkeypatch.setattr(push, name, getattr(fake, name))
     return fake
 
@@ -194,6 +205,16 @@ def test_subscribe_refused_when_login_not_linked(client: TestClient, repo: FakeR
     assert repo.rows == {}
 
 
+def test_practitioner_login_can_subscribe(client: TestClient, repo: FakeRepo) -> None:
+    """R4: practitioners enable alerts to hear about new handoffs."""
+    repo.linked = False
+    repo.practitioner = User(id=uuid.uuid4(), role="practitioner", auth_user_id=LOGIN.id)
+    response = client.post("/api/push/subscribe", json=BODY)
+    assert response.status_code == 201
+    (row,) = repo.rows.values()
+    assert row["user_id"] == repo.practitioner.id
+
+
 @pytest.mark.parametrize(
     "change",
     [
@@ -226,7 +247,10 @@ def test_unsubscribe_revokes_and_is_idempotent(client: TestClient, repo: FakeRep
     ("path", "content_type", "marker"),
     [
         ("/app/", "text/html", "Enable alerts"),
-        ("/app/app.js", "javascript", "pushManager.subscribe"),
+        ("/app/common.js", "javascript", "pushManager.subscribe"),
+        ("/app/app.js", "javascript", "MediaRecorder"),
+        ("/app/practitioner", "text/html", "Practitioner inbox"),
+        ("/app/practitioner.js", "javascript", "/api/practitioner/handoffs"),
         ("/app/sw.js", "javascript", "notificationclick"),
         ("/app/manifest.webmanifest", "application/manifest+json", '"start_url": "/app/"'),
     ],
