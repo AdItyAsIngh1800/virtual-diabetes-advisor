@@ -277,7 +277,7 @@ class SqlBatchRepository:
         self,
         *,
         user_id: uuid.UUID,
-        batch_run_id: uuid.UUID,
+        batch_run_id: uuid.UUID | None,
         drafts: Sequence[AdvisoryDraft],
         threshold_ids: Mapping[GlucoseLimitKind, uuid.UUID],
     ) -> list[AdvisoryState]:
@@ -288,7 +288,8 @@ class SqlBatchRepository:
 
         Args:
             user_id: The user.
-            batch_run_id: Run creating them.
+            batch_run_id: Run creating them, or ``None`` for a reading reported in the
+                chat (R4), which is judged immediately instead of by a batch run.
             drafts: Planned advisories.
             threshold_ids: ``thresholds_history.id`` per limit kind used to judge.
 

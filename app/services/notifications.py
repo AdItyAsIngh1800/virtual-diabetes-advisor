@@ -88,6 +88,9 @@ class Notification(BaseModel):
             replaces the earlier notification instead of stacking.
         urgency: Push-service delivery priority.
         ttl_seconds: How long a push service may hold it for an offline device.
+        tag: Notification tag for non-advisory messages (e.g. ``handoff-<id>``), so
+            repeats about the same conversation replace each other. Advisories use
+            their id instead and leave this ``None``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -98,6 +101,7 @@ class Notification(BaseModel):
     advisory_id: uuid.UUID | None = None
     urgency: Urgency = "normal"
     ttl_seconds: int = Field(default=DEFAULT_TTL_SECONDS, ge=0, le=_MAX_TTL_SECONDS)
+    tag: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9:_-]+$")
 
     @field_validator("url")
     @classmethod
@@ -120,18 +124,20 @@ class Notification(BaseModel):
     def payload(self) -> str:
         """Serialise the JSON the service worker reads (``{advisory_id, title, body, url}``).
 
+        ``tag`` is added only when set (chat/handoff notifications, R4).
+
         Returns:
             Compact JSON text.
         """
-        return json.dumps(
-            {
-                "advisory_id": str(self.advisory_id) if self.advisory_id else None,
-                "title": self.title,
-                "body": self.body,
-                "url": self.url,
-            },
-            separators=(",", ":"),
-        )
+        data: dict[str, str | None] = {
+            "advisory_id": str(self.advisory_id) if self.advisory_id else None,
+            "title": self.title,
+            "body": self.body,
+            "url": self.url,
+        }
+        if self.tag is not None:
+            data["tag"] = self.tag
+        return json.dumps(data, separators=(",", ":"))
 
 
 class DeliveryReport(BaseModel):
