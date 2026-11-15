@@ -4,6 +4,8 @@ Usage::
 
     uv run python -m scripts.seed_demo                          # no login linked
     uv run python -m scripts.seed_demo --my-email you@example.com  # link your /app login
+    uv run python -m scripts.seed_demo --my-email you@example.com \
+        --practitioner-email doctor@example.com     # + a demo practitioner login (R4)
     uv run python -m app.jobs.batch_update                      # then run the batch job
 
 Safe to re-run, in one transaction with the new inserts. Real patients are never
@@ -27,6 +29,12 @@ Demo patients have no phone number and no login. ``--my-email`` links one of the
 (Meera, the pre-breach drift scenario) to your own Supabase login, the account you
 created at ``/app``. That patient is the only demo patient the notification guard
 lets Web Push reach (``app.services.notifications.check_recipient``).
+
+``--practitioner-email`` (R4) links a second existing login as the demo practitioner:
+it gets a (non-demo) ``practitioner`` user and ``practitioners`` row, every seeded
+patient is assigned to it, and it approves the seeded knowledge base
+(``scripts.kb_seed``, ~15 diabetes-basics entries with sources). Without the flag, the
+KB is approved by an existing active practitioner, or skipped if there is none.
 """
 
 from __future__ import annotations
@@ -45,6 +53,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, insert, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.clinical_limits import DiabetesStatus
@@ -56,6 +65,8 @@ from app.db.models import (
     Advisory,
     ConversationTurn,
     Language,
+    PatientAssignment,
+    Practitioner,
     Profile,
     Reading,
     ReadingContext,
@@ -65,6 +76,7 @@ from app.db.models import (
 )
 from app.ml.predict import RiskAssessment
 from app.ml.schema import RiskProfile, age_to_bucket
+from scripts.kb_seed import KbSeedReport, seed_kb
 
 logger = logging.getLogger(__name__)
 
@@ -513,6 +525,9 @@ class SeedReport(BaseModel):
         preserved_advisories: Advisories kept because a conversation turn refers to them.
         unmatched_user_ids: Kept demo users that match no patient in the cohort; they
             are left exactly as they were.
+        practitioner_id: Demo practitioner linked by ``--practitioner-email``.
+        assigned_patients: Seeded patients assigned to that practitioner.
+        kb: Knowledge-base seeding result (``None`` when no approver exists).
     """
 
     deleted_users: int
@@ -521,13 +536,17 @@ class SeedReport(BaseModel):
     kept_users: int = 0
     preserved_advisories: int = 0
     unmatched_user_ids: list[uuid.UUID] = Field(default_factory=list)
+    practitioner_id: uuid.UUID | None = None
+    assigned_patients: int = 0
+    kb: KbSeedReport | None = None
 
 
-def validate_my_email(email: str) -> str:
-    """Check the ``--my-email`` value.
+def validate_my_email(email: str, flag: str = "--my-email") -> str:
+    """Check an email flag value (``--my-email`` or ``--practitioner-email``).
 
     Args:
-        email: Login email of the account created at ``/app``.
+        email: Login email of an account created at ``/app``.
+        flag: Flag name, for the error message.
 
     Returns:
         The email, trimmed and lower-cased (Supabase Auth stores it lower-case).
@@ -537,7 +556,7 @@ def validate_my_email(email: str) -> str:
     """
     cleaned = email.strip().lower()
     if not _EMAIL.match(cleaned):
-        raise SeedError("--my-email must be an email address, e.g. you@example.com")
+        raise SeedError(f"{flag} must be an email address, e.g. you@example.com")
     return cleaned
 
 
@@ -702,6 +721,7 @@ def seed_demo(
     now: datetime,
     scorer: RiskScorer | None,
     my_email: str | None = None,
+    practitioner_email: str | None = None,
     patients: Sequence[PatientSpec] = DEMO_PATIENTS,
     rng_seed: int = DEFAULT_RNG_SEED,
 ) -> SeedReport:
@@ -715,6 +735,7 @@ def seed_demo(
         now: Current time; readings cover the 30 days up to it.
         scorer: Risk model used to hit each patient's target tier, or ``None``.
         my_email: Validated login email to link to the ``my_login_slot`` patient.
+        practitioner_email: Validated login email of the demo practitioner (R4).
         patients: Cohort to create.
         rng_seed: Global seed.
 
@@ -723,8 +744,11 @@ def seed_demo(
 
     Raises:
         SeedError: If no Supabase login has ``my_email``, or that login already
-            belongs to a real (non-demo) user.
+            belongs to a real (non-demo) user; or the practitioner login is missing,
+            is the same as ``my_email``, or belongs to a patient.
     """
+    if practitioner_email is not None and practitioner_email == my_email:
+        raise SeedError("--practitioner-email must be a different login from --my-email")
     my_auth_user_id: uuid.UUID | None = None
     if my_email is not None:
         my_auth_user_id = find_auth_user_id_by_email(session, my_email)
@@ -780,6 +804,19 @@ def seed_demo(
     session.flush()
     if reading_rows:
         session.execute(insert(Reading), reading_rows)
+
+    practitioner_id: uuid.UUID | None = None
+    if practitioner_email is not None:
+        practitioner_id = link_practitioner(session, practitioner_email)
+        assign_patients(session, practitioner_id, [p.user_id for p in seeded])
+    approver = practitioner_id or session.scalar(
+        select(Practitioner.id).where(Practitioner.is_active).order_by(Practitioner.created_at)
+    )
+    kb_report: KbSeedReport | None = None
+    if approver is not None:
+        kb_report = seed_kb(session, approver_id=approver, now=now)
+    else:
+        logger.warning("knowledge base not seeded: no practitioner to approve it")
     return SeedReport(
         deleted_users=deleted,
         patients=seeded,
@@ -787,6 +824,82 @@ def seed_demo(
         kept_users=len(matched),
         preserved_advisories=preserved,
         unmatched_user_ids=unmatched,
+        practitioner_id=practitioner_id,
+        assigned_patients=len(seeded) if practitioner_id is not None else 0,
+        kb=kb_report,
+    )
+
+
+DEMO_PRACTITIONER_NAME: Final = "Demo Practitioner"
+
+
+def link_practitioner(session: Session, email: str) -> uuid.UUID:
+    """Make an existing login the demo practitioner (R4), reusing earlier links.
+
+    The practitioner user is **not** a demo user: ``clear_demo_data`` deletes demo
+    users on every re-seed, and practitioners are referenced by audit rows (RESTRICT).
+
+    Args:
+        session: Open session (caller commits).
+        email: Validated login email.
+
+    Returns:
+        ``practitioners.id``.
+
+    Raises:
+        SeedError: If no login has that email, or it belongs to a real patient.
+    """
+    auth_user_id = find_auth_user_id_by_email(session, email)
+    if auth_user_id is None:
+        raise SeedError(
+            "no Supabase login uses the practitioner email: create that account at /app first"
+        )
+    user = session.scalar(select(User).where(User.auth_user_id == auth_user_id))
+    if user is not None and user.role == "patient" and user.is_demo:
+        # An earlier --my-email linked this login to a synthetic patient. Demo data is
+        # disposable, so the login moves to the practitioner; the demo patient stays
+        # (with its turns, if any) but is no longer linked.
+        logger.info("practitioner login was linked to demo patient %s; unlinking", user.id)
+        user.auth_user_id = None
+        session.flush()
+        user = None
+    if user is not None and user.role == "patient":
+        raise SeedError(
+            "the practitioner login belongs to a real patient; use a separate account "
+            "for the practitioner"
+        )
+    if user is None:
+        user = User(id=uuid.uuid4(), role="practitioner", auth_user_id=auth_user_id)
+        session.add(user)
+        session.flush()
+    practitioner = session.scalar(select(Practitioner).where(Practitioner.user_id == user.id))
+    if practitioner is None:
+        practitioner = Practitioner(
+            id=uuid.uuid4(), user_id=user.id, full_name=DEMO_PRACTITIONER_NAME
+        )
+        session.add(practitioner)
+    practitioner.is_active = True
+    user.is_active = True
+    session.flush()
+    return practitioner.id
+
+
+def assign_patients(
+    session: Session, practitioner_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> None:
+    """Assign patients to a practitioner (``patient_assignments``); idempotent.
+
+    Args:
+        session: Open session (caller commits).
+        practitioner_id: Practitioner.
+        patient_ids: Patients.
+    """
+    if not patient_ids:
+        return
+    session.execute(
+        pg_insert(PatientAssignment)
+        .values([{"practitioner_id": practitioner_id, "patient_id": p} for p in patient_ids])
+        .on_conflict_do_nothing()
     )
 
 
@@ -879,6 +992,21 @@ def _print_report(report: SeedReport) -> None:
         lines.append("* kept user (has conversation turns)")
     if report.unmatched_user_ids:
         lines.append(f"Left untouched (match no patient): {report.unmatched_user_ids}")
+    if report.practitioner_id is not None:
+        lines.append(
+            f"Demo practitioner linked; {report.assigned_patients} patients assigned "
+            "(open /app/practitioner with that login)."
+        )
+    if report.kb is None:
+        lines.append("Knowledge base not seeded: pass --practitioner-email to approve it.")
+    elif report.kb.inserted or report.kb.retired:
+        lines.append(
+            f"Knowledge base: {report.kb.inserted} entries approved as kb_version "
+            f"{report.kb.kb_version} ({report.kb.unchanged} unchanged, "
+            f"{report.kb.retired} retired)."
+        )
+    else:
+        lines.append(f"Knowledge base: all {report.kb.unchanged} entries already approved.")
     lines += ["", "Next: uv run python -m app.jobs.batch_update"]
     print("\n".join(lines))
 
@@ -901,18 +1029,32 @@ def main(argv: list[str] | None = None) -> int:
         "--my-email",
         help="link one demo patient to your /app login (the account must exist)",
     )
+    parser.add_argument(
+        "--practitioner-email",
+        help="link another existing /app login as the demo practitioner (R4)",
+    )
     parser.add_argument("--rng-seed", type=int, default=DEFAULT_RNG_SEED)
     args = parser.parse_args(argv)
     configure_logging(get_settings().log_level)
 
     my_email = validate_my_email(args.my_email) if args.my_email else None
+    practitioner_email = (
+        validate_my_email(args.practitioner_email, "--practitioner-email")
+        if args.practitioner_email
+        else None
+    )
     factory = get_session_factory()
     with factory() as session:
         now = session.scalar(select(func.now()))
         if not isinstance(now, datetime):  # pragma: no cover - now() is never NULL
             raise SeedError("database returned no now()")
         report = seed_demo(
-            session, now=now, scorer=load_risk_scorer(), my_email=my_email, rng_seed=args.rng_seed
+            session,
+            now=now,
+            scorer=load_risk_scorer(),
+            my_email=my_email,
+            practitioner_email=practitioner_email,
+            rng_seed=args.rng_seed,
         )
         session.commit()
     _print_report(report)

@@ -240,3 +240,27 @@ def test_rising_trend_patient_gets_trend_revision() -> None:
 def test_well_controlled_patients_raise_nothing() -> None:
     for key in ("aarav", "rahul", "ananya", "fatima"):
         assert sum(_advisory_states(_spec(key)).values()) == 0, key
+
+
+# --- Phase 7: demo practitioner (R4) -----------------------------------------------
+
+
+def test_practitioner_email_flag_is_validated() -> None:
+    import scripts.seed_demo as seed  # noqa: PLC0415
+
+    assert seed.validate_my_email(" Doc@Example.com ", "--practitioner-email") == "doc@example.com"
+    with pytest.raises(seed.SeedError, match="--practitioner-email"):
+        seed.validate_my_email("not-an-email", "--practitioner-email")
+
+
+def test_patient_and_practitioner_must_be_different_logins() -> None:
+    import scripts.seed_demo as seed  # noqa: PLC0415
+
+    with pytest.raises(seed.SeedError, match="different login"):
+        seed.seed_demo(
+            None,  # type: ignore[arg-type]  # refused before any database access
+            now=datetime(2026, 11, 16, tzinfo=UTC),
+            scorer=None,
+            my_email="same@example.com",
+            practitioner_email="same@example.com",
+        )
