@@ -68,8 +68,8 @@ _E164: Final = re.compile(r"^\+[1-9][0-9]{6,14}$")
 DAYS: Final = 30
 # Demo patients live in India (IST); readings are stamped at local clock times.
 DEMO_TZ: Final = ZoneInfo("Asia/Kolkata")
-# Fasting before breakfast; post-meal 1-2 h after a 12:30 lunch, inside ADA's 1-2 h
-# postprandial timing (clinical_limits.POST_MEAL_HIGH_DM_MG_DL).
+# Fasting before breakfast; post-meal about 1.5 h after a 12:30 lunch. Demo
+# scheduling only, not a clinical timing rule.
 _FASTING_AT: Final = time(7, 0)
 _POST_MEAL_AT: Final = time(14, 0)
 _FASTING_JITTER_MIN: Final = 20

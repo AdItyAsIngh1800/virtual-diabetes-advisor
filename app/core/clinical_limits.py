@@ -11,8 +11,7 @@ never leaves the clamp. All values are capillary/plasma glucose in mg/dL.
 Sources (abbreviations used in the comments below). Every ADA citation refers to the
 Standards of Care in Diabetes-2026 edition (Diabetes Care 2026;49(Suppl. 1)). Section,
 table and recommendation numbers were checked against the 2026 text on PMC on
-2026-11-15; a reference marked UNVERIFIED could not be checked and must be confirmed
-before it is relied on (its value was carried over from the 2025 edition).
+2026-11-15.
 
     ADA-2:  ADA Professional Practice Committee for Diabetes. "2. Diagnosis and
             Classification of Diabetes: Standards of Care in Diabetes-2026."
@@ -21,9 +20,10 @@ before it is relied on (its value was carried over from the 2025 edition).
     ADA-6:  ADA Professional Practice Committee for Diabetes. "6. Glycemic Goals,
             Hypoglycemia, and Hyperglycemic Crises: Standards of Care in
             Diabetes-2026." Diabetes Care 2026;49(Suppl. 1):S132-S149.
-            doi:10.2337/dc26-S006. Title and pages checked; the full text could not
-            be retrieved (publisher blocks automated access), so every Section 6
-            table number below is UNVERIFIED for the 2026 edition.
+            doi:10.2337/dc26-S006 (PMC12690178). Checked by the team (the full
+            text blocks automated access): Table 6.2 "CGM metrics for clinical
+            care", Table 6.3 "Summary of glycemic goals for many nonpregnant adults
+            with diabetes", Table 6.4 "Classification of hypoglycemia".
     ADA-13: ADA Professional Practice Committee for Diabetes. "13. Older Adults:
             Standards of Care in Diabetes-2026." Diabetes Care 2026;49(Suppl.
             1):S277-S296. doi:10.2337/dc26-S013. Checked: Table 13.2 (goals by
@@ -55,18 +55,18 @@ LimitDirection = Literal["upper", "lower"]
 # Hypoglycaemia (lower limits)
 # ---------------------------------------------------------------------------
 
-# ADA-6 Table 6.4 (UNVERIFIED for 2026) + IHSG: Level 1 hypoglycaemia is glucose
-# < 70 mg/dL (and >= 54); 70 mg/dL is the "alert value". Lower limits are never
-# relaxed below this.
+# ADA-6 Table 6.4 + IHSG: Level 1 hypoglycaemia is glucose < 70 mg/dL and
+# >= 54 mg/dL. 70 is the Level 1 threshold, so lower limits are never relaxed below it.
 HYPO_LEVEL_1_MG_DL = 70.0
-# ADA-6 Table 6.4 (UNVERIFIED for 2026) + IHSG: Level 2 (clinically significant)
-# hypoglycaemia is glucose < 54 mg/dL. Not personalised: used for breach escalation (R3/R4).
+# ADA-6 Table 6.4 + IHSG: Level 2 (clinically significant) hypoglycaemia is
+# glucose < 54 mg/dL. Not personalised: every such reading escalates to a
+# practitioner and bypasses the advisory cooldown (R3/R4).
 HYPO_LEVEL_2_MG_DL = 54.0
-# ADA-6 Table 6.3 (UNVERIFIED for 2026): preprandial target 80-130 mg/dL for many
-# nonpregnant adults with diabetes; ADA-13 Table 13.2 (checked) gives the same 80-130
-# for healthy older adults. 80 is the bottom of that target, so it is the highest a low-glucose
-# alert may be raised to (e.g. for hypoglycaemia-prone users) - any higher and it
-# would fire on in-target readings.
+# ADA-6 Table 6.3: preprandial target 80-130 mg/dL for many nonpregnant adults with
+# diabetes; ADA-13 Table 13.2 gives the same 80-130 for healthy older adults. 80 is the
+# bottom of that target, so it is the highest a low-glucose alert may be raised to
+# (e.g. for hypoglycaemia-prone users) - any higher and it would fire on in-target
+# readings.
 PREPRANDIAL_TARGET_LOW_DM_MG_DL = 80.0
 
 # ---------------------------------------------------------------------------
@@ -93,20 +93,18 @@ COMPLEX_HEALTH_FASTING_HIGH_MG_DL = 150.0
 # Adults with diabetes (upper limits)
 # ---------------------------------------------------------------------------
 
-# ADA-6 Table 6.3 (UNVERIFIED for 2026): preprandial (fasting) capillary glucose
-# target upper bound 130 mg/dL for many nonpregnant adults with diabetes. ADA-13
-# Table 13.2 (checked) gives the same 80-130 goal for healthy older adults.
+# ADA-6 Table 6.3: preprandial (fasting) capillary glucose goal upper bound 130 mg/dL
+# for many nonpregnant adults with diabetes. ADA-13 Table 13.2 gives the same 80-130
+# goal for healthy older adults.
 FASTING_HIGH_DM_MG_DL = 130.0
 # ADA-13 Table 13.2: the most relaxed fasting/preprandial goal ADA gives is
 # 100-180 mg/dL (older adults, very complex/poor health). A fasting limit is never relaxed past 180.
 FASTING_HIGH_DM_HARD_MAX_MG_DL = 180.0
-# ADA-6 Table 6.3 (UNVERIFIED for 2026): peak postprandial capillary glucose
-# < 180 mg/dL (1-2 h after the start of a meal) for many nonpregnant adults with
-# diabetes.
+# ADA-6 Table 6.3: peak postprandial capillary glucose < 180 mg/dL for many
+# nonpregnant adults with diabetes.
 POST_MEAL_HIGH_DM_MG_DL = 180.0
-# TIR (ADA-6 CGM-metrics table UNVERIFIED for 2026): > 250 mg/dL is Level 2
-# ("very high") hyperglycaemia. A post-meal
-# limit is never relaxed into Level 2 territory.
+# ADA-6 Table 6.2 (CGM metrics, time above range) + TIR: > 250 mg/dL is Level 2
+# hyperglycaemia. A post-meal limit is never relaxed into Level 2 territory.
 LEVEL_2_HYPERGLYCAEMIA_MG_DL = 250.0
 
 # ---------------------------------------------------------------------------
@@ -205,7 +203,7 @@ _LIMITS: tuple[GlucoseLimit, ...] = (
         base_mg_dl=FASTING_HIGH_DM_MG_DL,
         hard_min_mg_dl=NORMAL_FASTING_MAX_MG_DL,
         hard_max_mg_dl=FASTING_HIGH_DM_HARD_MAX_MG_DL,
-        source="ADA Standards of Care 2026, Table 6.3 (unverified), Table 13.2, Table 2.2",
+        source="ADA Standards of Care 2026, Tables 6.3, 13.2, 2.2",
     ),
     GlucoseLimit(
         status="diabetes",
@@ -214,9 +212,7 @@ _LIMITS: tuple[GlucoseLimit, ...] = (
         base_mg_dl=POST_MEAL_HIGH_DM_MG_DL,
         hard_min_mg_dl=OGTT_2H_NORMAL_MAX_MG_DL,
         hard_max_mg_dl=LEVEL_2_HYPERGLYCAEMIA_MG_DL,
-        source=(
-            "ADA Standards of Care 2026, Table 6.3 (unverified), Table 2.2; Battelino 2019 (TIR)"
-        ),
+        source="ADA Standards of Care 2026, Tables 6.3, 6.2, 2.2; Battelino 2019 (TIR)",
     ),
     GlucoseLimit(
         status="diabetes",
@@ -225,7 +221,7 @@ _LIMITS: tuple[GlucoseLimit, ...] = (
         base_mg_dl=HYPO_LEVEL_1_MG_DL,
         hard_min_mg_dl=HYPO_LEVEL_1_MG_DL,
         hard_max_mg_dl=PREPRANDIAL_TARGET_LOW_DM_MG_DL,
-        source="ADA Standards of Care 2026, Tables 6.3, 6.4 (unverified); IHSG 2017",
+        source="ADA Standards of Care 2026, Tables 6.3, 6.4; IHSG 2017",
     ),
     # --- Adults without diabetes ------------------------------------------
     GlucoseLimit(
@@ -246,7 +242,7 @@ _LIMITS: tuple[GlucoseLimit, ...] = (
         hard_max_mg_dl=IGT_MAX_MG_DL,
         source="ADA Standards of Care 2026, Tables 2.1, 2.2 (2-h OGTT criteria, used as proxy)",
     ),
-    # Team decision 2026-11-15: reuse ADA's Level 1 alert value (defined for people
+    # Team decision 2026-11-15: reuse ADA's Level 1 threshold (defined for people
     # with diabetes) as a conservative low alert for people without diabetes. No
     # cited basis to move it either way, so the clamp is a single point: not
     # personalised.
@@ -257,7 +253,7 @@ _LIMITS: tuple[GlucoseLimit, ...] = (
         base_mg_dl=HYPO_LEVEL_1_MG_DL,
         hard_min_mg_dl=HYPO_LEVEL_1_MG_DL,
         hard_max_mg_dl=HYPO_LEVEL_1_MG_DL,
-        source="ADA Standards of Care 2026, Table 6.4 (unverified; applied conservatively)",
+        source="ADA Standards of Care 2026, Table 6.4 (applied conservatively)",
     ),
 )
 

@@ -110,10 +110,10 @@ COMPLEX_HEALTH_PROXY_FIELDS: Final[tuple[str, ...]] = (
     "stroke",
     "diff_walk",
 )
-# ADA Standards of Care 2026: no sex-specific glycaemic goals in Sec. 13 Table 13.2
-# (checked); Sec. 6 is UNVERIFIED for 2026 (full text not retrievable). So the sex
-# term is 0 for both codes. It is kept as an explicit term so the formula's shape matches the
-# spec and a cited value can be added in one place.
+# ADA Standards of Care 2026 give one set of glycaemic goals regardless of sex (Sec. 6
+# Table 6.3, Sec. 13 Table 13.2), so the sex term is 0 for both codes. It is kept as an
+# explicit term so the formula's shape matches the spec and a cited value can be added
+# in one place.
 _SEX_ADJ_MG_DL: Final[Mapping[int, Decimal]] = MappingProxyType({0: _ZERO, 1: _ZERO})
 # Bounds on the *total* demographic term, per direction. Demographics only ever
 # relax an upper limit (older adults) or raise a low limit (earlier hypo warning);
@@ -998,7 +998,7 @@ def classify_reading(
 
     Fasting readings use ``fasting_high`` + ``low``, post-meal readings
     ``post_meal_high`` + ``low``, random readings ``low`` only. Readings below
-    54 mg/dL (ADA 2026 Sec. 6 Level 2 hypoglycaemia) also set ``escalate``.
+    54 mg/dL (ADA 2026 Table 6.4 Level 2 hypoglycaemia) also set ``escalate``.
 
     Args:
         reading: The reading.
@@ -1013,8 +1013,8 @@ def classify_reading(
     """
     fraction = _to_decimal(get_settings().pre_breach_band if band is None else band)
     value = reading.value_mg_dl
-    # ADA 2026 Sec. 6 (table UNVERIFIED) / IHSG (clinical_limits): Level 2
-    # hypoglycaemia is strictly < 54 mg/dL.
+    # ADA 2026 Table 6.4 / IHSG (clinical_limits): Level 2 hypoglycaemia is strictly
+    # < 54 mg/dL.
     escalate = value < _to_decimal(HYPO_LEVEL_2_MG_DL)
 
     low = _require_threshold(thresholds, "low")
