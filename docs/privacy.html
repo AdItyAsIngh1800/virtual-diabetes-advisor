@@ -38,6 +38,7 @@
   <li>Alerts are sent with Web Push only after you press <strong>Enable alerts</strong> and allow notifications in your browser.</li>
   <li>An alert is delivered through your browser's push service (Google for Chrome on Android, Mozilla for Firefox, Apple for Safari). The content is encrypted end to end; the push service sees only that a message was sent to your device.</li>
   <li>An alert contains only your reading and your personal limit, never your name or anyone else's data. Alerts older than one hour are not delivered.</li>
+  <li>Each alert opens an advice page with a spoken version. The advice text (your reading, your limit and the advice, never your name) is turned into speech by Google's text-to-speech service. The recording is kept in private Supabase storage and can only be played through a link that expires after a few minutes, given only to you when you are signed in.</li>
 </ul>
 
 <h2>Where it is stored and processed</h2>
