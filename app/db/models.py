@@ -529,6 +529,10 @@ class ConversationTurn(Base):
     escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     # Client-generated message id: de-duplicates a retried chat request.
     message_id: Mapped[str | None] = mapped_column(Text, unique=True)
+    # 0008: practitioner who wrote an outbound handoff reply (R4); None for bot replies.
+    author_practitioner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("practitioners.id", ondelete="RESTRICT")
+    )
     created_at: Mapped[datetime] = _created_at()
 
 

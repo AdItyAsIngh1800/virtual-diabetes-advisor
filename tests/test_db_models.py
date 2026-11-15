@@ -184,3 +184,9 @@ def test_brfss_age_bucket_expression_matches_python() -> None:
     for age in range(18, 121):
         assert sql_bucket(age) == age_to_bucket(age), age
     assert "(age_years - 25) / 5 + 2" in CORE_SQL
+
+
+def test_replay_sees_0008_changes() -> None:
+    turns, _ = _replayed_schema("conversation_turns")
+    assert "author_practitioner_id" in turns
+    assert models.ConversationTurn.__table__.c.author_practitioner_id.nullable is True
