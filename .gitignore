@@ -12,3 +12,4 @@ models/*.joblib
 node_modules/
 .env.bak
 .coverage
+logs/
