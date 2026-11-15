@@ -148,13 +148,26 @@ def test_replay_sees_0006_changes() -> None:
     advisories, advisory_choices = _replayed_schema("advisories")
     assert {"message_id", "audio_message_id", "channel", "opened_at"} <= advisories
     assert not {"wamid", "audio_wamid", "delivery_channel", "delivered_at", "read_at"} & advisories
-    assert advisory_choices["delivery_status"] == {"queued", "sent", "opened", "failed", "expired"}
+    assert {"queued", "sent", "opened", "failed", "expired"} <= advisory_choices["delivery_status"]
     assert advisory_choices["channel"] == {"webpush"}
     assert "last_inbound_at" not in _replayed_schema("profiles")[0]
     turns, turn_choices = _replayed_schema("conversation_turns")
     assert "message_id" in turns
     assert "web" in turn_choices["channel"]
     assert models.Profile.__table__.c.phone_e164.nullable is True
+
+
+def test_replay_sees_0007_changes() -> None:
+    advisories, choices = _replayed_schema("advisories")
+    assert {"audio_path", "dispatch_claimed_at"} <= advisories
+    assert choices["delivery_status"] == {
+        "queued",
+        "sent",
+        "opened",
+        "failed",
+        "expired",
+        "suppressed",
+    }
 
 
 def test_brfss_age_bucket_expression_matches_python() -> None:

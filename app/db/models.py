@@ -54,7 +54,8 @@ ThresholdReason = Literal["initial", "batch", "trend_revision", "profile_change"
 AdvisoryState = Literal["pre_breach_high", "pre_breach_low", "breach_high", "breach_low"]
 # 0006: how an advisory reached the patient (NotificationChannel.name) and its state.
 NotificationChannelName = Literal["webpush"]
-DeliveryStatus = Literal["queued", "sent", "opened", "failed", "expired"]
+# 0007 adds 'suppressed' (dispatch-time cooldown).
+DeliveryStatus = Literal["queued", "sent", "opened", "failed", "expired", "suppressed"]
 HandoffTrigger = Literal["practitioner_request", "red_flag", "breach_escalation"]
 HandoffStatus = Literal["open", "assigned", "resolved"]
 KbStatus = Literal["draft", "approved", "retired"]
@@ -390,8 +391,9 @@ class Advisory(Base):
         _choice(NotificationChannelName), nullable=False, server_default="webpush"
     )
     # queued -> sent -> opened | failed | expired (reading older than
-    # ADVISORY_MAX_AGE_MINUTES when dispatched). DB CHECKs: failed needs failed_at,
-    # opened needs opened_at.
+    # ADVISORY_MAX_AGE_MINUTES when dispatched) | suppressed (a push for the same
+    # limit and state was sent within the cooldown). DB CHECKs: failed needs
+    # failed_at, opened needs opened_at.
     delivery_status: Mapped[DeliveryStatus] = mapped_column(
         _choice(DeliveryStatus), nullable=False, server_default="queued"
     )
@@ -399,6 +401,10 @@ class Advisory(Base):
     message_id: Mapped[str | None] = mapped_column(Text, unique=True)
     audio_message_id: Mapped[str | None] = mapped_column(Text, unique=True)
     attempt_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
+    # 0007: voice mp3 in the private advisory-audio bucket, and the at-most-once
+    # dispatch claim (see app.jobs.dispatch_advisories).
+    audio_path: Mapped[str | None] = mapped_column(Text)
+    dispatch_claimed_at: Mapped[datetime | None] = mapped_column(_TZ)
     delivery_error_code: Mapped[str | None] = mapped_column(Text)
     delivery_error: Mapped[str | None] = mapped_column(Text)
     sent_at: Mapped[datetime | None] = mapped_column(_TZ)
