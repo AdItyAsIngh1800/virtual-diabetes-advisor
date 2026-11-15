@@ -71,7 +71,7 @@ def client_with(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     def build(settings: Settings) -> TestClient:
         app.dependency_overrides[get_settings] = lambda: settings
         client = TestClient(app)
-        client.calls = calls
+        client.calls = calls  # type: ignore[attr-defined]  # test-only attribute
         return client
 
     yield build
