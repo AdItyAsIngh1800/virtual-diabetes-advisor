@@ -1,0 +1,230 @@
+"""Tests for app/services/voice.py: gTTS, faster-whisper and Supabase Storage, all mocked."""
+
+from __future__ import annotations
+
+import io
+import json
+import sys
+import threading
+import types
+from typing import Any
+
+import httpx
+import pytest
+
+from app.core.config import Settings
+from app.core.exceptions import AudioStorageError, SpeechError
+from app.services.voice import (
+    GttsSynthesizer,
+    SupabaseAudioStore,
+    WhisperTranscriber,
+    advisory_audio_path,
+)
+
+SETTINGS = Settings(
+    _env_file=None,
+    supabase_url="https://abc.supabase.co",
+    supabase_service_role_key="service-key",
+    database_url="postgresql://u:p@localhost:5432/db",
+)
+
+
+# --- gTTS ----------------------------------------------------------------------------
+
+
+class FakeGttsError(Exception):
+    pass
+
+
+def install_fake_gtts(
+    monkeypatch: pytest.MonkeyPatch, *, fail: bool = False
+) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+
+    class FakeGTTS:
+        def __init__(self, text: str, **kwargs: Any) -> None:
+            calls.append({"text": text, **kwargs})
+
+        def write_to_fp(self, fp: io.BytesIO) -> None:
+            if fail:
+                raise FakeGttsError("429 Too Many Requests")
+            fp.write(b"ID3fake-mp3")
+
+    module = types.ModuleType("gtts")
+    module.gTTS = FakeGTTS  # type: ignore[attr-defined]
+    module.gTTSError = FakeGttsError  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "gtts", module)
+    return calls
+
+
+def test_gtts_speaks_english_with_indian_voice(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = install_fake_gtts(monkeypatch)
+    audio = GttsSynthesizer().synthesize("Your glucose is 126.", "en")
+    assert audio == b"ID3fake-mp3"
+    assert calls == [{"text": "Your glucose is 126.", "lang": "en", "tld": "co.in"}]
+
+
+@pytest.mark.parametrize("language", ["hi", "ta"])
+def test_tts_is_english_only(monkeypatch: pytest.MonkeyPatch, language: str) -> None:
+    calls = install_fake_gtts(monkeypatch)
+    with pytest.raises(SpeechError, match="English-only"):
+        GttsSynthesizer().synthesize("text", language)  # type: ignore[arg-type]
+    assert calls == []
+
+
+def test_gtts_failure_becomes_speech_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_fake_gtts(monkeypatch, fail=True)
+    with pytest.raises(SpeechError, match="gTTS failed"):
+        GttsSynthesizer().synthesize("text", "en")
+    with pytest.raises(SpeechError, match="nothing to speak"):
+        GttsSynthesizer().synthesize("   ", "en")
+
+
+# --- faster-whisper ------------------------------------------------------------------
+
+
+class Segment:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class FakeWhisper:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def transcribe(self, audio: io.BytesIO, *, language: str) -> tuple[list[Segment], object]:
+        self.calls.append(language)
+        assert audio.read() == b"webm-bytes"
+        return [Segment(" my sugar is "), Segment("one forty ")], object()
+
+
+def test_whisper_loads_lazily_once_and_joins_segments() -> None:
+    loads: list[int] = []
+    model = FakeWhisper()
+
+    def loader() -> FakeWhisper:
+        loads.append(1)
+        return model
+
+    transcriber = WhisperTranscriber(loader)
+    assert loads == []  # nothing loaded at construction
+    assert transcriber.transcribe(b"webm-bytes", "en") == "my sugar is one forty"
+    assert transcriber.transcribe(b"webm-bytes", "en") == "my sugar is one forty"
+    assert loads == [1]
+    assert model.calls == ["en", "en"]
+
+
+def test_whisper_concurrent_first_calls_load_once() -> None:
+    loads: list[int] = []
+    gate = threading.Event()
+
+    def slow_loader() -> FakeWhisper:
+        loads.append(1)
+        gate.wait(0.2)
+        return FakeWhisper()
+
+    transcriber = WhisperTranscriber(slow_loader)
+    threads = [
+        threading.Thread(target=transcriber.transcribe, args=(b"webm-bytes", "en"))
+        for _ in range(4)
+    ]
+    for t in threads:
+        t.start()
+    gate.set()
+    for t in threads:
+        t.join()
+    assert loads == [1]
+
+
+def test_whisper_rejects_bad_input_and_wraps_decode_errors() -> None:
+    class Broken:
+        def transcribe(self, audio: io.BytesIO, *, language: str) -> tuple[list[Segment], object]:
+            raise RuntimeError("Invalid data found when processing input")
+
+    with pytest.raises(SpeechError, match="English-only"):
+        WhisperTranscriber(FakeWhisper).transcribe(b"x", "ta")
+    with pytest.raises(SpeechError, match="no audio"):
+        WhisperTranscriber(FakeWhisper).transcribe(b"", "en")
+    with pytest.raises(SpeechError, match="transcription failed"):
+        WhisperTranscriber(Broken).transcribe(b"x", "en")
+
+
+def test_default_loader_uses_small_int8_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import voice  # noqa: PLC0415
+
+    seen: dict[str, Any] = {}
+
+    class WhisperModel:
+        def __init__(self, size: str, **kwargs: Any) -> None:
+            seen.update(size=size, **kwargs)
+
+    module = types.ModuleType("faster_whisper")
+    module.WhisperModel = WhisperModel  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "faster_whisper", module)
+    voice.load_whisper_model()
+    assert seen == {"size": "small", "device": "cpu", "compute_type": "int8"}
+
+
+# --- Supabase Storage ----------------------------------------------------------------
+
+
+def store_with(handler: Any) -> tuple[SupabaseAudioStore, list[httpx.Request]]:
+    requests: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        result: httpx.Response = handler(request)
+        return result
+
+    client = httpx.Client(transport=httpx.MockTransport(record))
+    return SupabaseAudioStore(SETTINGS, http_client=client), requests
+
+
+def test_upload_goes_to_private_bucket_with_service_key() -> None:
+    store, requests = store_with(lambda _r: httpx.Response(200, json={"Key": "x"}))
+    store.upload("u1/a1.mp3", b"ID3")
+    (request,) = requests
+    assert str(request.url) == "https://abc.supabase.co/storage/v1/object/advisory-audio/u1/a1.mp3"
+    assert request.headers["content-type"] == "audio/mpeg"
+    assert request.headers["x-upsert"] == "true"
+    assert request.headers["authorization"] == "Bearer service-key"
+    assert request.content == b"ID3"
+
+
+def test_signed_url_is_absolute_and_short_lived() -> None:
+    store, requests = store_with(
+        lambda _r: httpx.Response(
+            200, json={"signedURL": "/object/sign/advisory-audio/u1/a1.mp3?token=t"}
+        )
+    )
+    url = store.signed_url("u1/a1.mp3", 300)
+    assert url == "https://abc.supabase.co/storage/v1/object/sign/advisory-audio/u1/a1.mp3?token=t"
+    assert json.loads(requests[0].content) == {"expiresIn": 300}
+
+
+@pytest.mark.parametrize(
+    "response",
+    [httpx.Response(400, json={"error": "not found"}), httpx.Response(200, json={"oops": 1})],
+)
+def test_storage_errors_are_audio_storage_errors(response: httpx.Response) -> None:
+    store, _ = store_with(lambda _r: response)
+    with pytest.raises(AudioStorageError):
+        store.signed_url("u1/a1.mp3", 300)
+    if response.status_code != 200:
+        with pytest.raises(AudioStorageError, match="HTTP 400"):
+            store.upload("u1/a1.mp3", b"ID3")
+
+
+def test_network_errors_are_audio_storage_errors() -> None:
+    def boom(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down", request=request)
+
+    store, _ = store_with(boom)
+    with pytest.raises(AudioStorageError, match="ConnectError"):
+        store.upload("p", b"x")
+    with pytest.raises(AudioStorageError, match="ConnectError"):
+        store.signed_url("p", 60)
+
+
+def test_audio_path_is_one_folder_per_patient() -> None:
+    assert advisory_audio_path("user-1", "adv-2") == "user-1/adv-2.mp3"

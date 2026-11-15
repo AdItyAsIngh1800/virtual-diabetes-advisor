@@ -66,6 +66,10 @@ class Settings(BaseSettings):
             :meth:`require_vapid`.
         advisory_max_age_minutes: Advisories whose reading is older than this are
             expired instead of notified (R3).
+        dispatch_interval_minutes: How often the advisory dispatcher runs on its own
+            schedule (it also runs right after every batch update).
+        advisory_audio_bucket: Private Supabase Storage bucket for voice advisories.
+        advisory_audio_url_ttl_seconds: Lifetime of a signed voice-advisory URL.
         public_base_url: Public HTTPS URL of this API (the ngrok URL the phone opens).
             Optional; read it via :meth:`require_public_base_url` where it is needed.
         anthropic_api_key: API key for the Claude-backed help chat. Optional until
@@ -109,6 +113,15 @@ class Settings(BaseSettings):
     # R3: an alert about a reading more than an hour old no longer helps the patient
     # act on it (team choice, matching the 1 h push TTL); such advisories expire.
     advisory_max_age_minutes: int = Field(default=60, ge=5, le=24 * 60)
+    # R3: queued advisories wait at most this long for the dispatcher when no batch run
+    # happens (e.g. a reading arrives between runs). 2 min keeps alerts timely; the cap
+    # matches the expiry window so a typo cannot hold alerts until they expire.
+    dispatch_interval_minutes: int = Field(default=2, ge=1, le=60)
+    # Private bucket (created by migration 0007): audio is only reachable through a
+    # signed URL handed to the patient who owns the advisory.
+    advisory_audio_bucket: str = Field(default="advisory-audio", pattern=r"^[a-z0-9][a-z0-9-]*$")
+    # 5 min: long enough to press Play, short enough that a leaked link soon dies.
+    advisory_audio_url_ttl_seconds: int = Field(default=300, ge=30, le=3600)
 
     # --- Public URL + LLM ------------------------------------------------------
     # Optional: only phone testing over ngrok needs a public URL, so local dev,

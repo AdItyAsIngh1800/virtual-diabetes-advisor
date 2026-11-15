@@ -22,6 +22,9 @@ OPTIONAL_ENV = (
     "VAPID_PRIVATE_KEY",
     "VAPID_SUBJECT",
     "ADVISORY_MAX_AGE_MINUTES",
+    "DISPATCH_INTERVAL_MINUTES",
+    "ADVISORY_AUDIO_BUCKET",
+    "ADVISORY_AUDIO_URL_TTL_SECONDS",
     "PUBLIC_BASE_URL",
     "ANTHROPIC_API_KEY",
     "PRE_BREACH_BAND",
@@ -310,3 +313,9 @@ def test_rejected_url_subjects_really_crash_py_vapid() -> None:
     for subject in _REJECTED_SUBJECTS[:3]:
         assert not _check_sub(subject)
 
+
+def test_dispatch_and_audio_settings_defaults(env: pytest.MonkeyPatch) -> None:
+    settings = load_settings(env_file=None)
+    assert settings.dispatch_interval_minutes == 2
+    assert settings.advisory_audio_bucket == "advisory-audio"
+    assert settings.advisory_audio_url_ttl_seconds == 300

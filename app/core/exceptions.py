@@ -78,3 +78,15 @@ class ThresholdComputationError(DiabetesAdvisorError):
     Examples: a reading needs a limit the user has no threshold for yet, or the
     inputs to a revision are inconsistent (a previous threshold for another limit).
     """
+
+
+class SpeechError(DiabetesAdvisorError):
+    """Raised when text-to-speech or speech-to-text fails (R3 voice advisory, R4 chat).
+
+    Callers treat it as non-fatal for advisories: the page falls back to the browser's
+    ``speechSynthesis`` when no audio file exists.
+    """
+
+
+class AudioStorageError(DiabetesAdvisorError):
+    """Raised when voice audio cannot be uploaded to, or signed from, Supabase Storage."""
