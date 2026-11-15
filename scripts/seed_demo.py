@@ -43,6 +43,13 @@ from app.core.clinical_limits import DiabetesStatus
 from app.core.config import get_settings
 from app.core.exceptions import DiabetesAdvisorError
 from app.core.logging import configure_logging, mask_phone
+from app.core.phones import (
+    DEMO_PHONE_FIRST,
+    DEMO_PHONE_LAST,
+    DEMO_PHONE_PREFIX,
+    E164_PATTERN,
+    is_fictional_demo_phone,
+)
 from app.db.models import (
     Advisory,
     ConversationTurn,
@@ -58,12 +65,9 @@ from app.ml.schema import RiskProfile, age_to_bucket
 
 logger = logging.getLogger(__name__)
 
-# Fake numbers: +1 555 0100 ... +1 555 0199 (NANP fictional 555-01xx block).
-DEMO_PHONE_PREFIX: Final = "+1555"
-DEMO_PHONE_FIRST: Final = 100
-DEMO_PHONE_LAST: Final = 199
-# Same rule as the profiles.phone_e164 CHECK (0001_core_schema.sql).
-_E164: Final = re.compile(r"^\+[1-9][0-9]{6,14}$")
+# Fake numbers (+1 555 0100 ... 0199) and the E.164 rule live in app.core.phones so
+# the WhatsApp send guard can recognise and block them.
+_E164: Final = re.compile(E164_PATTERN)
 
 DAYS: Final = 30
 # Demo patients live in India (IST); readings are stamped at local clock times.
@@ -540,7 +544,7 @@ def validate_my_phone(number: str) -> str:
     compact = re.sub(r"[\s\-()]", "", number)
     if not _E164.match(compact):
         raise SeedError("--my-phone must be E.164, e.g. +919876543210")
-    if compact.startswith(DEMO_PHONE_PREFIX) and len(compact) == len(demo_phone(0)):
+    if is_fictional_demo_phone(compact):
         raise SeedError("--my-phone must be a real number, not one of the fake 555 numbers")
     return compact
 
