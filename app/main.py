@@ -3,6 +3,7 @@
 Run with ``uv run uvicorn app.main:app``. On startup the app schedules the batch update
 every ``BATCH_INTERVAL_MINUTES`` (default 15) with APScheduler, unless
 ``BATCH_SCHEDULER_ENABLED=false``. ``POST /admin/batch-run`` triggers a run on demand.
+``/webhooks/whatsapp`` receives WhatsApp Cloud API events (see ``app.api.webhooks``).
 Scheduled and manual runs cannot overlap: the second gets ``BatchAlreadyRunningError``.
 """
 
@@ -16,7 +17,7 @@ from datetime import UTC
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 
-from app.api import admin
+from app.api import admin, webhooks
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BatchAlreadyRunningError
 from app.core.logging import configure_logging
@@ -96,10 +97,11 @@ def create_app() -> FastAPI:
     """Build the FastAPI application.
 
     Returns:
-        The app with the admin router mounted.
+        The app with the admin and WhatsApp webhook routers mounted.
     """
     app = FastAPI(title="Virtual Diabetes Advisor", version="0.1.0", lifespan=lifespan)
     app.include_router(admin.router)
+    app.include_router(webhooks.router)
     return app
 
 
