@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import Connection, create_engine, func, select, update
+from sqlalchemy import Connection, create_engine, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, load_settings
@@ -468,8 +468,20 @@ def test_seed_script_produces_every_advisory_state(
     with factory() as session:
         again = seed_demo(session, now=clock(conn), scorer=scorer)
         session.commit()
-    assert again.deleted_users >= len(ids)
+    # Demo users with conversation turns (e.g. your own, if you chatted) are kept, not
+    # deleted; their seeded advisories are still cleared.
+    assert again.deleted_users + again.kept_users >= len(ids)
     assert sum(advisory_count(factory, uid) for uid in ids) == 0
+
+
+def add_login(conn: Connection) -> tuple[uuid.UUID, str]:
+    """Create a Supabase login (auth.users row) inside the test transaction."""
+    auth_id, email = uuid.uuid4(), f"seed-test-{uuid.uuid4().hex[:8]}@example.com"
+    conn.execute(
+        text("insert into auth.users (id, email) values (:id, :email)"),
+        {"id": auth_id, "email": email},
+    )
+    return auth_id, email
 
 
 @live
@@ -478,31 +490,46 @@ def test_reseed_keeps_demo_user_with_conversation_turns(
 ) -> None:
     from scripts.seed_demo import DEMO_PATIENTS, seed_demo  # noqa: PLC0415
 
-    my_phone, new_phone = "+447700900111", "+447700900222"
-    slot = next(i for i, spec in enumerate(DEMO_PATIENTS) if spec.my_phone_slot)
+    (my_login, my_email), (new_login, new_email) = add_login(conn), add_login(conn)
+    slot = next(i for i, spec in enumerate(DEMO_PATIENTS) if spec.my_login_slot)
     with factory() as session:
-        first = seed_demo(session, now=clock(conn), scorer=None, my_phone=my_phone)
+        first = seed_demo(session, now=clock(conn), scorer=None, my_email=my_email)
         session.commit()
     ids = [p.user_id for p in first.patients]
     me = ids[slot]
+    assert [p.linked for p in first.patients].count(True) == 1
+    assert first.patients[slot].linked
     run_batch_update(
         factory, scorer=None, user_ids=ids, window=(None, clock(conn)), settings=settings
     )
 
-    # The webhook stored an inbound message, and a reply referred to one advisory.
+    def turn_count() -> int:
+        with factory() as session:
+            count = session.scalar(
+                select(func.count())
+                .select_from(ConversationTurn)
+                .where(ConversationTurn.user_id == me)
+            )
+            return int(count or 0)
+
+    # The database may already hold turns for this patient (the seed keeps a demo user
+    # with history and links your login to it), so count relative to that.
+    turns_before = turn_count()
+
+    # The chat stored an inbound message, and a reply referred to one advisory.
     with factory() as session:
         audited = session.scalars(select(Advisory).where(Advisory.user_id == me)).first()
-        assert audited is not None, "the my-phone patient should have an advisory"
+        assert audited is not None, "the linked patient should have an advisory"
         audited_id, audited_reading = audited.id, audited.reading_id
         session.add_all(
             [
                 ConversationTurn(
-                    user_id=me, channel="whatsapp_text", direction="inbound",
-                    raw_text="hi", wamid=f"wamid.in-{uuid.uuid4()}",
+                    user_id=me, channel="web", direction="inbound",
+                    raw_text="hi", message_id=f"msg-in-{uuid.uuid4()}",
                 ),
                 ConversationTurn(
-                    user_id=me, channel="whatsapp_text", direction="outbound",
-                    advisory_id=audited_id, wamid=f"wamid.out-{uuid.uuid4()}",
+                    user_id=me, channel="web", direction="outbound",
+                    advisory_id=audited_id, message_id=f"msg-out-{uuid.uuid4()}",
                 ),
             ]
         )  # fmt: skip
@@ -510,20 +537,17 @@ def test_reseed_keeps_demo_user_with_conversation_turns(
         old_readings = set(session.scalars(select(Reading.id).where(Reading.user_id == me)))
 
     with factory() as session:
-        again = seed_demo(session, now=clock(conn), scorer=None, my_phone=my_phone)
+        again = seed_demo(session, now=clock(conn), scorer=None, my_email=my_email)
         session.commit()
 
     assert again.patients[slot].user_id == me
     assert again.patients[slot].kept is True
-    assert (again.kept_users, again.preserved_advisories) == (1, 1)
-    assert again.deleted_users >= len(ids) - 1
+    assert again.preserved_advisories == 1
+    assert again.deleted_users + again.kept_users >= len(ids)
     others = {p.user_id for i, p in enumerate(again.patients) if i != slot}
     assert others.isdisjoint(ids)  # everyone else was replaced
+    assert turn_count() == turns_before + 2
     with factory() as session:
-        turns = session.scalar(
-            select(func.count()).select_from(ConversationTurn).where(ConversationTurn.user_id == me)
-        )
-        assert turns == 2
         advisories = list(session.scalars(select(Advisory.id).where(Advisory.user_id == me)))
         assert advisories == [audited_id]  # only the audited advisory survived
         thresholds = session.scalar(
@@ -533,17 +557,15 @@ def test_reseed_keeps_demo_user_with_conversation_turns(
         readings = set(session.scalars(select(Reading.id).where(Reading.user_id == me)))
         assert readings & old_readings == {audited_reading}
         assert len(readings) == again.patients[slot].readings + 1
-        phone = session.scalar(select(Profile.phone_e164).where(Profile.user_id == me))
-        assert phone == my_phone
+        assert session.scalar(select(User.auth_user_id).where(User.id == me)) == my_login
 
-    # A different --my-phone re-attaches to the same user; no --my-phone keeps the number.
-    for requested, expected in ((new_phone, new_phone), (None, new_phone)):
+    # A different --my-email re-attaches to the same user; no --my-email keeps the link.
+    for requested, expected in ((new_email, new_login), (None, new_login)):
         with factory() as session:
-            report = seed_demo(session, now=clock(conn), scorer=None, my_phone=requested)
+            report = seed_demo(session, now=clock(conn), scorer=None, my_email=requested)
             session.commit()
             assert report.patients[slot].user_id == me
-            phone = session.scalar(select(Profile.phone_e164).where(Profile.user_id == me))
-            assert phone == expected
+            assert session.scalar(select(User.auth_user_id).where(User.id == me)) == expected
 
     # The batch job rebuilds thresholds and advisories for the kept user.
     summary = run_batch_update(
@@ -551,6 +573,22 @@ def test_reseed_keeps_demo_user_with_conversation_turns(
     )
     assert (summary.status, summary.users_failed) == ("succeeded", 0)
     assert advisory_count(factory, me) > 1
+
+
+@live
+def test_seed_rejects_unknown_or_real_patient_login(
+    conn: Connection, factory: Callable[[], Session]
+) -> None:
+    from scripts.seed_demo import SeedError, seed_demo  # noqa: PLC0415
+
+    with factory() as session, pytest.raises(SeedError, match="create the account"):
+        seed_demo(session, now=clock(conn), scorer=None, my_email="nobody-xyz@example.com")
+    auth_id, email = add_login(conn)
+    with factory() as session:
+        session.add(User(id=uuid.uuid4(), role="patient", auth_user_id=auth_id))
+        session.commit()
+    with factory() as session, pytest.raises(SeedError, match="real"):
+        seed_demo(session, now=clock(conn), scorer=None, my_email=email)
 
 
 @pytest.mark.parametrize(

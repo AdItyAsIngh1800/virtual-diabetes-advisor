@@ -1,4 +1,4 @@
-"""Tests for scripts/seed_demo.py: cohort coverage, determinism, phones and scenarios.
+"""Tests for scripts/seed_demo.py: cohort coverage, determinism, login linking, scenarios.
 
 The scenario test runs the generated readings through the real threshold engine and
 advisory planner (no database), so it proves the cohort yields every advisory state.
@@ -29,13 +29,13 @@ from app.services.thresholds import (
 from scripts.seed_demo import (
     DAYS,
     DEMO_PATIENTS,
+    KeptUser,
     PatientSpec,
     SeedError,
     build_risk_profile,
-    demo_phone,
     generate_readings,
     match_kept_users,
-    validate_my_phone,
+    validate_my_email,
 )
 
 NOW = datetime(2026, 11, 15, 18, 0, tzinfo=UTC)  # 23:30 IST: today's readings exist
@@ -101,7 +101,7 @@ def test_cohort_size_and_mix() -> None:
         tiers = {s.target_tier for s in DEMO_PATIENTS if s.diabetes_status == status}
         assert tiers == {"low", "moderate", "high"}, status
     assert len({s.key for s in DEMO_PATIENTS}) == len(DEMO_PATIENTS)
-    assert sum(s.my_phone_slot for s in DEMO_PATIENTS) == 1
+    assert sum(s.my_login_slot for s in DEMO_PATIENTS) == 1
 
 
 def test_healthy_and_complex_older_adults_present() -> None:
@@ -112,59 +112,64 @@ def test_healthy_and_complex_older_adults_present() -> None:
     assert any(n <= 1 for n in conditions), "need a healthy older adult"
 
 
-def test_phone_numbers_are_fake_and_unique() -> None:
-    phones = [demo_phone(i) for i in range(len(DEMO_PATIENTS))]
-    assert phones[0] == "+15550100"
-    assert len(set(phones)) == len(phones)
-    assert all("+15550100" <= p <= "+15550199" for p in phones)
-    assert demo_phone(99) == "+15550199"
-    with pytest.raises(SeedError, match="fake numbers"):
-        demo_phone(100)
+@pytest.mark.parametrize("raw", ["you@example.com", "  You@Example.COM ", "a.b+c@uni.ac.in"])
+def test_my_email_accepts_addresses(raw: str) -> None:
+    assert validate_my_email(raw) == raw.strip().lower()
 
 
-@pytest.mark.parametrize("raw", ["+91 98765 43210", "+919876543210", "+1 (415) 555-2671"])
-def test_my_phone_accepts_e164(raw: str) -> None:
-    assert validate_my_phone(raw).startswith("+")
-    assert " " not in validate_my_phone(raw)
+@pytest.mark.parametrize("raw", ["", "you", "you@", "@example.com", "you@example", "a b@c.d"])
+def test_my_email_rejects_non_addresses(raw: str) -> None:
+    with pytest.raises(SeedError, match="--my-email"):
+        validate_my_email(raw)
 
 
-@pytest.mark.parametrize("raw", ["9876543210", "+0123456789", "+15550142", "hello"])
-def test_my_phone_rejects_bad_or_fake(raw: str) -> None:
-    with pytest.raises(SeedError):
-        validate_my_phone(raw)
+SLOT = next(i for i, s in enumerate(DEMO_PATIENTS) if s.my_login_slot)
+MY_LOGIN = uuid.uuid4()
+OLD_LOGIN = uuid.uuid4()
 
 
-MY_PHONE = "+447700900111"
-OLD_REAL = "+447700900222"
-SLOT = next(i for i, s in enumerate(DEMO_PATIENTS) if s.my_phone_slot)
+def kept(name: str | None, login: uuid.UUID | None = None) -> KeptUser:
+    return KeptUser(user_id=uuid.uuid4(), full_name=name, auth_user_id=login)
 
 
-def test_kept_user_on_fake_number_keeps_its_patient() -> None:
-    user = uuid.uuid4()
-    matched, unmatched = match_kept_users([(user, demo_phone(3))], DEMO_PATIENTS, None)
-    assert (matched, unmatched) == ({3: user}, [])
+def test_unlinked_kept_user_keeps_its_patient_by_name() -> None:
+    user = kept(DEMO_PATIENTS[3].name)
+    assert match_kept_users([user], DEMO_PATIENTS, None) == ({3: user.user_id}, [])
 
 
-@pytest.mark.parametrize("my_phone", [None, MY_PHONE, "+447700900333"])
-def test_kept_user_on_real_number_is_the_my_phone_patient(my_phone: str | None) -> None:
-    user = uuid.uuid4()
-    matched, unmatched = match_kept_users([(user, MY_PHONE)], DEMO_PATIENTS, my_phone)
-    assert (matched, unmatched) == ({SLOT: user}, [])
+@pytest.mark.parametrize("my_login", [None, MY_LOGIN, OLD_LOGIN])
+def test_linked_kept_user_is_the_my_email_patient(my_login: uuid.UUID | None) -> None:
+    # Linked users go to the login slot whatever their name.
+    user = kept(DEMO_PATIENTS[5].name, MY_LOGIN)
+    assert match_kept_users([user], DEMO_PATIENTS, my_login) == ({SLOT: user.user_id}, [])
 
 
-def test_my_phone_user_wins_the_slot_over_an_older_real_number() -> None:
-    old, me = uuid.uuid4(), uuid.uuid4()
-    kept = [(old, OLD_REAL), (me, MY_PHONE)]
-    assert match_kept_users(kept, DEMO_PATIENTS, MY_PHONE) == ({SLOT: me}, [old])
-    # Without --my-phone the first real number (by input order) takes the slot.
-    assert match_kept_users(kept, DEMO_PATIENTS, None) == ({SLOT: old}, [me])
+def test_my_login_wins_the_slot_over_an_older_link() -> None:
+    old, me = kept("x", OLD_LOGIN), kept("y", MY_LOGIN)
+    assert match_kept_users([old, me], DEMO_PATIENTS, MY_LOGIN) == (
+        {SLOT: me.user_id},
+        [old.user_id],
+    )
+    # Without --my-email the first linked user (input order) takes the slot.
+    assert match_kept_users([old, me], DEMO_PATIENTS, None) == (
+        {SLOT: old.user_id},
+        [me.user_id],
+    )
+
+
+def test_slot_patient_by_name_loses_to_a_linked_user() -> None:
+    by_name, linked = kept(DEMO_PATIENTS[SLOT].name), kept(None, MY_LOGIN)
+    matched, unmatched = match_kept_users([by_name, linked], DEMO_PATIENTS, MY_LOGIN)
+    assert (matched, unmatched) == ({SLOT: linked.user_id}, [by_name.user_id])
 
 
 def test_kept_users_outside_the_cohort_are_unmatched() -> None:
-    beyond, real = uuid.uuid4(), uuid.uuid4()
-    no_slot = [replace(spec, my_phone_slot=False) for spec in DEMO_PATIENTS]
-    kept = [(beyond, demo_phone(len(DEMO_PATIENTS))), (real, MY_PHONE)]
-    assert match_kept_users(kept, no_slot, MY_PHONE) == ({}, [real, beyond])
+    stranger, linked = kept("Not In Cohort"), kept(None, MY_LOGIN)
+    no_slot = [replace(spec, my_login_slot=False) for spec in DEMO_PATIENTS]
+    assert match_kept_users([stranger, linked], no_slot, MY_LOGIN) == (
+        {},
+        [linked.user_id, stranger.user_id],
+    )
 
 
 def test_readings_cover_30_days_of_fasting_and_post_meal() -> None:

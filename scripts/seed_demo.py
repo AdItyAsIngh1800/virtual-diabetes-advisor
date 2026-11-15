@@ -2,9 +2,9 @@
 
 Usage::
 
-    uv run python -m scripts.seed_demo                      # fake numbers only
-    uv run python -m scripts.seed_demo --my-phone +9198...  # one patient -> your WhatsApp
-    uv run python -m app.jobs.batch_update                  # then run the batch job
+    uv run python -m scripts.seed_demo                          # no login linked
+    uv run python -m scripts.seed_demo --my-email you@example.com  # link your /app login
+    uv run python -m app.jobs.batch_update                      # then run the batch job
 
 Safe to re-run, in one transaction with the new inserts. Real patients are never
 touched. Demo users are handled in two ways:
@@ -15,7 +15,7 @@ touched. Demo users are handled in two ways:
   log (R5) and cannot be deleted. Only its readings, thresholds and advisories are
   replaced from the seed; its id, profile and turns stay. Advisories that a turn
   refers to are kept too (with their reading and threshold), because the turn's
-  foreign key must stay valid. ``--my-phone`` re-attaches to this same user.
+  foreign key must stay valid. ``--my-email`` re-attaches to this same user.
 
 The cohort covers people with and without diabetes, all three risk tiers, healthy and
 complex older adults (ADA 2026 Table 13.2 via the threshold engine's proxy), and these
@@ -23,9 +23,10 @@ scenarios: drift into the pre-breach band, a significant rising trend, readings 
 54 mg/dL, and steady near-limit readings in every band state. Values are generated from
 a fixed seed, so every run produces the same cohort.
 
-Phone numbers are fake: ``+1 555 0100`` to ``+1 555 0199`` (the 555-01xx block is
-reserved for fiction). ``--my-phone`` swaps one patient's number for a real one so the
-Phase 5 WhatsApp delivery can be tested end to end.
+Demo patients have no phone number and no login. ``--my-email`` links one of them
+(Meera, the pre-breach drift scenario) to your own Supabase login, the account you
+created at ``/app``. That patient is the only demo patient the notification guard
+lets Web Push reach (``app.services.notifications.check_recipient``).
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ import logging
 import random
 import re
 import uuid
-from collections.abc import Collection, Iterator, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from decimal import Decimal
@@ -49,14 +50,8 @@ from sqlalchemy.orm import Session
 from app.core.clinical_limits import DiabetesStatus
 from app.core.config import get_settings
 from app.core.exceptions import DiabetesAdvisorError
-from app.core.logging import configure_logging, mask_phone
-from app.core.phones import (
-    DEMO_PHONE_FIRST,
-    DEMO_PHONE_LAST,
-    DEMO_PHONE_PREFIX,
-    E164_PATTERN,
-    is_fictional_demo_phone,
-)
+from app.core.logging import configure_logging
+from app.db.auth_users import find_auth_user_id_by_email
 from app.db.models import (
     Advisory,
     ConversationTurn,
@@ -73,9 +68,8 @@ from app.ml.schema import RiskProfile, age_to_bucket
 
 logger = logging.getLogger(__name__)
 
-# Fake numbers (+1 555 0100 ... 0199) and the E.164 rule live in app.core.phones so
-# the WhatsApp send guard can recognise and block them.
-_E164: Final = re.compile(E164_PATTERN)
+# Shape check only (something@domain.tld); Supabase Auth owns real validation.
+_EMAIL: Final = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 DAYS: Final = 30
 # Demo patients live in India (IST); readings are stamped at local clock times.
@@ -183,8 +177,8 @@ class PatientSpec:
         conditions: Fixed complex-health proxy answers (older adults); unset ones
             are chosen by the tier search.
         events: ``(day, context, value)`` overrides, e.g. a hypoglycaemic episode.
-        my_phone_slot: The patient ``--my-phone`` attaches to (also the patient a kept
-            demo user with a real number belongs to).
+        my_login_slot: The patient ``--my-email`` links to your login (also the
+            patient a kept demo user that is already linked belongs to).
     """
 
     key: str
@@ -199,7 +193,7 @@ class PatientSpec:
     post_meal: Series
     conditions: Mapping[ConditionName, bool] = field(default_factory=dict)
     events: tuple[tuple[int, ReadingContext, float], ...] = ()
-    my_phone_slot: bool = False
+    my_login_slot: bool = False
 
 
 _HEALTHY_OLDER: Final[Mapping[ConditionName, bool]] = dict.fromkeys(_CONDITIONS, False)
@@ -211,7 +205,7 @@ DEMO_PATIENTS: Final[tuple[PatientSpec, ...]] = (
     PatientSpec(
         "meera", "Meera Iyer", 58, 0, "diabetes", "en", "moderate",
         "fasting drifts up into the pre-breach band (~121-127 vs limit 130)",
-        Series(112, 124, 2.0), steady(150, 8), my_phone_slot=True,
+        Series(112, 124, 2.0), steady(150, 8), my_login_slot=True,
     ),
     PatientSpec(
         "rohan", "Rohan Mehta", 62, 1, "diabetes", "hi", "high",
@@ -335,24 +329,6 @@ class GeneratedReading(BaseModel):
     context: ReadingContext
     value_mg_dl: Decimal = Field(gt=0)
     measured_at: datetime
-
-
-def demo_phone(index: int) -> str:
-    """Return the fake E.164 number of the ``index``-th demo patient.
-
-    Args:
-        index: 0-based patient index.
-
-    Returns:
-        ``+15550100`` for index 0, up to ``+15550199``.
-
-    Raises:
-        SeedError: If the index is outside the 100-number fake block.
-    """
-    number = DEMO_PHONE_FIRST + index
-    if number > DEMO_PHONE_LAST:
-        raise SeedError(f"only {DEMO_PHONE_LAST - DEMO_PHONE_FIRST + 1} fake numbers exist")
-    return f"{DEMO_PHONE_PREFIX}{number:04d}"
 
 
 def _patient_rng(rng_seed: int, key: str, purpose: str) -> random.Random:
@@ -501,7 +477,7 @@ class SeededPatient(BaseModel):
         key: Spec key.
         user_id: New ``users.id``.
         name: Display name.
-        phone_masked: Masked phone number (PII-safe).
+        linked: Linked to a Supabase login (receives notifications).
         diabetes_status: Limit set.
         age: Age.
         target_tier: Tier searched for.
@@ -515,7 +491,7 @@ class SeededPatient(BaseModel):
     key: str
     user_id: uuid.UUID
     name: str
-    phone_masked: str
+    linked: bool
     diabetes_status: DiabetesStatus
     age: int
     target_tier: RiskTier
@@ -547,84 +523,104 @@ class SeedReport(BaseModel):
     unmatched_user_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
-def validate_my_phone(number: str) -> str:
-    """Check a real phone number for ``--my-phone``.
+def validate_my_email(email: str) -> str:
+    """Check the ``--my-email`` value.
 
     Args:
-        number: E.164 number, e.g. ``+919876543210`` (spaces and dashes allowed).
+        email: Login email of the account created at ``/app``.
 
     Returns:
-        The number in E.164 without separators.
+        The email, trimmed and lower-cased (Supabase Auth stores it lower-case).
 
     Raises:
-        SeedError: If it is not E.164 or lies in the fake demo block.
+        SeedError: If it does not look like an email address.
     """
-    compact = re.sub(r"[\s\-()]", "", number)
-    if not _E164.match(compact):
-        raise SeedError("--my-phone must be E.164, e.g. +919876543210")
-    if is_fictional_demo_phone(compact):
-        raise SeedError("--my-phone must be a real number, not one of the fake 555 numbers")
-    return compact
+    cleaned = email.strip().lower()
+    if not _EMAIL.match(cleaned):
+        raise SeedError("--my-email must be an email address, e.g. you@example.com")
+    return cleaned
 
 
-def demo_users_with_turns(session: Session) -> list[tuple[uuid.UUID, str]]:
-    """List demo users that have conversation turns, with their phone numbers.
+class KeptUser(BaseModel):
+    """A demo user that has conversation turns and therefore cannot be deleted.
+
+    Attributes:
+        user_id: ``users.id``.
+        full_name: ``profiles.full_name`` (the seed writes the spec's name there).
+        auth_user_id: Linked Supabase login, if any.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    user_id: uuid.UUID
+    full_name: str | None
+    auth_user_id: uuid.UUID | None = None
+
+
+def demo_users_with_turns(session: Session) -> list[KeptUser]:
+    """List demo users that have conversation turns.
 
     Args:
         session: Open session.
 
     Returns:
-        ``(user_id, phone_e164)`` pairs, ordered by phone for a stable result.
+        The users, ordered by id for a stable result.
     """
     has_turns = select(ConversationTurn.user_id).where(ConversationTurn.user_id == User.id)
     rows = session.execute(
-        select(User.id, Profile.phone_e164)
-        .join(Profile, Profile.user_id == User.id)
+        select(User.id, Profile.full_name, User.auth_user_id)
+        .outerjoin(Profile, Profile.user_id == User.id)
         .where(User.is_demo, has_turns.exists())
-        .order_by(Profile.phone_e164)
+        .order_by(User.id)
     )
-    return [(user_id, phone) for user_id, phone in rows]
+    return [
+        KeptUser(user_id=user_id, full_name=name, auth_user_id=auth_id)
+        for user_id, name, auth_id in rows
+    ]
 
 
 def match_kept_users(
-    kept: Sequence[tuple[uuid.UUID, str]],
+    kept: Sequence[KeptUser],
     patients: Sequence[PatientSpec],
-    my_phone: str | None,
+    my_auth_user_id: uuid.UUID | None,
 ) -> tuple[dict[int, uuid.UUID], list[uuid.UUID]]:
     """Decide which cohort patient each kept demo user stands for.
 
     Rules, in order:
 
-    1. A user whose number equals ``my_phone`` is the ``my_phone_slot`` patient, so
-       ``--my-phone`` re-attaches to the same user on every re-seed.
-    2. A user on a fake number ``+1555 01NN`` is the patient at index ``NN``, the slot
-       :func:`demo_phone` gave it.
-    3. A user on any other real number is the ``my_phone_slot`` patient (it got that
-       number from an earlier ``--my-phone``).
+    1. A user linked to ``my_auth_user_id`` is the ``my_login_slot`` patient, so
+       ``--my-email`` re-attaches to the same user on every re-seed.
+    2. A user linked to any other login is the ``my_login_slot`` patient (it was
+       linked by an earlier ``--my-email``).
+    3. Otherwise the user is the patient whose name equals its ``full_name``.
 
-    A user whose patient is already taken, or out of range, is unmatched.
+    A user whose patient is already taken, or that matches none, is unmatched.
 
     Args:
-        kept: ``(user_id, phone_e164)`` of demo users with conversation turns.
+        kept: Demo users with conversation turns.
         patients: The cohort being seeded.
-        my_phone: Validated ``--my-phone`` number, or ``None``.
+        my_auth_user_id: Login id from ``--my-email``, or ``None``.
 
     Returns:
         ``({patient index: user_id}, [unmatched user ids])``.
     """
-    slot = next((i for i, spec in enumerate(patients) if spec.my_phone_slot), None)
+    slot = next((i for i, spec in enumerate(patients) if spec.my_login_slot), None)
+    by_name = {spec.name: i for i, spec in enumerate(patients)}
+
+    def priority(user: KeptUser) -> int:
+        if my_auth_user_id is not None and user.auth_user_id == my_auth_user_id:
+            return 0
+        return 1 if user.auth_user_id is not None else 2
+
     matched: dict[int, uuid.UUID] = {}
     unmatched: list[uuid.UUID] = []
-    # Rule 1 first, so the --my-phone user wins the slot over an older real number.
-    for user_id, phone in sorted(kept, key=lambda row: row[1] != my_phone):
-        if is_fictional_demo_phone(phone):
-            index: int | None = int(phone[len(DEMO_PHONE_PREFIX) :]) - DEMO_PHONE_FIRST
+    # Stable sort: rule 1 first, so your login wins the slot over an older link.
+    for user in sorted(kept, key=priority):
+        index = slot if user.auth_user_id is not None else by_name.get(user.full_name or "")
+        if index is None or index in matched:
+            unmatched.append(user.user_id)
         else:
-            index = slot
-        if index is None or index >= len(patients) or index in matched:
-            unmatched.append(user_id)
-        else:
-            matched[index] = user_id
+            matched[index] = user.user_id
     return matched, unmatched
 
 
@@ -700,25 +696,12 @@ def reset_seeded_data(session: Session, user_ids: Collection[uuid.UUID]) -> int:
     return int(preserved or 0)
 
 
-def _phone_numbers(my_phone: str | None) -> Iterator[str]:
-    """Yield each patient's number in :data:`DEMO_PATIENTS` order.
-
-    Args:
-        my_phone: Real number for the ``my_phone_slot`` patient, or ``None``.
-
-    Yields:
-        E.164 numbers.
-    """
-    for index, spec in enumerate(DEMO_PATIENTS):
-        yield my_phone if (spec.my_phone_slot and my_phone) else demo_phone(index)
-
-
 def seed_demo(
     session: Session,
     *,
     now: datetime,
     scorer: RiskScorer | None,
-    my_phone: str | None = None,
+    my_email: str | None = None,
     patients: Sequence[PatientSpec] = DEMO_PATIENTS,
     rng_seed: int = DEFAULT_RNG_SEED,
 ) -> SeedReport:
@@ -731,7 +714,7 @@ def seed_demo(
         session: Open session.
         now: Current time; readings cover the 30 days up to it.
         scorer: Risk model used to hit each patient's target tier, or ``None``.
-        my_phone: Validated real number for the ``my_phone_slot`` patient.
+        my_email: Validated login email to link to the ``my_login_slot`` patient.
         patients: Cohort to create.
         rng_seed: Global seed.
 
@@ -739,40 +722,41 @@ def seed_demo(
         What was deleted and created.
 
     Raises:
-        SeedError: If ``my_phone`` belongs to a real (non-demo) patient.
+        SeedError: If no Supabase login has ``my_email``, or that login already
+            belongs to a real (non-demo) user.
     """
-    if my_phone is not None:
-        owner = session.scalar(
-            select(User.is_demo)
-            .join(Profile, Profile.user_id == User.id)
-            .where(Profile.phone_e164 == my_phone)
-        )
+    my_auth_user_id: uuid.UUID | None = None
+    if my_email is not None:
+        my_auth_user_id = find_auth_user_id_by_email(session, my_email)
+        if my_auth_user_id is None:
+            raise SeedError("no Supabase login uses that email: create the account at /app first")
+        owner = session.scalar(select(User.is_demo).where(User.auth_user_id == my_auth_user_id))
         if owner is False:
-            raise SeedError("--my-phone already belongs to a real (non-demo) patient")
+            raise SeedError("that login already belongs to a real (non-demo) user")
     kept = demo_users_with_turns(session)
-    matched, unmatched = match_kept_users(kept, patients, my_phone)
+    matched, unmatched = match_kept_users(kept, patients, my_auth_user_id)
     if unmatched:
         logger.warning(
             "%d demo users with conversation turns match no seeded patient; left untouched",
             len(unmatched),
         )
-    deleted = clear_demo_data(session, keep=[user_id for user_id, _ in kept])
+    deleted = clear_demo_data(session, keep=[user.user_id for user in kept])
     preserved = reset_seeded_data(session, matched.values())
-    # Deletes must reach the database before a kept user takes over a number that a
-    # deleted user held (profiles.phone_e164 is unique).
+    # Deletes must reach the database before a kept or new user takes over a login
+    # that a deleted user held (users.auth_user_id is unique).
     session.flush()
 
     seeded: list[SeededPatient] = []
     reading_rows: list[dict[str, object]] = []
-    numbers = _phone_numbers(my_phone)
-    for index, (spec, new_phone) in enumerate(zip(patients, numbers, strict=False)):
+    for index, spec in enumerate(patients):
         risk_profile, assessment = build_risk_profile(spec, scorer, rng_seed=rng_seed)
+        login = my_auth_user_id if spec.my_login_slot else None
         user_id = matched.get(index)
         if user_id is not None:
-            phone = _reattach_phone(session, user_id, my_phone if spec.my_phone_slot else None)
+            linked = _reattach_login(session, user_id, login)
         else:
-            phone = new_phone
-            user_id = _create_patient(session, spec, phone, risk_profile)
+            user_id = _create_patient(session, spec, risk_profile, login)
+            linked = login is not None
         readings = generate_readings(spec, now=now, rng_seed=rng_seed)
         reading_rows.extend(
             {"user_id": user_id, "source": "seed", **r.model_dump()} for r in readings
@@ -782,7 +766,7 @@ def seed_demo(
                 key=spec.key,
                 user_id=user_id,
                 name=spec.name,
-                phone_masked=mask_phone(phone),
+                linked=linked,
                 diabetes_status=spec.diabetes_status,
                 age=spec.age,
                 target_tier=spec.target_tier,
@@ -807,20 +791,23 @@ def seed_demo(
 
 
 def _create_patient(
-    session: Session, spec: PatientSpec, phone: str, risk_profile: RiskProfile
+    session: Session,
+    spec: PatientSpec,
+    risk_profile: RiskProfile,
+    auth_user_id: uuid.UUID | None,
 ) -> uuid.UUID:
-    """Insert a new demo user and profile.
+    """Insert a new demo user and profile (no phone number).
 
     Args:
         session: Open session.
         spec: The patient.
-        phone: E.164 number to give them.
         risk_profile: BRFSS answers found for the target tier.
+        auth_user_id: Login to link (``--my-email`` patient only), or ``None``.
 
     Returns:
         The new user id.
     """
-    user = User(id=uuid.uuid4(), role="patient", is_demo=True)
+    user = User(id=uuid.uuid4(), role="patient", is_demo=True, auth_user_id=auth_user_id)
     session.add(user)
     session.flush()
     answers = risk_profile.model_dump(exclude={"age", "sex"})
@@ -828,7 +815,6 @@ def _create_patient(
         Profile(
             user_id=user.id,
             full_name=spec.name,
-            phone_e164=phone,
             language=spec.language,
             age_years=spec.age,
             sex=spec.sex,
@@ -839,28 +825,27 @@ def _create_patient(
     return user.id
 
 
-def _reattach_phone(session: Session, user_id: uuid.UUID, my_phone: str | None) -> str:
-    """Give a kept demo user ``--my-phone`` (if set) and return their number.
+def _reattach_login(session: Session, user_id: uuid.UUID, auth_user_id: uuid.UUID | None) -> bool:
+    """Link a kept demo user to ``--my-email``'s login (if given).
 
     Args:
         session: Open session.
         user_id: Kept demo user.
-        my_phone: Number for the ``my_phone_slot`` patient, or ``None`` to keep the
-            current number.
+        auth_user_id: Login to link, or ``None`` to keep the current link.
 
     Returns:
-        The user's number after the update.
+        Whether the user is linked to a login afterwards.
 
     Raises:
-        SeedError: If the user has no profile.
+        SeedError: If the user no longer exists.
     """
-    profile = session.scalar(select(Profile).where(Profile.user_id == user_id))
-    if profile is None:  # pragma: no cover - demo_users_with_turns joins on profiles
-        raise SeedError(f"kept demo user {user_id} has no profile")
-    if my_phone is not None and profile.phone_e164 != my_phone:
-        profile.phone_e164 = my_phone
+    user = session.get(User, user_id)
+    if user is None:  # pragma: no cover - demo_users_with_turns just returned it
+        raise SeedError(f"kept demo user {user_id} disappeared")
+    if auth_user_id is not None and user.auth_user_id != auth_user_id:
+        user.auth_user_id = auth_user_id
         session.flush()
-    return profile.phone_e164
+    return user.auth_user_id is not None
 
 
 # ---------------------------------------------------------------------------
@@ -880,14 +865,14 @@ def _print_report(report: SeedReport) -> None:
         f"{report.preserved_advisories} audited advisories preserved).",
         f"Seeded {len(report.patients)} demo patients, {report.readings} readings.",
         "",
-        f"{'patient':<16} {'phone':<14} {'status':<12} {'age':>3} {'tier(target/model)':<20} "
+        f"{'patient':<16} {'login':<6} {'status':<12} {'age':>3} {'tier(target/model)':<20} "
         "scenario",
     ]
     for p in report.patients:
         tier = f"{p.target_tier}/{p.model_tier or '?'}"
         name = f"{p.name}*" if p.kept else p.name
         lines.append(
-            f"{name:<16} {p.phone_masked:<14} {p.diabetes_status:<12} {p.age:>3} "
+            f"{name:<16} {'linked' if p.linked else '-':<6} {p.diabetes_status:<12} {p.age:>3} "
             f"{tier:<20} {p.scenario}"
         )
     if report.kept_users:
@@ -913,21 +898,21 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0] if __doc__ else None)
     parser.add_argument(
-        "--my-phone",
-        help="attach the first demo patient to this real WhatsApp number (E.164)",
+        "--my-email",
+        help="link one demo patient to your /app login (the account must exist)",
     )
     parser.add_argument("--rng-seed", type=int, default=DEFAULT_RNG_SEED)
     args = parser.parse_args(argv)
     configure_logging(get_settings().log_level)
 
-    my_phone = validate_my_phone(args.my_phone) if args.my_phone else None
+    my_email = validate_my_email(args.my_email) if args.my_email else None
     factory = get_session_factory()
     with factory() as session:
         now = session.scalar(select(func.now()))
         if not isinstance(now, datetime):  # pragma: no cover - now() is never NULL
             raise SeedError("database returned no now()")
         report = seed_demo(
-            session, now=now, scorer=load_risk_scorer(), my_phone=my_phone, rng_seed=args.rng_seed
+            session, now=now, scorer=load_risk_scorer(), my_email=my_email, rng_seed=args.rng_seed
         )
         session.commit()
     _print_report(report)
