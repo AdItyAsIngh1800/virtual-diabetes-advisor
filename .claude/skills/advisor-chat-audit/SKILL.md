@@ -16,7 +16,7 @@ Pipeline per incoming message (text or transcribed voice):
    LLM constrained to that context, cite the KB entry id. If retrieval confidence is low, say so and
    offer practitioner connect.
 4. `practitioner_request` -> create a `handoff` record (status `open -> assigned -> resolved`),
-   notify the practitioner (WhatsApp/email), relay messages while the handoff is open.
+   notify the practitioner (Web Push / Supabase Realtime), relay messages while the handoff is open.
 5. Reply in the user's channel: text, plus voice if the user wrote in voice.
 
 System prompt for the LLM must forbid dosing, diagnosis and anything outside the KB context.

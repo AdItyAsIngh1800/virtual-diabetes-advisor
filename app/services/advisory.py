@@ -22,7 +22,7 @@ Rules, applied to readings oldest first:
    of later, less severe lows in the same state.
 
 Nothing here sends a message: rows are created with ``delivery_status = 'queued'`` and
-Phase 5 delivers them (whatsapp-voice-advisory skill).
+the Web Push dispatcher delivers them (web-push-voice-advisory skill).
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ from app.services.thresholds import BandResult
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Message templates (whatsapp-voice-advisory skill: fixed templates, never free LLM
+# Message templates (web-push-voice-advisory skill: fixed templates, never free LLM
 # text for alerts; no dosing advice, no diagnosis; low-glucose guidance only with a
 # cited source - clinical_limits.py has none for treatment, so lows say "contact your
 # doctor"). Each message is ~40-60 words, under the skill's ~25 s spoken limit.

@@ -7,6 +7,7 @@ import pytest
 from app.core import config
 from app.core.config import Settings, load_settings
 from app.core.exceptions import ConfigurationError
+from scripts.gen_vapid_keys import generate_vapid_keys
 
 SECRET = "sk-test-super-secret-value"
 
@@ -14,15 +15,13 @@ REQUIRED_ENV = {
     "SUPABASE_URL": "https://abc.supabase.co",
     "SUPABASE_SERVICE_ROLE_KEY": SECRET,
     "DATABASE_URL": "postgresql://postgres:pw@db.abc.supabase.co:5432/postgres",
-    "WHATSAPP_ACCESS_TOKEN": "wa-token",
-    "WHATSAPP_PHONE_NUMBER_ID": "123456789012345",
-    "WHATSAPP_VERIFY_TOKEN": "verify-me",
-    "WHATSAPP_APP_SECRET": "app-secret",
-    "GRAPH_API_VERSION": "v21.0",
 }
 OPTIONAL_ENV = (
-    "WHATSAPP_TEST_MODE",
-    "ALLOWED_TEST_NUMBERS",
+    "SUPABASE_ANON_KEY",
+    "VAPID_PUBLIC_KEY",
+    "VAPID_PRIVATE_KEY",
+    "VAPID_SUBJECT",
+    "ADVISORY_MAX_AGE_MINUTES",
     "PUBLIC_BASE_URL",
     "ANTHROPIC_API_KEY",
     "PRE_BREACH_BAND",
@@ -49,11 +48,6 @@ def test_loads_every_variable(env: pytest.MonkeyPatch) -> None:
     assert str(s.supabase_url).startswith("https://abc.supabase.co")
     assert s.supabase_service_role_key.get_secret_value() == SECRET
     assert s.database_url.get_secret_value().startswith("postgresql://")
-    assert s.whatsapp_access_token.get_secret_value() == "wa-token"
-    assert s.whatsapp_phone_number_id == "123456789012345"
-    assert s.whatsapp_verify_token.get_secret_value() == "verify-me"
-    assert s.whatsapp_app_secret.get_secret_value() == "app-secret"
-    assert s.graph_api_version == "v21.0"
     assert s.public_base_url is None
     assert s.anthropic_api_key is None
 
@@ -72,8 +66,9 @@ def test_defaults(env: pytest.MonkeyPatch) -> None:
     assert s.batch_scheduler_enabled is True
     assert s.admin_api_key is None
     assert s.log_level == "INFO"
-    assert s.whatsapp_test_mode is True
-    assert s.allowed_test_numbers == ()
+    assert s.advisory_max_age_minutes == 60
+    assert (s.vapid_public_key, s.vapid_private_key, s.vapid_subject) == (None, None, None)
+    assert s.supabase_anon_key is None
 
 
 def test_defaults_can_be_overridden(env: pytest.MonkeyPatch) -> None:
@@ -98,32 +93,64 @@ def test_cooldown_bounds(env: pytest.MonkeyPatch, hours: str) -> None:
         load_settings(env_file=None)
 
 
+def _with_vapid(env: pytest.MonkeyPatch) -> tuple[str, str]:
+    keys = generate_vapid_keys()
+    env.setenv("VAPID_PUBLIC_KEY", keys.public_key)
+    env.setenv("VAPID_PRIVATE_KEY", keys.private_key)
+    env.setenv("VAPID_SUBJECT", "mailto:team6@example.com")
+    return keys
+
+
+def test_vapid_settings_load_and_hide_the_private_key(env: pytest.MonkeyPatch) -> None:
+    public, private = _with_vapid(env)
+    vapid = load_settings(env_file=None).require_vapid()
+    assert vapid.public_key == public
+    assert vapid.private_key.get_secret_value() == private
+    assert vapid.subject == "mailto:team6@example.com"
+    assert private not in repr(load_settings(env_file=None))
+
+
+def test_require_vapid_names_every_missing_variable(env: pytest.MonkeyPatch) -> None:
+    env.setenv("VAPID_SUBJECT", "mailto:team6@example.com")
+    with pytest.raises(ConfigurationError, match="VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY"):
+        load_settings(env_file=None).require_vapid()
+
+
 @pytest.mark.parametrize(
-    ("raw", "expected"), [("21.0", "v21.0"), ("v22.0", "v22.0"), (" v23.1 ", "v23.1")]
+    ("variable", "value"),
+    [
+        ("VAPID_PUBLIC_KEY", "not-base64!"),
+        ("VAPID_PUBLIC_KEY", "AAAA"),  # valid base64url, wrong length
+        ("VAPID_PRIVATE_KEY", "c2hvcnQ"),  # 5 bytes, not 32
+        ("VAPID_SUBJECT", "team6@example.com"),  # missing mailto:
+        ("VAPID_SUBJECT", "http://example.com"),  # must be https
+    ],
 )
-def test_graph_version_normalised(env: pytest.MonkeyPatch, raw: str, expected: str) -> None:
-    env.setenv("GRAPH_API_VERSION", raw)
-    s = load_settings(env_file=None)
-    assert s.graph_api_version == expected
-    assert s.graph_api_base_url == f"https://graph.facebook.com/{expected}"
+def test_vapid_values_are_validated(env: pytest.MonkeyPatch, variable: str, value: str) -> None:
+    _with_vapid(env)
+    env.setenv(variable, value)
+    with pytest.raises(ConfigurationError, match=variable) as info:
+        load_settings(env_file=None)
+    assert value not in str(info.value)
 
 
-@pytest.mark.parametrize("raw", ["latest", "v21", "21.0.1", ""])
-def test_graph_version_rejected(env: pytest.MonkeyPatch, raw: str) -> None:
-    env.setenv("GRAPH_API_VERSION", raw)
-    with pytest.raises(ConfigurationError, match="GRAPH_API_VERSION"):
+@pytest.mark.parametrize("minutes", ["4", "1441"])
+def test_advisory_max_age_bounds(env: pytest.MonkeyPatch, minutes: str) -> None:
+    env.setenv("ADVISORY_MAX_AGE_MINUTES", minutes)
+    with pytest.raises(ConfigurationError, match="ADVISORY_MAX_AGE_MINUTES"):
         load_settings(env_file=None)
 
 
-def test_phone_number_id_must_be_digits(env: pytest.MonkeyPatch) -> None:
-    env.setenv("WHATSAPP_PHONE_NUMBER_ID", "abc123")
-    with pytest.raises(ConfigurationError, match="WHATSAPP_PHONE_NUMBER_ID"):
-        load_settings(env_file=None)
+def test_supabase_anon_key_optional(env: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ConfigurationError, match="SUPABASE_ANON_KEY"):
+        load_settings(env_file=None).require_supabase_anon_key()
+    env.setenv("SUPABASE_ANON_KEY", "sb_publishable_abc")
+    assert load_settings(env_file=None).require_supabase_anon_key() == "sb_publishable_abc"
 
 
 @pytest.mark.parametrize("required", sorted(REQUIRED_ENV))
 def test_each_required_variable_is_enforced(env: pytest.MonkeyPatch, required: str) -> None:
-    """Supabase, WhatsApp and Anthropic settings stay mandatory."""
+    """Supabase settings stay mandatory."""
     env.delenv(required)
     with pytest.raises(ConfigurationError, match=required):
         load_settings(env_file=None)
@@ -171,12 +198,12 @@ def test_public_base_url_still_validated_when_set(env: pytest.MonkeyPatch) -> No
 
 
 def test_missing_variable_named_without_leaking_secrets(env: pytest.MonkeyPatch) -> None:
-    env.delenv("WHATSAPP_ACCESS_TOKEN")
+    env.delenv("DATABASE_URL")
     env.setenv("PUBLIC_BASE_URL", "not a url")
     with pytest.raises(ConfigurationError) as info:
         load_settings(env_file=None)
     message = str(info.value)
-    assert "WHATSAPP_ACCESS_TOKEN" in message
+    assert "DATABASE_URL" in message
     assert "PUBLIC_BASE_URL" in message
     assert SECRET not in message
     # The pydantic error (which embeds input values) must not be chained.

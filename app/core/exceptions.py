@@ -43,44 +43,32 @@ class BatchAlreadyRunningError(DiabetesAdvisorError):
     """
 
 
-class WhatsAppDeliveryError(DiabetesAdvisorError):
-    """Raised when a WhatsApp Cloud API call fails or is not allowed (R3/R4).
+class AuthenticationError(DiabetesAdvisorError):
+    """Raised when a Supabase access token is missing, expired or invalid."""
 
-    Graph API errors are parsed into the attributes below so callers can record
-    ``code`` on the advisory row and decide whether a later retry makes sense.
+
+class NotificationDeliveryError(DiabetesAdvisorError):
+    """Raised when a notification (Web Push, R3) cannot be delivered or is not allowed.
 
     Attributes:
-        http_status: HTTP status of the last response, or ``None`` if no response
+        status_code: HTTP status from the push service, or ``None`` when no response
             arrived (network error) or no request was made (guard block).
-        code: Graph ``error.code`` (e.g. ``131047`` re-engagement required).
-        subcode: Graph ``error.error_subcode``, if any.
-        fbtrace_id: Meta's trace id, quoted when asking Meta support.
-        retryable: ``True`` for transient failures (5xx, rate limits, connect errors).
+        retryable: ``True`` for transient failures (5xx, 429, connection errors).
     """
 
     def __init__(
-        self,
-        message: str,
-        *,
-        http_status: int | None = None,
-        code: int | None = None,
-        subcode: int | None = None,
-        fbtrace_id: str | None = None,
-        retryable: bool = False,
+        self, message: str, *, status_code: int | None = None, retryable: bool = False
     ) -> None:
         super().__init__(message)
-        self.http_status = http_status
-        self.code = code
-        self.subcode = subcode
-        self.fbtrace_id = fbtrace_id
+        self.status_code = status_code
         self.retryable = retryable
 
 
-class RecipientBlockedError(WhatsAppDeliveryError):
-    """Raised by the send guard before any HTTP call, when a recipient is not allowed.
+class RecipientBlockedError(NotificationDeliveryError):
+    """Raised by the recipient guard before anything is sent.
 
-    Examples: a demo patient still on a fictional 555 number, or a number outside
-    ``ALLOWED_TEST_NUMBERS`` while WhatsApp runs on Meta's test number. Never retryable.
+    Example: a demo patient that is not linked to the developer's own login
+    (``seed_demo --my-email``). Never retryable.
     """
 
 

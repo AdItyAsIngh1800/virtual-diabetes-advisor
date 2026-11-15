@@ -1,7 +1,7 @@
 [project]
 name = "diabetes-advisor"
 version = "0.1.0"
-description = "Virtual diabetes advisor: personal thresholds, pre-breach WhatsApp voice alerts, two-way help, audited conversations, dashboard."
+description = "Virtual diabetes advisor: personal thresholds, pre-breach web-push voice alerts, two-way help, audited conversations, dashboard."
 requires-python = ">=3.11"
 dependencies = [
     # API + jobs
@@ -21,10 +21,11 @@ dependencies = [
     "supabase>=2.9",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
-    # Messaging + voice
+    # Notifications (Web Push) + voice
     "gtts>=2.5",
     "faster-whisper>=1.0",
     "httpx>=0.27",
+    "pywebpush>=2.0",
 ]
 
 [dependency-groups]
@@ -67,7 +68,7 @@ plugins = ["pydantic.mypy"]
 exclude = ["notebooks/", "tests/fixtures/"]
 
 [[tool.mypy.overrides]]
-module = ["xgboost.*", "gtts.*", "faster_whisper.*", "apscheduler.*", "twilio.*", "joblib.*", "statsmodels.*", "sklearn.*", "supabase.*"]
+module = ["xgboost.*", "gtts.*", "faster_whisper.*", "apscheduler.*", "pywebpush.*", "py_vapid.*", "http_ece.*", "joblib.*", "statsmodels.*", "sklearn.*", "supabase.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

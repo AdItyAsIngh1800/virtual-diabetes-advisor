@@ -1,6 +1,6 @@
 """Logging setup with phone-number masking.
 
-Phone numbers are PII (WhatsApp ``wa_id`` values, E.164 user numbers). They must
+Phone numbers are PII (E.164 profile numbers, numbers typed into chat). They must
 never appear in full in logs, so every record passing through the handler installed
 by :func:`configure_logging` is masked *after* formatting. Masking after formatting
 covers ``%``-args, f-strings, ``extra`` fields rendered by the format string and
@@ -26,9 +26,9 @@ DEFAULT_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 #   1. International form with a leading "+", optionally with spaces/dots/dashes/
 #      parentheses between digits: "+91 98765 43210", "+1 (415) 555-2671".
 #      8-15 digits total; 15 is the E.164 maximum (ITU-T E.164 section 6).
-#   2. Bare digit runs as WhatsApp sends them in webhooks (wa_id "919876543210"):
+#   2. Bare digit runs without the "+" ("919876543210"), as people often type them:
 #      10-15 consecutive digits. 10 is the shortest national number we expect.
-# Shape 2 also hits other 10-15 digit IDs (Unix timestamps, phone_number_id, the
+# Shape 2 also hits other 10-15 digit IDs (Unix timestamps, numeric ids, the
 # rare all-digit UUID segment). We
 # accept that over-masking: hiding a harmless ID is better than leaking a number.
 _PHONE_PATTERN = re.compile(

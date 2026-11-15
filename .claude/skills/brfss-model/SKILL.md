@@ -22,7 +22,7 @@ BRFSS is a **survey**: 21 features (HighBP, HighChol, BMI, Smoker, PhysActivity,
 1-13, Sex, Education, Income ...). It has **no glucose readings**. So:
 - The model outputs a **risk probability / tier** per user from their profile.
 - That risk tier **adjusts** the personal threshold (R2). It does not replace clinical limits.
-- Glucose readings for R1/R3 come from users (form, WhatsApp text) or a seeded simulator for the demo.
+- Glucose readings for R1/R3 come from users (web app form or chat) or a seeded simulator for the demo.
 
 ## Pipeline
 

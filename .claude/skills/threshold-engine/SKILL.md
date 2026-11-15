@@ -40,7 +40,7 @@ lower limit L:  pre-breach if L < reading <= 1.05*L      breach if reading <= L
 Return a typed result: `Literal["normal", "pre_breach_high", "pre_breach_low", "breach_high", "breach_low"]`.
 Band percentage (`0.05`) lives in config, not inline.
 
-- `pre_breach_*` -> queue a voice advisory (whatsapp-voice-advisory skill).
+- `pre_breach_*` -> queue a voice advisory (web-push-voice-advisory skill).
 - `breach_*` -> advisory **plus** practitioner escalation flag.
 - De-duplicate: one advisory per user per metric per state per N hours (configurable cooldown).
 

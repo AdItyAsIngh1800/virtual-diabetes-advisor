@@ -630,7 +630,7 @@ def _time_weighted_ewma(days: npt.NDArray[np.float64], values: npt.NDArray[np.fl
 
     Each reading weighs ``0.5 ** (age_days / EWMA_HALFLIFE_DAYS)``, where its age is
     measured back from the latest reading. Weighting by elapsed time (not by reading
-    count) keeps irregular WhatsApp reporting from distorting the level; this equals
+    count) keeps irregular self-reporting from distorting the level; this equals
     pandas' ``ewm(halflife=..., times=..., adjust=True)``.
 
     Args:

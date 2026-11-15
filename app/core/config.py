@@ -8,27 +8,28 @@ if a settings object is ever logged or shown in a traceback.
 
 from __future__ import annotations
 
-import re
+import base64
+import binascii
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal, NamedTuple
 
 from pydantic import Field, HttpUrl, SecretStr, ValidationError, field_validator
-from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.exceptions import ConfigurationError
-from app.core.phones import normalise_e164
 
 # Repo root: app/core/config.py -> parents[2]. Anchoring the path means the app finds
 # .env no matter which directory uvicorn / pytest / the batch job is started from.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ENV_FILE = PROJECT_ROOT / ".env"
 
-# Meta's Graph API host; only the version segment is configurable (GRAPH_API_VERSION).
-GRAPH_API_HOST = "https://graph.facebook.com"
-
-# Meta writes versions as "v21.0"; accept "21.0" too so either .env style works.
-_GRAPH_VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)$")
+# VAPID keys are P-256 (RFC 8292). The browser's applicationServerKey is the public
+# key as an uncompressed point: 0x04 || X (32 bytes) || Y (32 bytes) = 65 bytes. The
+# private key is the raw 32-byte scalar, which is what scripts/gen_vapid_keys.py prints.
+_VAPID_PUBLIC_LEN = 65
+_VAPID_UNCOMPRESSED_PREFIX = 0x04
+_VAPID_PRIVATE_LEN = 32
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -44,18 +45,17 @@ class Settings(BaseSettings):
         supabase_url: Supabase project URL.
         supabase_service_role_key: Server-side Supabase key (bypasses RLS - backend only).
         database_url: Postgres connection string used by SQLAlchemy / psycopg.
-        whatsapp_access_token: WhatsApp Cloud API bearer token.
-        whatsapp_phone_number_id: Sender phone-number ID from the Meta app dashboard.
-        whatsapp_verify_token: Shared token Meta echoes during webhook verification.
-        whatsapp_app_secret: App secret used to verify ``X-Hub-Signature-256`` on webhooks.
-        graph_api_version: Graph API version, normalised to ``vMAJOR.MINOR``.
-        whatsapp_test_mode: ``True`` while the Meta app sends from its free test
-            number. Every send is then limited to ``allowed_test_numbers``.
-        allowed_test_numbers: E.164 numbers allowed to receive messages in test mode
-            (``ALLOWED_TEST_NUMBERS``, comma-separated in ``.env``).
-        public_base_url: Public HTTPS URL of this API (webhook callback / media links).
-            Optional until Phase 5 webhook setup; read it via
-            :meth:`require_public_base_url` there.
+        supabase_anon_key: Publishable (anon) key the patient web app uses to sign in
+            with Supabase Auth. Public by design; optional until ``/app`` is used.
+        vapid_public_key: Web Push VAPID public key (base64url, uncompressed P-256 point).
+        vapid_private_key: Web Push VAPID private key (base64url, raw 32 bytes).
+        vapid_subject: VAPID contact, ``mailto:...`` or ``https://...`` (RFC 8292).
+            The three VAPID settings are optional until a push is sent; read them via
+            :meth:`require_vapid`.
+        advisory_max_age_minutes: Advisories whose reading is older than this are
+            expired instead of notified (R3).
+        public_base_url: Public HTTPS URL of this API (the ngrok URL the phone opens).
+            Optional; read it via :meth:`require_public_base_url` where it is needed.
         anthropic_api_key: API key for the Claude-backed help chat. Optional until
             Phase 7; read it via :meth:`require_anthropic_api_key` there.
         pre_breach_band: Fraction of a limit that defines the pre-breach band (R3).
@@ -84,23 +84,23 @@ class Settings(BaseSettings):
     # SecretStr, not a DSN type: the connection string embeds the DB password.
     database_url: SecretStr
 
-    # --- WhatsApp Cloud API (R3 delivery, R4 transport) -------------------------
-    whatsapp_access_token: SecretStr
-    whatsapp_phone_number_id: str = Field(pattern=r"^\d+$")
-    whatsapp_verify_token: SecretStr
-    whatsapp_app_secret: SecretStr
-    graph_api_version: str
-    # R3 send guard. Defaults to test mode so a fresh checkout can only ever message the
-    # allowlisted numbers; set WHATSAPP_TEST_MODE=false once a real business number is
-    # live. Meta's test number itself accepts at most 5 verified recipients.
-    whatsapp_test_mode: bool = True
-    # NoDecode: read "+91..., +44..." as plain text and split it in the validator below,
-    # instead of pydantic-settings expecting a JSON list.
-    allowed_test_numbers: Annotated[tuple[str, ...], NoDecode] = ()
+    # Publishable key: shipped to the browser, so a plain str, not a SecretStr.
+    supabase_anon_key: str | None = None
+
+    # --- Web Push (R3 delivery) -------------------------------------------------
+    # Optional so tests, the batch job and the API start before keys are generated
+    # (scripts/gen_vapid_keys.py); sending a push calls require_vapid() and fails
+    # loudly if any is missing.
+    vapid_public_key: str | None = None
+    vapid_private_key: SecretStr | None = None
+    vapid_subject: str | None = Field(default=None, pattern=r"^(mailto:\S+@\S+|https://\S+)$")
+    # R3: an alert about a reading more than an hour old no longer helps the patient
+    # act on it (team choice, matching the 1 h push TTL); such advisories expire.
+    advisory_max_age_minutes: int = Field(default=60, ge=5, le=24 * 60)
 
     # --- Public URL + LLM ------------------------------------------------------
-    # Optional: only the Phase 5 webhook/media setup needs a public URL, so local
-    # dev, tests and batch jobs must start without one.
+    # Optional: only phone testing over ngrok needs a public URL, so local dev,
+    # tests and batch jobs must start without one.
     public_base_url: HttpUrl | None = None
     # Optional: only the Phase 7 help chat calls Claude; read it via
     # require_anthropic_api_key() there.
@@ -128,50 +128,59 @@ class Settings(BaseSettings):
 
     log_level: LogLevel = "INFO"
 
-    @field_validator("graph_api_version")
+    @field_validator("vapid_public_key")
     @classmethod
-    def _normalise_graph_version(cls, value: str) -> str:
-        """Normalise ``21.0`` / ``v21.0`` to ``v21.0``.
+    def _check_vapid_public_key(cls, value: str | None) -> str | None:
+        """Require a base64url, uncompressed P-256 point (what browsers expect).
 
         Args:
-            value: Raw ``GRAPH_API_VERSION`` value.
+            value: Raw ``VAPID_PUBLIC_KEY``.
 
         Returns:
-            The version with a leading ``v``.
+            The key, stripped.
 
         Raises:
-            ValueError: If the value is not of the form ``[v]MAJOR.MINOR``.
+            ValueError: If it does not decode to 65 bytes starting with ``0x04``.
         """
-        match = _GRAPH_VERSION_PATTERN.match(value.strip())
-        if match is None:
-            raise ValueError("GRAPH_API_VERSION must look like 'v21.0' or '21.0'")
-        return f"v{match.group(1)}.{match.group(2)}"
+        if value is None:
+            return None
+        raw = _b64url_decode(value.strip())
+        if raw is None or len(raw) != _VAPID_PUBLIC_LEN or raw[0] != _VAPID_UNCOMPRESSED_PREFIX:
+            raise ValueError("VAPID_PUBLIC_KEY must be a base64url uncompressed P-256 point")
+        return value.strip()
 
-    @field_validator("allowed_test_numbers", mode="before")
+    @field_validator("vapid_private_key")
     @classmethod
-    def _parse_allowed_numbers(cls, value: object) -> object:
-        """Split a comma-separated ``ALLOWED_TEST_NUMBERS`` and normalise each to E.164.
+    def _check_vapid_private_key(cls, value: SecretStr | None) -> SecretStr | None:
+        """Require a base64url raw 32-byte P-256 private key.
 
         Args:
-            value: Raw value: a comma-separated string from the environment, or a
-                sequence when constructed in code.
+            value: Raw ``VAPID_PRIVATE_KEY``.
 
         Returns:
-            A tuple of compact E.164 numbers without duplicates, in input order.
+            The key, stripped and still wrapped.
 
         Raises:
-            ValueError: If any entry is not an E.164 number.
+            ValueError: If it does not decode to 32 bytes. The message omits the value.
         """
-        if isinstance(value, str):
-            items: list[str] = value.split(",")
-        elif isinstance(value, list | tuple):
-            items = [str(item) for item in value]
-        else:
-            return value
-        numbers = [normalise_e164(item) for item in items if item.strip()]
-        return tuple(dict.fromkeys(numbers))
+        if value is None:
+            return None
+        secret = value.get_secret_value().strip()
+        raw = _b64url_decode(secret)
+        if raw is None or len(raw) != _VAPID_PRIVATE_LEN:
+            raise ValueError("VAPID_PRIVATE_KEY must be a base64url raw 32-byte key")
+        return SecretStr(secret)
 
-    @field_validator("public_base_url", "anthropic_api_key", "admin_api_key", mode="before")
+    @field_validator(
+        "public_base_url",
+        "anthropic_api_key",
+        "admin_api_key",
+        "supabase_anon_key",
+        "vapid_public_key",
+        "vapid_private_key",
+        "vapid_subject",
+        mode="before",
+    )
     @classmethod
     def _blank_is_unset(cls, value: object) -> object:
         """Treat a blank optional line in ``.env`` (e.g. ``PUBLIC_BASE_URL=``) as not set.
@@ -186,20 +195,11 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @property
-    def graph_api_base_url(self) -> str:
-        """Versioned Graph API base URL, e.g. ``https://graph.facebook.com/v21.0``.
-
-        Returns:
-            The base URL without a trailing slash.
-        """
-        return f"{GRAPH_API_HOST}/{self.graph_api_version}"
-
     def require_public_base_url(self) -> str:
         """Return the public base URL, failing loudly if it is not configured.
 
-        Call this from code that genuinely needs a public URL (Phase 5 webhook
-        registration, media links) so the error points at the missing variable.
+        Call this from code that genuinely needs a public URL (links printed for the
+        phone over ngrok) so the error points at the missing variable.
 
         Returns:
             The URL without a trailing slash, e.g. ``https://advisor.example.com``.
@@ -209,7 +209,7 @@ class Settings(BaseSettings):
         """
         if self.public_base_url is None:
             raise ConfigurationError(
-                "PUBLIC_BASE_URL is required for WhatsApp webhook setup but is not set"
+                "PUBLIC_BASE_URL is required (run scripts/go_live.sh) but is not set"
             )
         return str(self.public_base_url).rstrip("/")
 
@@ -243,6 +243,78 @@ class Settings(BaseSettings):
         if self.admin_api_key is None:
             raise ConfigurationError("ADMIN_API_KEY is required for /admin routes but is not set")
         return self.admin_api_key
+
+    def require_vapid(self) -> VapidConfig:
+        """Return the VAPID key pair and subject, failing loudly if any is missing.
+
+        Returns:
+            The VAPID configuration; the private key stays wrapped.
+
+        Raises:
+            ConfigurationError: Naming every missing ``VAPID_*`` variable.
+        """
+        missing = [
+            name
+            for name, value in (
+                ("VAPID_PUBLIC_KEY", self.vapid_public_key),
+                ("VAPID_PRIVATE_KEY", self.vapid_private_key),
+                ("VAPID_SUBJECT", self.vapid_subject),
+            )
+            if value is None
+        ]
+        if (
+            missing
+            or self.vapid_public_key is None
+            or self.vapid_private_key is None
+            or self.vapid_subject is None
+        ):
+            raise ConfigurationError(
+                f"{', '.join(missing)} required for Web Push but not set "
+                "(generate keys with: uv run python -m scripts.gen_vapid_keys)"
+            )
+        return VapidConfig(self.vapid_public_key, self.vapid_private_key, self.vapid_subject)
+
+    def require_supabase_anon_key(self) -> str:
+        """Return the publishable key the web app signs in with.
+
+        Returns:
+            The key.
+
+        Raises:
+            ConfigurationError: If ``SUPABASE_ANON_KEY`` is not set.
+        """
+        if self.supabase_anon_key is None:
+            raise ConfigurationError("SUPABASE_ANON_KEY is required for /app but is not set")
+        return self.supabase_anon_key
+
+
+class VapidConfig(NamedTuple):
+    """VAPID settings needed to sign a Web Push request (RFC 8292).
+
+    Attributes:
+        public_key: Base64url uncompressed P-256 point (browser applicationServerKey).
+        private_key: Base64url raw 32-byte private key, still wrapped.
+        subject: ``mailto:`` or ``https:`` contact sent to push services.
+    """
+
+    public_key: str
+    private_key: SecretStr
+    subject: str
+
+
+def _b64url_decode(value: str) -> bytes | None:
+    """Decode base64url with or without padding.
+
+    Args:
+        value: Encoded text.
+
+    Returns:
+        The bytes, or ``None`` if the text is not valid base64url.
+    """
+    try:
+        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (binascii.Error, ValueError):
+        return None
 
 
 def load_settings(env_file: Path | None = ENV_FILE) -> Settings:

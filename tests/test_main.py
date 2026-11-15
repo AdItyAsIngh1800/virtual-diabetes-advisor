@@ -28,11 +28,6 @@ REQUIRED = {
     "supabase_url": "https://abc.supabase.co",
     "supabase_service_role_key": "srk",
     "database_url": "postgresql://u:p@localhost:5432/db",
-    "whatsapp_access_token": "t",
-    "whatsapp_phone_number_id": "123",
-    "whatsapp_verify_token": "v",
-    "whatsapp_app_secret": "s",
-    "graph_api_version": "v21.0",
 }
 SUMMARY = BatchRunSummary(
     run_id=uuid.uuid4(),

@@ -21,7 +21,7 @@ These are graded requirements, not suggestions. A PostToolUse hook runs ruff + m
   e.g. `# ADA 2025: fasting target 80-130 mg/dL for adults with diabetes`), every threshold formula,
   every magic constant, every place the ML output is adjusted by a rule.
 - **Constants**: clinical limits live in `app/core/clinical_limits.py`, never inline.
-- **Errors**: raise specific exceptions (`ThresholdComputationError`, `WhatsAppDeliveryError`),
+- **Errors**: raise specific exceptions (`ThresholdComputationError`, `NotificationDeliveryError`),
   log with `logging.getLogger(__name__)`, never `print`. Never swallow exceptions silently.
 - **Secrets**: only via `app/core/config.py` (pydantic-settings reading `.env`). Never hard-code.
 - **Tests**: every module in `app/services/` gets a `tests/` file. Threshold and band logic need
@@ -34,7 +34,7 @@ app/
   api/            FastAPI routers (users, readings, webhooks, dashboard)
   core/           config.py, clinical_limits.py, logging.py, exceptions.py
   ml/             training, feature pipeline, model registry (joblib artifacts in models/)
-  services/       thresholds.py, monitor.py, advisory.py, voice.py, whatsapp.py, chat.py, audit.py
+  services/       thresholds.py, monitor.py, advisory.py, voice.py, webpush.py, chat.py, audit.py
   jobs/           batch_update.py (R1), retrain.py (R5)
   db/             SQLAlchemy models + Supabase migrations
 notebooks/        Colab-style notebooks for MLE, linear regression, classification (course rubric)

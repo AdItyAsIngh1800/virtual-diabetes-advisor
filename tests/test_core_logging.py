@@ -19,7 +19,7 @@ from app.core.logging import (
     ("raw", "masked"),
     [
         ("+919876543210", "+91******3210"),  # India E.164, 12 digits
-        ("919876543210", "91******3210"),  # WhatsApp wa_id form
+        ("919876543210", "91******3210"),  # bare digits, no "+"
         ("+14155552671", "+14*****2671"),  # US E.164, 11 digits
         ("+1 (415) 555-2671", "+14*****2671"),  # separators dropped
         ("9876543210", "98****3210"),  # exactly 10 digits

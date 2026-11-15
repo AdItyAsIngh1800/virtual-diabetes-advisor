@@ -1,1 +1,1 @@
-"""FastAPI routers (admin now; users, readings, webhooks and dashboard in later phases)."""
+"""FastAPI routers: admin, Web Push subscriptions and the patient app; more in later phases."""
