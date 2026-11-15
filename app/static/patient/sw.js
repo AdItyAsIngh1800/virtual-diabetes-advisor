@@ -2,6 +2,7 @@
 "use strict";
 
 const FALLBACK_URL = "/app/";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
@@ -14,6 +15,14 @@ function sameOriginUrl(raw) {
   } catch {
     return new URL(FALLBACK_URL, self.location.origin).href;
   }
+}
+
+/** Page a notification opens: the advisory page when the push names an advisory. */
+function targetFor(data) {
+  if (data.advisory_id && UUID.test(data.advisory_id)) {
+    return sameOriginUrl(`/app/advisory/${data.advisory_id}`);
+  }
+  return sameOriginUrl(data.url);
 }
 
 // Payload: {advisory_id, title, body, url} (app/services/notifications.py).
@@ -33,12 +42,13 @@ self.addEventListener("push", (event) => {
       renotify: true,
       icon: "/app/icon-192.png",
       badge: "/app/icon-192.png",
-      data: { url: sameOriginUrl(data.url) },
+      data: { url: targetFor(data) },
     }),
   );
 });
 
-// Focus an open app tab (navigating it to the advisory) or open a new one.
+// Tapping opens /app/advisory/{id}: focus an open app tab and navigate it there, or
+// open a new one. The page itself records "opened" (GET /api/advisories/{id}).
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = sameOriginUrl(event.notification.data && event.notification.data.url);

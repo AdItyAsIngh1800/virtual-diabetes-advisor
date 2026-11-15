@@ -28,6 +28,9 @@
              background: var(--accent); color: #fff; cursor: pointer; min-height: 44px; }
     button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
     button:disabled { opacity: .5; cursor: default; }
+    .alert { border-left: 5px solid var(--accent); }
+    a.button { display: inline-block; font-weight: 600; padding: .7rem 1rem; border-radius: 8px; margin-top: .5rem;
+               background: var(--accent); color: #fff; text-decoration: none; min-height: 44px; }
     #status { min-height: 1.5em; }
     #status.error { color: var(--err); }
     [hidden] { display: none !important; }
@@ -38,9 +41,10 @@
   <h1>Diabetes Advisor</h1>
   <p class="muted">Test page for glucose alerts on this device.</p>
 
-  <section id="advisory" hidden>
-    <strong>Advisory opened</strong>
-    <p class="muted">Advisory <span id="advisory-id"></span>. The full advisory page and voice playback come in a later phase.</p>
+  <section id="new-advisory" class="alert" role="alert" hidden>
+    <strong id="new-advisory-title">New glucose advice</strong>
+    <p class="muted">A new advisory just arrived for you.</p>
+    <a id="new-advisory-link" class="button" href="/app/">Open advice</a>
   </section>
 
   <section id="signed-out" hidden>

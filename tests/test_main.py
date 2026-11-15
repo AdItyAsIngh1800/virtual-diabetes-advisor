@@ -20,8 +20,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app import main
 from app.api import admin
 from app.core.config import Settings, get_settings
-from app.core.exceptions import BatchAlreadyRunningError
+from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.jobs.batch_update import BatchRunSummary
+from app.jobs.dispatch_advisories import DispatchSummary
 
 KEY = "test-admin-key-0123456789"
 REQUIRED = {
@@ -62,6 +63,7 @@ def client_with(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
         return SUMMARY
 
     monkeypatch.setattr(admin, "run_batch_update", fake_run)
+    monkeypatch.setattr(admin, "scheduled_dispatch", lambda: calls.append({"dispatch": True}))
     monkeypatch.setattr(admin, "get_session_factory", lambda: None)
     monkeypatch.setattr(admin, "load_risk_scorer", lambda: None)
     app = main.create_app()
@@ -99,7 +101,30 @@ def test_batch_run_with_valid_key(client_with: Any) -> None:
     body = response.json()
     assert body["advisories_created"] == 3
     assert body["advisories_by_state"] == {"pre_breach_high": 2, "breach_low": 1}
-    assert client.calls == [{"scorer": None, "triggered_by": "admin_api"}]
+    # The batch run is followed by a dispatch of the new advisories (R3).
+    assert client.calls == [{"scorer": None, "triggered_by": "admin_api"}, {"dispatch": True}]
+
+
+def test_dispatch_run_with_valid_key(client_with: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    client = client_with(make_settings(admin_api_key=KEY))
+    monkeypatch.setattr(admin, "run_dispatch", lambda: DispatchSummary(sent=1, expired=2))
+    response = client.post("/admin/dispatch-run", headers={"X-Admin-Api-Key": KEY})
+    assert response.status_code == 200
+    assert (response.json()["sent"], response.json()["expired"]) == (1, 2)
+    assert client.post("/admin/dispatch-run").status_code == 401
+
+
+def test_dispatch_run_errors(client_with: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    client = client_with(make_settings(admin_api_key=KEY))
+    headers = {"X-Admin-Api-Key": KEY}
+
+    def unconfigured() -> DispatchSummary:
+        raise ConfigurationError("VAPID_PUBLIC_KEY required")
+
+    monkeypatch.setattr(admin, "run_dispatch", unconfigured)
+    assert client.post("/admin/dispatch-run", headers=headers).status_code == 503
+    monkeypatch.setattr(admin, "run_dispatch", lambda: None)
+    assert client.post("/admin/dispatch-run", headers=headers).status_code == 409
 
 
 def test_batch_run_conflict_when_already_running(
@@ -134,7 +159,27 @@ def test_default_interval_is_15_minutes() -> None:
     assert make_settings().batch_interval_minutes == 15
 
 
+def test_dispatch_job_runs_on_its_own_interval() -> None:
+    scheduler = main.build_scheduler(make_settings(dispatch_interval_minutes=3))
+    job = scheduler.get_job(main.DISPATCH_JOB_ID)
+    assert job is not None
+    assert isinstance(job.trigger, IntervalTrigger)
+    assert job.trigger.interval.total_seconds() == 180
+    assert (job.max_instances, job.coalesce) == (1, True)
+
+
+def test_scheduled_batch_run_is_followed_by_a_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    order: list[str] = []
+    monkeypatch.setattr(main, "get_session_factory", lambda: None)
+    monkeypatch.setattr(main, "load_risk_scorer", lambda: None)
+    monkeypatch.setattr(main, "run_batch_update", lambda *_a, **_k: order.append("batch"))
+    monkeypatch.setattr(main, "scheduled_dispatch", lambda: order.append("dispatch"))
+    main.scheduled_batch_run()
+    assert order == ["batch", "dispatch"]
+
+
 def test_scheduled_run_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(main, "scheduled_dispatch", lambda: None)
     monkeypatch.setattr(main, "get_session_factory", lambda: None)
     monkeypatch.setattr(main, "load_risk_scorer", lambda: None)
 

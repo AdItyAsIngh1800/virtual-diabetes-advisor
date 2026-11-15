@@ -1,17 +1,20 @@
 """The minimal patient web app at ``/app`` and the config it bootstraps from (R3).
 
 ``app/static/patient`` holds a plain HTML/JS page (Supabase email login, "Enable
-alerts"), the service worker ``sw.js`` and ``manifest.webmanifest``. It is a test
+alerts"), the advisory page ``advisory.html`` (served at ``/app/advisory/{id}``), the
+service worker ``sw.js`` and ``manifest.webmanifest``. It is a test
 harness for Web Push, not the R6 dashboard (``web/``). Serving it from FastAPI keeps
 it same-origin with ``/api``, so the ngrok https URL covers both.
 """
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -60,6 +63,24 @@ def app_config(settings: Annotated[Settings, Depends(get_settings)]) -> AppConfi
         supabase_anon_key=anon_key,
         vapid_public_key=settings.vapid_public_key,
     )
+
+
+@router.get(f"{APP_PATH}/advisory/{{advisory_id}}", include_in_schema=False)
+def advisory_page(advisory_id: uuid.UUID) -> FileResponse:
+    """Serve the advisory page; its script loads the advisory by the id in the URL.
+
+    The id is validated as a UUID here so arbitrary paths 404/422 instead of serving
+    the page. Ownership is checked by ``GET /api/advisories/{id}``, not here: the
+    page itself holds no patient data.
+
+    Args:
+        advisory_id: Advisory id from the notification link.
+
+    Returns:
+        ``advisory.html``.
+    """
+    del advisory_id  # read by the page's script from location.pathname
+    return FileResponse(STATIC_DIR / "advisory.html", media_type="text/html")
 
 
 def mount_patient_app(app: FastAPI) -> None:

@@ -1,4 +1,4 @@
-"""Admin routes: trigger the batch update on demand (R1 demo).
+"""Admin routes: trigger the batch update and the advisory dispatcher on demand (R1/R3 demo).
 
 Every route requires the ``X-Admin-Api-Key`` header to equal ``ADMIN_API_KEY``. The
 check fails closed: with no key configured, every request gets 503.
@@ -13,9 +13,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from app.core.config import Settings, get_settings
-from app.core.exceptions import BatchAlreadyRunningError
+from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.db.session import get_session_factory
 from app.jobs.batch_update import BatchRunSummary, load_risk_scorer, run_batch_update
+from app.jobs.dispatch_advisories import DispatchSummary, run_dispatch, scheduled_dispatch
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +55,11 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 
 @router.post("/batch-run")
 def trigger_batch_run() -> BatchRunSummary:
-    """Run the batch update now and return its summary (R1).
+    """Run the batch update now, then dispatch new advisories, and return the batch summary.
 
     Runs synchronously (FastAPI executes plain ``def`` routes in a worker thread). A
     run with failed users still returns 200; check ``status`` and ``failed_user_ids``.
+    The dispatch outcome is logged (``POST /admin/dispatch-run`` returns it).
 
     Returns:
         Counts and status of the run.
@@ -66,8 +68,30 @@ def trigger_batch_run() -> BatchRunSummary:
         HTTPException: 409 if a batch update is already in progress.
     """
     try:
-        return run_batch_update(
+        summary = run_batch_update(
             get_session_factory(), scorer=load_risk_scorer(), triggered_by="admin_api"
         )
     except BatchAlreadyRunningError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    scheduled_dispatch()
+    return summary
+
+
+@router.post("/dispatch-run")
+def trigger_dispatch_run() -> DispatchSummary:
+    """Deliver queued advisories now (R3) and return what happened.
+
+    Returns:
+        Counts of sent, failed, expired, suppressed and blocked advisories.
+
+    Raises:
+        HTTPException: 503 if Web Push is not configured, 409 if a dispatch is
+            already running in this process.
+    """
+    try:
+        summary = run_dispatch()
+    except ConfigurationError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    if summary is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "a dispatch is already running")
+    return summary

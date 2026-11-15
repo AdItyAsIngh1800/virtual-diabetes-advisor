@@ -1,10 +1,13 @@
 """FastAPI application and the in-process batch scheduler (R1).
 
 Run with ``uv run uvicorn app.main:app``. On startup the app schedules the batch update
-every ``BATCH_INTERVAL_MINUTES`` (default 15) with APScheduler, unless
-``BATCH_SCHEDULER_ENABLED=false``. ``POST /admin/batch-run`` triggers a run on demand.
-``/api/push/*`` manages Web Push subscriptions and ``/app`` serves the patient web app
-(Supabase login + "Enable alerts"); see ``app.api.push`` and ``app.api.patient_app``.
+every ``BATCH_INTERVAL_MINUTES`` (default 15) and the advisory dispatcher (R3) every
+``DISPATCH_INTERVAL_MINUTES`` (default 2) with APScheduler, unless
+``BATCH_SCHEDULER_ENABLED=false``. Every batch run is followed by a dispatch, so new
+advisories go out at once. ``POST /admin/batch-run`` triggers a run on demand.
+``/api/push/*`` manages Web Push subscriptions, ``/api/advisories/{id}`` serves one
+advisory to its patient, and ``/app`` serves the patient web app (Supabase login,
+"Enable alerts", the advisory page); see ``app.api``.
 Scheduled and manual runs cannot overlap: the second gets ``BatchAlreadyRunningError``.
 """
 
@@ -18,24 +21,27 @@ from datetime import UTC
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 
-from app.api import admin, patient_app, push
+from app.api import admin, advisories, patient_app, push
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BatchAlreadyRunningError
 from app.core.logging import configure_logging
 from app.db.session import get_session_factory
 from app.jobs.batch_update import load_risk_scorer, run_batch_update
+from app.jobs.dispatch_advisories import scheduled_dispatch
 
 logger = logging.getLogger(__name__)
 
 BATCH_JOB_ID = "batch_update"
+DISPATCH_JOB_ID = "dispatch_advisories"
 
 
 def scheduled_batch_run() -> None:
-    """APScheduler entry point: one batch update, never raising into the scheduler.
+    """APScheduler entry point: one batch update then a dispatch, never raising.
 
     A run already in progress (e.g. started from the admin API) is skipped. Other
     errors are logged with the traceback; the scheduler keeps its timetable and the
-    next run retries the same window (see ``app.jobs.batch_update``).
+    next run retries the same window (see ``app.jobs.batch_update``). The dispatch
+    runs even after a failed batch: advisories of users that did commit are queued.
     """
     try:
         run_batch_update(get_session_factory(), scorer=load_risk_scorer())
@@ -43,13 +49,14 @@ def scheduled_batch_run() -> None:
         logger.info("scheduled batch update skipped: another run is in progress")
     except Exception:
         logger.exception("scheduled batch update failed")
+    scheduled_dispatch()
 
 
 def build_scheduler(settings: Settings) -> BackgroundScheduler:
-    """Create (not start) the scheduler with the batch job registered.
+    """Create (not start) the scheduler with the batch and dispatch jobs registered.
 
     Args:
-        settings: Supplies ``batch_interval_minutes``.
+        settings: Supplies ``batch_interval_minutes`` and ``dispatch_interval_minutes``.
 
     Returns:
         A configured, stopped scheduler.
@@ -62,6 +69,16 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
         id=BATCH_JOB_ID,
         # One at a time, and after downtime run once rather than replaying every
         # missed slot: each run already covers everything since the last success.
+        max_instances=1,
+        coalesce=True,
+    )
+    # R3: also dispatch between batch runs, so an advisory queued by any path waits
+    # at most a couple of minutes.
+    scheduler.add_job(
+        scheduled_dispatch,
+        "interval",
+        minutes=settings.dispatch_interval_minutes,
+        id=DISPATCH_JOB_ID,
         max_instances=1,
         coalesce=True,
     )
@@ -84,7 +101,11 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.batch_scheduler_enabled:
         scheduler = build_scheduler(settings)
         scheduler.start()
-        logger.info("batch update scheduled every %d min", settings.batch_interval_minutes)
+        logger.info(
+            "batch update every %d min, advisory dispatch every %d min",
+            settings.batch_interval_minutes,
+            settings.dispatch_interval_minutes,
+        )
     try:
         yield
     finally:
@@ -98,11 +119,14 @@ def create_app() -> FastAPI:
     """Build the FastAPI application.
 
     Returns:
-        The app with the admin, push and patient-app routes mounted.
+        The app with the admin, push, advisory and patient-app routes mounted.
     """
     app = FastAPI(title="Virtual Diabetes Advisor", version="0.1.0", lifespan=lifespan)
     app.include_router(admin.router)
     app.include_router(push.router)
+    app.include_router(advisories.router)
+    # Before mount_patient_app: the /app static mount would otherwise swallow
+    # /app/advisory/{id}.
     app.include_router(patient_app.router)
     patient_app.mount_patient_app(app)
     return app
