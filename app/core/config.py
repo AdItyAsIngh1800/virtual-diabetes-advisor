@@ -55,6 +55,12 @@ class Settings(BaseSettings):
             Phase 7; read it via :meth:`require_anthropic_api_key` there.
         pre_breach_band: Fraction of a limit that defines the pre-breach band (R3).
         advisory_cooldown_hours: Minimum hours between repeat advisories (R3 de-dup).
+        admin_api_key: Shared secret for ``POST /admin/batch-run`` (sent in the
+            ``X-Admin-Api-Key`` header). Optional: without it the admin endpoint
+            refuses every request; read it via :meth:`require_admin_api_key`.
+        batch_interval_minutes: How often APScheduler runs the batch update (R1).
+        batch_scheduler_enabled: Start the in-process scheduler with the API. Turn
+            off when another process (or only the admin endpoint) drives the job.
         log_level: Root log level.
     """
 
@@ -98,6 +104,15 @@ class Settings(BaseSettings):
     # team to avoid alert fatigue; a *breach* still escalates to the practitioner.
     advisory_cooldown_hours: int = Field(default=24, ge=1, le=24 * 7)
 
+    # --- Batch job / admin API (R1) ---------------------------------------------
+    # Optional so tests, scripts and the batch job start without it; the admin
+    # endpoint fails closed (503) when it is missing.
+    admin_api_key: SecretStr | None = None
+    # R1: 15 min keeps advisories close to real time while each run stays small; the
+    # upper bound (one day) stops a typo from silently disabling alerts for weeks.
+    batch_interval_minutes: int = Field(default=15, ge=1, le=24 * 60)
+    batch_scheduler_enabled: bool = True
+
     log_level: LogLevel = "INFO"
 
     @field_validator("graph_api_version")
@@ -119,7 +134,7 @@ class Settings(BaseSettings):
             raise ValueError("GRAPH_API_VERSION must look like 'v21.0' or '21.0'")
         return f"v{match.group(1)}.{match.group(2)}"
 
-    @field_validator("public_base_url", "anthropic_api_key", mode="before")
+    @field_validator("public_base_url", "anthropic_api_key", "admin_api_key", mode="before")
     @classmethod
     def _blank_is_unset(cls, value: object) -> object:
         """Treat a blank optional line in ``.env`` (e.g. ``PUBLIC_BASE_URL=``) as not set.
@@ -178,6 +193,19 @@ class Settings(BaseSettings):
                 "ANTHROPIC_API_KEY is required for the help chat but is not set"
             )
         return self.anthropic_api_key
+
+    def require_admin_api_key(self) -> SecretStr:
+        """Return the admin API key, failing loudly if it is not configured.
+
+        Returns:
+            The key as a :class:`pydantic.SecretStr`.
+
+        Raises:
+            ConfigurationError: If ``ADMIN_API_KEY`` is not set.
+        """
+        if self.admin_api_key is None:
+            raise ConfigurationError("ADMIN_API_KEY is required for /admin routes but is not set")
+        return self.admin_api_key
 
 
 def load_settings(env_file: Path | None = ENV_FILE) -> Settings:

@@ -75,6 +75,15 @@ class RiskModel:
     estimator: Any
     metadata: ModelMetadata
 
+    @property
+    def version(self) -> str:
+        """Model version recorded with every assessment (R5 audit).
+
+        Returns:
+            ``metadata.version``, e.g. ``"risk-20261114-204228"``.
+        """
+        return self.metadata.version
+
     @classmethod
     def load(cls, model_dir: Path = DEFAULT_MODEL_DIR) -> RiskModel:
         """Load the model and metadata written by :mod:`app.ml.train`.

@@ -25,6 +25,9 @@ OPTIONAL_ENV = (
     "ANTHROPIC_API_KEY",
     "PRE_BREACH_BAND",
     "ADVISORY_COOLDOWN_HOURS",
+    "ADMIN_API_KEY",
+    "BATCH_INTERVAL_MINUTES",
+    "BATCH_SCHEDULER_ENABLED",
     "LOG_LEVEL",
 )
 
@@ -63,6 +66,9 @@ def test_defaults(env: pytest.MonkeyPatch) -> None:
     s = load_settings(env_file=None)
     assert s.pre_breach_band == 0.05
     assert s.advisory_cooldown_hours == 24
+    assert s.batch_interval_minutes == 15
+    assert s.batch_scheduler_enabled is True
+    assert s.admin_api_key is None
     assert s.log_level == "INFO"
 
 
@@ -201,3 +207,25 @@ def test_get_settings_is_cached(monkeypatch: pytest.MonkeyPatch, env: pytest.Mon
         assert len(calls) == 1
     finally:
         config.get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_admin_api_key_is_unset(env: pytest.MonkeyPatch, blank: str) -> None:
+    env.setenv("ADMIN_API_KEY", blank)
+    s = load_settings(env_file=None)
+    with pytest.raises(ConfigurationError, match="ADMIN_API_KEY"):
+        s.require_admin_api_key()
+
+
+def test_require_admin_api_key_returns_wrapped_secret(env: pytest.MonkeyPatch) -> None:
+    env.setenv("ADMIN_API_KEY", SECRET)
+    s = load_settings(env_file=None)
+    assert s.require_admin_api_key().get_secret_value() == SECRET
+    assert SECRET not in repr(s)
+
+
+@pytest.mark.parametrize("minutes", ["0", "1441"])
+def test_batch_interval_bounds(env: pytest.MonkeyPatch, minutes: str) -> None:
+    env.setenv("BATCH_INTERVAL_MINUTES", minutes)
+    with pytest.raises(ConfigurationError, match="BATCH_INTERVAL_MINUTES"):
+        load_settings(env_file=None)

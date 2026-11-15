@@ -35,6 +35,14 @@ class AuditLogImmutableError(DiabetesAdvisorError):
     """Raised when code tries to update or delete an append-only audit row (R5)."""
 
 
+class BatchAlreadyRunningError(DiabetesAdvisorError):
+    """Raised when a batch job starts while another run of the same job is in progress.
+
+    The ``batch_runs_one_running_idx`` unique index (0005) allows one ``running`` row
+    per job; the second starter gets this instead of processing the window twice.
+    """
+
+
 class ThresholdComputationError(DiabetesAdvisorError):
     """Raised when a personal threshold cannot be computed or applied (R2/R3).
 

@@ -54,10 +54,14 @@ class SqlThresholdRepository:
 
     Args:
         session: Open session; the caller commits or rolls back.
+        created_before: If set, :meth:`readings_since` ignores readings stored after
+            this moment. The batch job (R1) passes its window end so that re-running
+            a window sees exactly the same readings and computes the same thresholds.
     """
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, created_before: datetime | None = None) -> None:
         self._session = session
+        self._created_before = created_before
 
     def current_thresholds(self, user_id: uuid.UUID) -> dict[GlucoseLimitKind, StoredThreshold]:
         """Read the user's current thresholds through the ``current_thresholds`` view.
@@ -81,13 +85,15 @@ class SqlThresholdRepository:
             since: Exclusive lower bound on ``measured_at``.
 
         Returns:
-            Readings, oldest first.
+            Readings, oldest first (only those stored by ``created_before``, if set).
         """
         stmt = (
             select(Reading)
             .where(Reading.user_id == user_id, Reading.measured_at > since)
             .order_by(Reading.measured_at)
         )
+        if self._created_before is not None:
+            stmt = stmt.where(Reading.created_at <= self._created_before)
         return [ReadingPoint.model_validate(r) for r in self._session.scalars(stmt)]
 
     def save_threshold(
