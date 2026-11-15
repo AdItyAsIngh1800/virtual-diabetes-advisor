@@ -2,7 +2,7 @@
 
 The SQL migrations are the source of truth: never call ``Base.metadata.create_all``
 against Supabase. These models exist so services and jobs get typed rows. Every
-``Literal`` below mirrors a ``CHECK (... in (...))`` list in ``0001_core_schema.sql``;
+``Literal`` below mirrors a ``CHECK (... in (...))`` list in the migrations;
 ``tests/test_db_models.py`` fails if the two drift apart.
 
 Text columns with a fixed value set are mapped through :func:`_choice`, a non-native
@@ -141,6 +141,8 @@ class User(Base):
         _choice(UserRole), nullable=False, server_default="patient"
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # Added in 0005: synthetic patient from scripts/seed_demo.py (deleted on re-seed).
+    is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 
@@ -320,6 +322,31 @@ class ThresholdHistory(Base):
         ForeignKey("batch_runs.id", ondelete="SET NULL")
     )
     effective_from: Mapped[datetime] = mapped_column(_TZ, nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = _created_at()
+
+
+class RiskAssessmentRecord(Base):
+    """One risk-model score of a user's BRFSS profile (0005, R1/R2).
+
+    The batch job reuses the latest row while ``profile_hash`` and ``model_version``
+    are unchanged, so the model runs only when the profile (or the model) changed.
+    Named ``...Record`` to keep it apart from :class:`app.ml.predict.RiskAssessment`.
+    """
+
+    __tablename__ = "risk_assessments"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    profile_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    model_version: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    risk_tier: Mapped[RiskTier] = mapped_column(_choice(RiskTier), nullable=False)
+    flagged: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    batch_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("batch_runs.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = _created_at()
 
 
@@ -543,6 +570,7 @@ __all__ = [
     "Practitioner",
     "Profile",
     "Reading",
+    "RiskAssessmentRecord",
     "ThresholdHistory",
     "TurnReview",
     "User",

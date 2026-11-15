@@ -29,7 +29,7 @@ _CONSTRAINT_PREFIXES = ("check", "constraint", "primary key", "unique", "foreign
 def _sql_tables() -> dict[str, str]:
     """Map table name -> body of its CREATE TABLE block."""
     pattern = re.compile(r"create table public\.(\w+) \((.*?)\n\);", re.DOTALL)
-    return {name: body for name, body in pattern.findall(CORE_SQL)}
+    return {name: body for name, body in pattern.findall(ALL_SQL)}
 
 
 def _sql_columns(table: str, body: str) -> set[str]:
