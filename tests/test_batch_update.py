@@ -21,7 +21,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, load_settings
 from app.core.exceptions import BatchAlreadyRunningError, ModelNotTrainedError
-from app.db.models import Advisory, BatchRun, Profile, Reading, ThresholdHistory, User
+from app.db.models import (
+    Advisory,
+    BatchRun,
+    ConversationTurn,
+    Profile,
+    Reading,
+    ThresholdHistory,
+    User,
+)
 from app.db.session import sqlalchemy_url
 from app.jobs import batch_update
 from app.jobs.batch_update import (
@@ -462,6 +470,87 @@ def test_seed_script_produces_every_advisory_state(
         session.commit()
     assert again.deleted_users >= len(ids)
     assert sum(advisory_count(factory, uid) for uid in ids) == 0
+
+
+@live
+def test_reseed_keeps_demo_user_with_conversation_turns(
+    conn: Connection, factory: Callable[[], Session], settings: Settings
+) -> None:
+    from scripts.seed_demo import DEMO_PATIENTS, seed_demo  # noqa: PLC0415
+
+    my_phone, new_phone = "+447700900111", "+447700900222"
+    slot = next(i for i, spec in enumerate(DEMO_PATIENTS) if spec.my_phone_slot)
+    with factory() as session:
+        first = seed_demo(session, now=clock(conn), scorer=None, my_phone=my_phone)
+        session.commit()
+    ids = [p.user_id for p in first.patients]
+    me = ids[slot]
+    run_batch_update(
+        factory, scorer=None, user_ids=ids, window=(None, clock(conn)), settings=settings
+    )
+
+    # The webhook stored an inbound message, and a reply referred to one advisory.
+    with factory() as session:
+        audited = session.scalars(select(Advisory).where(Advisory.user_id == me)).first()
+        assert audited is not None, "the my-phone patient should have an advisory"
+        audited_id, audited_reading = audited.id, audited.reading_id
+        session.add_all(
+            [
+                ConversationTurn(
+                    user_id=me, channel="whatsapp_text", direction="inbound",
+                    raw_text="hi", wamid=f"wamid.in-{uuid.uuid4()}",
+                ),
+                ConversationTurn(
+                    user_id=me, channel="whatsapp_text", direction="outbound",
+                    advisory_id=audited_id, wamid=f"wamid.out-{uuid.uuid4()}",
+                ),
+            ]
+        )  # fmt: skip
+        session.commit()
+        old_readings = set(session.scalars(select(Reading.id).where(Reading.user_id == me)))
+
+    with factory() as session:
+        again = seed_demo(session, now=clock(conn), scorer=None, my_phone=my_phone)
+        session.commit()
+
+    assert again.patients[slot].user_id == me
+    assert again.patients[slot].kept is True
+    assert (again.kept_users, again.preserved_advisories) == (1, 1)
+    assert again.deleted_users >= len(ids) - 1
+    others = {p.user_id for i, p in enumerate(again.patients) if i != slot}
+    assert others.isdisjoint(ids)  # everyone else was replaced
+    with factory() as session:
+        turns = session.scalar(
+            select(func.count()).select_from(ConversationTurn).where(ConversationTurn.user_id == me)
+        )
+        assert turns == 2
+        advisories = list(session.scalars(select(Advisory.id).where(Advisory.user_id == me)))
+        assert advisories == [audited_id]  # only the audited advisory survived
+        thresholds = session.scalar(
+            select(func.count()).select_from(ThresholdHistory).where(ThresholdHistory.user_id == me)
+        )
+        assert thresholds == 1  # the audited advisory's threshold
+        readings = set(session.scalars(select(Reading.id).where(Reading.user_id == me)))
+        assert readings & old_readings == {audited_reading}
+        assert len(readings) == again.patients[slot].readings + 1
+        phone = session.scalar(select(Profile.phone_e164).where(Profile.user_id == me))
+        assert phone == my_phone
+
+    # A different --my-phone re-attaches to the same user; no --my-phone keeps the number.
+    for requested, expected in ((new_phone, new_phone), (None, new_phone)):
+        with factory() as session:
+            report = seed_demo(session, now=clock(conn), scorer=None, my_phone=requested)
+            session.commit()
+            assert report.patients[slot].user_id == me
+            phone = session.scalar(select(Profile.phone_e164).where(Profile.user_id == me))
+            assert phone == expected
+
+    # The batch job rebuilds thresholds and advisories for the kept user.
+    summary = run_batch_update(
+        factory, scorer=None, user_ids=[me], window=(None, clock(conn)), settings=settings
+    )
+    assert (summary.status, summary.users_failed) == ("succeeded", 0)
+    assert advisory_count(factory, me) > 1
 
 
 @pytest.mark.parametrize(

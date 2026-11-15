@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -33,6 +34,7 @@ from scripts.seed_demo import (
     build_risk_profile,
     demo_phone,
     generate_readings,
+    match_kept_users,
     validate_my_phone,
 )
 
@@ -130,6 +132,39 @@ def test_my_phone_accepts_e164(raw: str) -> None:
 def test_my_phone_rejects_bad_or_fake(raw: str) -> None:
     with pytest.raises(SeedError):
         validate_my_phone(raw)
+
+
+MY_PHONE = "+447700900111"
+OLD_REAL = "+447700900222"
+SLOT = next(i for i, s in enumerate(DEMO_PATIENTS) if s.my_phone_slot)
+
+
+def test_kept_user_on_fake_number_keeps_its_patient() -> None:
+    user = uuid.uuid4()
+    matched, unmatched = match_kept_users([(user, demo_phone(3))], DEMO_PATIENTS, None)
+    assert (matched, unmatched) == ({3: user}, [])
+
+
+@pytest.mark.parametrize("my_phone", [None, MY_PHONE, "+447700900333"])
+def test_kept_user_on_real_number_is_the_my_phone_patient(my_phone: str | None) -> None:
+    user = uuid.uuid4()
+    matched, unmatched = match_kept_users([(user, MY_PHONE)], DEMO_PATIENTS, my_phone)
+    assert (matched, unmatched) == ({SLOT: user}, [])
+
+
+def test_my_phone_user_wins_the_slot_over_an_older_real_number() -> None:
+    old, me = uuid.uuid4(), uuid.uuid4()
+    kept = [(old, OLD_REAL), (me, MY_PHONE)]
+    assert match_kept_users(kept, DEMO_PATIENTS, MY_PHONE) == ({SLOT: me}, [old])
+    # Without --my-phone the first real number (by input order) takes the slot.
+    assert match_kept_users(kept, DEMO_PATIENTS, None) == ({SLOT: old}, [me])
+
+
+def test_kept_users_outside_the_cohort_are_unmatched() -> None:
+    beyond, real = uuid.uuid4(), uuid.uuid4()
+    no_slot = [replace(spec, my_phone_slot=False) for spec in DEMO_PATIENTS]
+    kept = [(beyond, demo_phone(len(DEMO_PATIENTS))), (real, MY_PHONE)]
+    assert match_kept_users(kept, no_slot, MY_PHONE) == ({}, [real, beyond])
 
 
 def test_readings_cover_30_days_of_fasting_and_post_meal() -> None:

@@ -6,9 +6,16 @@ Usage::
     uv run python -m scripts.seed_demo --my-phone +9198...  # one patient -> your WhatsApp
     uv run python -m app.jobs.batch_update                  # then run the batch job
 
-Safe to re-run: every ``users.is_demo`` row (and, by cascade, its profile, readings,
-thresholds, risk assessments and advisories) is deleted first, in the same transaction
-as the new inserts. Real patients are never touched.
+Safe to re-run, in one transaction with the new inserts. Real patients are never
+touched. Demo users are handled in two ways:
+
+* A demo user **without** conversation turns is deleted (with, by cascade, its
+  profile, readings, thresholds, risk assessments and advisories) and created afresh.
+* A demo user **with** conversation turns is kept: the turns are an append-only audit
+  log (R5) and cannot be deleted. Only its readings, thresholds and advisories are
+  replaced from the seed; its id, profile and turns stay. Advisories that a turn
+  refers to are kept too (with their reading and threshold), because the turn's
+  foreign key must stay valid. ``--my-phone`` re-attaches to this same user.
 
 The cohort covers people with and without diabetes, all three risk tiers, healthy and
 complex older adults (ADA 2026 Table 13.2 via the threshold engine's proxy), and these
@@ -28,7 +35,7 @@ import logging
 import random
 import re
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from decimal import Decimal
@@ -58,6 +65,7 @@ from app.db.models import (
     Reading,
     ReadingContext,
     RiskTier,
+    ThresholdHistory,
     User,
 )
 from app.ml.predict import RiskAssessment
@@ -175,7 +183,8 @@ class PatientSpec:
         conditions: Fixed complex-health proxy answers (older adults); unset ones
             are chosen by the tier search.
         events: ``(day, context, value)`` overrides, e.g. a hypoglycaemic episode.
-        my_phone_slot: The patient ``--my-phone`` attaches to.
+        my_phone_slot: The patient ``--my-phone`` attaches to (also the patient a kept
+            demo user with a real number belongs to).
     """
 
     key: str
@@ -500,6 +509,7 @@ class SeededPatient(BaseModel):
         complex_conditions: Complex-health proxy conditions answered yes.
         readings: Readings inserted.
         scenario: What the readings show.
+        kept: ``True`` if an existing demo user with conversation turns was reused.
     """
 
     key: str
@@ -513,6 +523,7 @@ class SeededPatient(BaseModel):
     complex_conditions: int
     readings: int
     scenario: str
+    kept: bool = False
 
 
 class SeedReport(BaseModel):
@@ -520,13 +531,20 @@ class SeedReport(BaseModel):
 
     Attributes:
         deleted_users: Previous demo users removed.
-        patients: Patients created.
+        patients: Patients seeded (created, or kept and re-filled).
         readings: Readings created.
+        kept_users: Demo users kept because they have conversation turns.
+        preserved_advisories: Advisories kept because a conversation turn refers to them.
+        unmatched_user_ids: Kept demo users that match no patient in the cohort; they
+            are left exactly as they were.
     """
 
     deleted_users: int
     patients: list[SeededPatient]
     readings: int
+    kept_users: int = 0
+    preserved_advisories: int = 0
+    unmatched_user_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 def validate_my_phone(number: str) -> str:
@@ -549,36 +567,137 @@ def validate_my_phone(number: str) -> str:
     return compact
 
 
-def clear_demo_data(session: Session) -> int:
-    """Delete every demo user and everything that cascades from them.
+def demo_users_with_turns(session: Session) -> list[tuple[uuid.UUID, str]]:
+    """List demo users that have conversation turns, with their phone numbers.
+
+    Args:
+        session: Open session.
+
+    Returns:
+        ``(user_id, phone_e164)`` pairs, ordered by phone for a stable result.
+    """
+    has_turns = select(ConversationTurn.user_id).where(ConversationTurn.user_id == User.id)
+    rows = session.execute(
+        select(User.id, Profile.phone_e164)
+        .join(Profile, Profile.user_id == User.id)
+        .where(User.is_demo, has_turns.exists())
+        .order_by(Profile.phone_e164)
+    )
+    return [(user_id, phone) for user_id, phone in rows]
+
+
+def match_kept_users(
+    kept: Sequence[tuple[uuid.UUID, str]],
+    patients: Sequence[PatientSpec],
+    my_phone: str | None,
+) -> tuple[dict[int, uuid.UUID], list[uuid.UUID]]:
+    """Decide which cohort patient each kept demo user stands for.
+
+    Rules, in order:
+
+    1. A user whose number equals ``my_phone`` is the ``my_phone_slot`` patient, so
+       ``--my-phone`` re-attaches to the same user on every re-seed.
+    2. A user on a fake number ``+1555 01NN`` is the patient at index ``NN``, the slot
+       :func:`demo_phone` gave it.
+    3. A user on any other real number is the ``my_phone_slot`` patient (it got that
+       number from an earlier ``--my-phone``).
+
+    A user whose patient is already taken, or out of range, is unmatched.
+
+    Args:
+        kept: ``(user_id, phone_e164)`` of demo users with conversation turns.
+        patients: The cohort being seeded.
+        my_phone: Validated ``--my-phone`` number, or ``None``.
+
+    Returns:
+        ``({patient index: user_id}, [unmatched user ids])``.
+    """
+    slot = next((i for i, spec in enumerate(patients) if spec.my_phone_slot), None)
+    matched: dict[int, uuid.UUID] = {}
+    unmatched: list[uuid.UUID] = []
+    # Rule 1 first, so the --my-phone user wins the slot over an older real number.
+    for user_id, phone in sorted(kept, key=lambda row: row[1] != my_phone):
+        if is_fictional_demo_phone(phone):
+            index: int | None = int(phone[len(DEMO_PHONE_PREFIX) :]) - DEMO_PHONE_FIRST
+        else:
+            index = slot
+        if index is None or index >= len(patients) or index in matched:
+            unmatched.append(user_id)
+        else:
+            matched[index] = user_id
+    return matched, unmatched
+
+
+def clear_demo_data(session: Session, keep: Collection[uuid.UUID] = ()) -> int:
+    """Delete every demo user except ``keep``, with everything that cascades from them.
 
     Advisories are deleted first: they reference ``thresholds_history`` with ON DELETE
     RESTRICT, so the cascade from ``users`` could otherwise trip over them.
 
     Args:
         session: Open session (caller commits).
+        keep: Demo users to leave alone; must include every demo user with
+            conversation turns.
 
     Returns:
         Number of demo users deleted.
 
     Raises:
-        SeedError: If a demo user has conversation turns (append-only audit rows,
-            R5), which must never be deleted.
+        SeedError: If a demo user outside ``keep`` has conversation turns
+            (append-only audit rows, R5), which must never be deleted.
     """
-    demo_ids = select(User.id).where(User.is_demo).scalar_subquery()
+    doomed = select(User.id).where(User.is_demo, User.id.not_in(list(keep))).scalar_subquery()
     turns = session.scalar(
         select(func.count())
         .select_from(ConversationTurn)
-        .where(ConversationTurn.user_id.in_(demo_ids))
+        .where(ConversationTurn.user_id.in_(doomed))
     )
     if turns:
         raise SeedError(
-            f"demo users have {turns} conversation turns (append-only audit log); "
-            "they cannot be deleted - deactivate them instead of re-seeding"
+            f"demo users to delete have {turns} conversation turns (append-only audit log)"
         )
-    session.execute(delete(Advisory).where(Advisory.user_id.in_(demo_ids)))
-    result = session.execute(delete(User).where(User.is_demo))
+    session.execute(delete(Advisory).where(Advisory.user_id.in_(doomed)))
+    result = session.execute(delete(User).where(User.id.in_(doomed)))
     return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+def reset_seeded_data(session: Session, user_ids: Collection[uuid.UUID]) -> int:
+    """Delete the readings, thresholds and advisories of kept demo users.
+
+    Profiles, risk assessments and conversation turns stay. An advisory that a
+    conversation turn refers to is kept (``conversation_turns.advisory_id`` is ON
+    DELETE RESTRICT and turns cannot be edited), and so are its reading and threshold,
+    which the advisory needs.
+
+    Args:
+        session: Open session (caller commits).
+        user_ids: Kept demo users.
+
+    Returns:
+        Number of advisories kept because a turn refers to them.
+    """
+    ids = list(user_ids)
+    if not ids:
+        return 0
+    audited = select(ConversationTurn.advisory_id).where(ConversationTurn.advisory_id.is_not(None))
+    session.execute(delete(Advisory).where(Advisory.user_id.in_(ids), Advisory.id.not_in(audited)))
+    remaining = select(Advisory.reading_id, Advisory.threshold_id).where(Advisory.user_id.in_(ids))
+    still_needed = remaining.subquery()
+    session.execute(
+        delete(ThresholdHistory).where(
+            ThresholdHistory.user_id.in_(ids),
+            ThresholdHistory.id.not_in(select(still_needed.c.threshold_id)),
+        )
+    )
+    session.execute(
+        delete(Reading).where(
+            Reading.user_id.in_(ids), Reading.id.not_in(select(still_needed.c.reading_id))
+        )
+    )
+    preserved = session.scalar(
+        select(func.count()).select_from(Advisory).where(Advisory.user_id.in_(ids))
+    )
+    return int(preserved or 0)
 
 
 def _phone_numbers(my_phone: str | None) -> Iterator[str]:
@@ -603,7 +722,10 @@ def seed_demo(
     patients: Sequence[PatientSpec] = DEMO_PATIENTS,
     rng_seed: int = DEFAULT_RNG_SEED,
 ) -> SeedReport:
-    """Replace all demo data with a fresh cohort (caller commits).
+    """Replace demo data with a fresh cohort (caller commits).
+
+    Demo users with conversation turns are kept and re-filled rather than replaced;
+    see the module docstring.
 
     Args:
         session: Open session.
@@ -617,8 +739,7 @@ def seed_demo(
         What was deleted and created.
 
     Raises:
-        SeedError: If ``my_phone`` belongs to a real (non-demo) patient, or demo
-            users cannot be deleted.
+        SeedError: If ``my_phone`` belongs to a real (non-demo) patient.
     """
     if my_phone is not None:
         owner = session.scalar(
@@ -628,36 +749,38 @@ def seed_demo(
         )
         if owner is False:
             raise SeedError("--my-phone already belongs to a real (non-demo) patient")
-    deleted = clear_demo_data(session)
+    kept = demo_users_with_turns(session)
+    matched, unmatched = match_kept_users(kept, patients, my_phone)
+    if unmatched:
+        logger.warning(
+            "%d demo users with conversation turns match no seeded patient; left untouched",
+            len(unmatched),
+        )
+    deleted = clear_demo_data(session, keep=[user_id for user_id, _ in kept])
+    preserved = reset_seeded_data(session, matched.values())
+    # Deletes must reach the database before a kept user takes over a number that a
+    # deleted user held (profiles.phone_e164 is unique).
+    session.flush()
 
     seeded: list[SeededPatient] = []
     reading_rows: list[dict[str, object]] = []
-    for spec, phone in zip(patients, _phone_numbers(my_phone), strict=False):
+    numbers = _phone_numbers(my_phone)
+    for index, (spec, new_phone) in enumerate(zip(patients, numbers, strict=False)):
         risk_profile, assessment = build_risk_profile(spec, scorer, rng_seed=rng_seed)
-        user = User(id=uuid.uuid4(), role="patient", is_demo=True)
-        session.add(user)
-        session.flush()
-        answers = risk_profile.model_dump(exclude={"age", "sex"})
-        session.add(
-            Profile(
-                user_id=user.id,
-                full_name=spec.name,
-                phone_e164=phone,
-                language=spec.language,
-                age_years=spec.age,
-                sex=spec.sex,
-                diabetes_status=spec.diabetes_status,
-                **{**answers, "bmi": Decimal(str(answers["bmi"]))},
-            )
-        )
+        user_id = matched.get(index)
+        if user_id is not None:
+            phone = _reattach_phone(session, user_id, my_phone if spec.my_phone_slot else None)
+        else:
+            phone = new_phone
+            user_id = _create_patient(session, spec, phone, risk_profile)
         readings = generate_readings(spec, now=now, rng_seed=rng_seed)
         reading_rows.extend(
-            {"user_id": user.id, "source": "seed", **r.model_dump()} for r in readings
+            {"user_id": user_id, "source": "seed", **r.model_dump()} for r in readings
         )
         seeded.append(
             SeededPatient(
                 key=spec.key,
-                user_id=user.id,
+                user_id=user_id,
                 name=spec.name,
                 phone_masked=mask_phone(phone),
                 diabetes_status=spec.diabetes_status,
@@ -667,12 +790,77 @@ def seed_demo(
                 complex_conditions=sum(getattr(risk_profile, c) for c in _CONDITIONS),
                 readings=len(readings),
                 scenario=spec.scenario,
+                kept=index in matched,
             )
         )
     session.flush()
     if reading_rows:
         session.execute(insert(Reading), reading_rows)
-    return SeedReport(deleted_users=deleted, patients=seeded, readings=len(reading_rows))
+    return SeedReport(
+        deleted_users=deleted,
+        patients=seeded,
+        readings=len(reading_rows),
+        kept_users=len(matched),
+        preserved_advisories=preserved,
+        unmatched_user_ids=unmatched,
+    )
+
+
+def _create_patient(
+    session: Session, spec: PatientSpec, phone: str, risk_profile: RiskProfile
+) -> uuid.UUID:
+    """Insert a new demo user and profile.
+
+    Args:
+        session: Open session.
+        spec: The patient.
+        phone: E.164 number to give them.
+        risk_profile: BRFSS answers found for the target tier.
+
+    Returns:
+        The new user id.
+    """
+    user = User(id=uuid.uuid4(), role="patient", is_demo=True)
+    session.add(user)
+    session.flush()
+    answers = risk_profile.model_dump(exclude={"age", "sex"})
+    session.add(
+        Profile(
+            user_id=user.id,
+            full_name=spec.name,
+            phone_e164=phone,
+            language=spec.language,
+            age_years=spec.age,
+            sex=spec.sex,
+            diabetes_status=spec.diabetes_status,
+            **{**answers, "bmi": Decimal(str(answers["bmi"]))},
+        )
+    )
+    return user.id
+
+
+def _reattach_phone(session: Session, user_id: uuid.UUID, my_phone: str | None) -> str:
+    """Give a kept demo user ``--my-phone`` (if set) and return their number.
+
+    Args:
+        session: Open session.
+        user_id: Kept demo user.
+        my_phone: Number for the ``my_phone_slot`` patient, or ``None`` to keep the
+            current number.
+
+    Returns:
+        The user's number after the update.
+
+    Raises:
+        SeedError: If the user has no profile.
+    """
+    profile = session.scalar(select(Profile).where(Profile.user_id == user_id))
+    if profile is None:  # pragma: no cover - demo_users_with_turns joins on profiles
+        raise SeedError(f"kept demo user {user_id} has no profile")
+    if my_phone is not None and profile.phone_e164 != my_phone:
+        profile.phone_e164 = my_phone
+        session.flush()
+    return profile.phone_e164
 
 
 # ---------------------------------------------------------------------------
@@ -687,7 +875,9 @@ def _print_report(report: SeedReport) -> None:
         report: Result of :func:`seed_demo`.
     """
     lines = [
-        f"Deleted {report.deleted_users} previous demo users.",
+        f"Deleted {report.deleted_users} previous demo users; kept {report.kept_users} with "
+        f"conversation turns (readings, thresholds and advisories replaced, "
+        f"{report.preserved_advisories} audited advisories preserved).",
         f"Seeded {len(report.patients)} demo patients, {report.readings} readings.",
         "",
         f"{'patient':<16} {'phone':<14} {'status':<12} {'age':>3} {'tier(target/model)':<20} "
@@ -695,10 +885,15 @@ def _print_report(report: SeedReport) -> None:
     ]
     for p in report.patients:
         tier = f"{p.target_tier}/{p.model_tier or '?'}"
+        name = f"{p.name}*" if p.kept else p.name
         lines.append(
-            f"{p.name:<16} {p.phone_masked:<14} {p.diabetes_status:<12} {p.age:>3} "
+            f"{name:<16} {p.phone_masked:<14} {p.diabetes_status:<12} {p.age:>3} "
             f"{tier:<20} {p.scenario}"
         )
+    if report.kept_users:
+        lines.append("* kept user (has conversation turns)")
+    if report.unmatched_user_ids:
+        lines.append(f"Left untouched (match no patient): {report.unmatched_user_ids}")
     lines += ["", "Next: uv run python -m app.jobs.batch_update"]
     print("\n".join(lines))
 
