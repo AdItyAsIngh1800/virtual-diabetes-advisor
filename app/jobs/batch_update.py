@@ -22,6 +22,8 @@ last succeeded window and retries that user; users that did succeed get no dupli
 
 Entry points: :func:`run_batch_update` (APScheduler in ``app.main``, ``POST
 /admin/batch-run``) and ``uv run python -m app.jobs.batch_update`` for a manual run.
+Every entry point then runs the advisory dispatcher (``app.jobs.dispatch_advisories``),
+which sends the queued advisories (R3); this module itself never sends anything.
 """
 
 from __future__ import annotations
@@ -563,7 +565,7 @@ def load_risk_scorer() -> RiskScorer | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run one batch update from the command line (``triggered_by='manual'``).
+    """Run one batch update from the command line (``triggered_by='manual'``), then dispatch.
 
     Args:
         argv: Arguments (default: ``sys.argv[1:]``).
@@ -571,15 +573,24 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code: 0 if the run succeeded, 1 otherwise.
     """
-    from app.db.session import get_session_factory  # noqa: PLC0415 - CLI-only import
+    # CLI-only imports: the dispatcher pulls in Web Push and TTS clients.
+    from app.db.session import get_session_factory  # noqa: PLC0415
+    from app.jobs.dispatch_advisories import scheduled_dispatch  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(description="Run the R1 batch update once.")
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--no-dispatch",
+        action="store_true",
+        help="only queue advisories; do not send them (R3 dispatch)",
+    )
+    args = parser.parse_args(argv)
     configure_logging(get_settings().log_level)
     summary = run_batch_update(
         get_session_factory(), scorer=load_risk_scorer(), triggered_by="manual"
     )
     print(summary.model_dump_json(indent=2))
+    if not args.no_dispatch:
+        scheduled_dispatch()
     return 0 if summary.status == "succeeded" else 1
 
 
