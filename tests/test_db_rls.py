@@ -125,7 +125,7 @@ def world(conn: psycopg.Connection[Any]) -> World:
     assert th is not None
     turn = conn.execute(
         "insert into public.conversation_turns (user_id, channel, direction, raw_text)"
-        " values (%s, 'whatsapp_text', 'inbound', 'hello') returning id",
+        " values (%s, 'web', 'inbound', 'hello') returning id",
         (patient_a,),
     ).fetchone()
     assert turn is not None
@@ -312,3 +312,61 @@ def test_brfss_age_bucket_is_generated(conn: psycopg.Connection[Any], world: Wor
         "select brfss_age_bucket from public.profiles where user_id = %s", (world.patient_a,)
     ).fetchone()
     assert row == (age_to_bucket(52),)  # 7 = BRFSS 50-54
+
+
+# --- push_subscriptions (0006) ------------------------------------------------------
+
+
+def _subscribe(conn: psycopg.Connection[Any], user_id: uuid.UUID) -> uuid.UUID:
+    row = conn.execute(
+        "insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)"
+        " values (%s, %s, 'p256dh-key', 'auth-secret') returning id",
+        (user_id, f"https://push.example.invalid/{uuid.uuid4()}"),
+    ).fetchone()
+    assert row is not None
+    return uuid.UUID(str(row[0]))
+
+
+def test_patient_sees_only_own_push_subscriptions(
+    conn: psycopg.Connection[Any], world: World
+) -> None:
+    own = _subscribe(conn, world.patient_a)
+    _subscribe(conn, world.patient_b)
+    rows = _as(conn, "authenticated", world.auth_a, "select id from public.push_subscriptions")
+    assert [uuid.UUID(str(r[0])) for r in rows] == [own]
+    # Not even an assigned practitioner reads a patient's device keys.
+    assert (
+        _as(conn, "authenticated", world.auth_prac, "select id from public.push_subscriptions")
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)"
+        " values (%s, 'https://push.example.invalid/x', 'k', 'a')",
+        "update public.push_subscriptions set revoked_at = now() where user_id = %s",
+        "delete from public.push_subscriptions where user_id = %s",
+    ],
+)
+def test_clients_cannot_write_push_subscriptions(
+    conn: psycopg.Connection[Any], world: World, query: LiteralString
+) -> None:
+    _subscribe(conn, world.patient_a)
+    with pytest.raises(errors.InsufficientPrivilege):
+        _as(conn, "authenticated", world.auth_a, query, (world.patient_a,))
+
+
+def test_anon_cannot_read_push_subscriptions(conn: psycopg.Connection[Any], world: World) -> None:
+    with pytest.raises(errors.InsufficientPrivilege):
+        _as(conn, "anon", None, "select 1 from public.push_subscriptions")
+
+
+def test_push_endpoint_must_be_https(conn: psycopg.Connection[Any], world: World) -> None:
+    with pytest.raises(errors.CheckViolation):
+        conn.execute(
+            "insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)"
+            " values (%s, 'http://push.example.invalid/x', 'k', 'a')",
+            (world.patient_a,),
+        )
