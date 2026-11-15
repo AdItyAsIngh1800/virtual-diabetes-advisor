@@ -6,7 +6,9 @@ Three small interfaces, each with one real implementation and fakes in tests:
   (Google Translate's TTS endpoint). mp3 because every browser plays it.
 * :class:`SpeechTranscriber` - recorded audio -> text. :class:`WhisperTranscriber`
   uses faster-whisper ``small`` with int8 weights on CPU, loaded lazily, once per
-  process (the first call downloads ~460 MB and takes a few seconds).
+  process (the first call downloads ~460 MB and takes a few seconds). Audio is decoded
+  here (:func:`decode_audio`, PyAV) and handed to the model as samples: faster-whisper
+  1.2's own decoder passes an argument PyAV 15+ no longer accepts.
 * :class:`AudioStore` - where advisory mp3s live. :class:`SupabaseAudioStore` uploads
   to a **private** Supabase Storage bucket and hands out short-lived signed URLs, so
   only the patient the API gives a link to can play their advisory.
@@ -24,6 +26,8 @@ from collections.abc import Iterable
 from typing import Final, Protocol
 
 import httpx
+import numpy as np
+import numpy.typing as npt
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import Settings
@@ -152,16 +156,68 @@ class _WhisperModel(Protocol):
     """The part of ``faster_whisper.WhisperModel`` this module calls."""
 
     def transcribe(
-        self, audio: io.BytesIO, *, language: str
+        self, audio: npt.NDArray[np.float32], *, language: str
     ) -> tuple[Iterable[_WhisperSegment], object]:
         """Transcribe audio (see faster-whisper).
 
         Args:
-            audio: Encoded audio.
+            audio: Mono float32 samples at :data:`WHISPER_SAMPLE_RATE`.
             language: ISO language code.
 
         Returns:
             Segments and transcription info.
+        """
+        ...
+
+
+# Whisper models are trained on 16 kHz mono audio; faster-whisper expects exactly that.
+WHISPER_SAMPLE_RATE: Final = 16_000
+# s16 PCM full scale, to map samples into [-1, 1) as Whisper expects.
+_S16_FULL_SCALE: Final = 32768.0
+
+
+def decode_audio(audio: bytes) -> npt.NDArray[np.float32]:
+    """Decode a recording (webm/ogg opus, mp4/aac, mp3, wav) to 16 kHz mono samples.
+
+    Same output as ``faster_whisper.decode_audio``, done with the installed PyAV.
+
+    Args:
+        audio: Encoded audio bytes.
+
+    Returns:
+        float32 samples in [-1, 1).
+
+    Raises:
+        SpeechError: If the bytes are not decodable audio or hold no sound.
+    """
+    import av  # noqa: PLC0415 - only needed when someone speaks
+
+    resampler = av.AudioResampler(format="s16", layout="mono", rate=WHISPER_SAMPLE_RATE)
+    # s16 frames (PyAV types to_ndarray() as a union over sample formats).
+    chunks: list[npt.NDArray[np.generic]] = []
+    try:
+        with av.open(io.BytesIO(audio), mode="r") as container:
+            for frame in container.decode(audio=0):
+                chunks.extend(f.to_ndarray().reshape(-1) for f in resampler.resample(frame))
+            chunks.extend(f.to_ndarray().reshape(-1) for f in resampler.resample(None))
+    except (av.FFmpegError, ValueError, IndexError, OSError) as exc:
+        raise SpeechError(f"could not decode the recording ({type(exc).__name__})") from exc
+    if not chunks:
+        raise SpeechError("the recording holds no audio")
+    return (np.concatenate(chunks).astype(np.float32) / _S16_FULL_SCALE).astype(np.float32)
+
+
+class AudioDecoder(Protocol):
+    """Turns encoded audio into Whisper input samples (tests pass a fake)."""
+
+    def __call__(self, audio: bytes) -> npt.NDArray[np.float32]:
+        """Decode.
+
+        Args:
+            audio: Encoded audio.
+
+        Returns:
+            16 kHz mono float32 samples.
         """
         ...
 
@@ -187,7 +243,12 @@ def load_whisper_model() -> _WhisperModel:
     from faster_whisper import WhisperModel  # noqa: PLC0415 - ~1 s import, load lazily
 
     model: _WhisperModel = WhisperModel(
-        WHISPER_MODEL_SIZE, device=_WHISPER_DEVICE, compute_type=_WHISPER_COMPUTE_TYPE
+        WHISPER_MODEL_SIZE,
+        device=_WHISPER_DEVICE,
+        compute_type=_WHISPER_COMPUTE_TYPE,
+        # The model is public. Never send a saved Hugging Face token: an expired one
+        # makes the Hub answer 401 and the download (or cache check) fails.
+        use_auth_token=False,
     )
     return model
 
@@ -200,10 +261,16 @@ class WhisperTranscriber:
 
     Args:
         loader: Builds the model; defaults to :func:`load_whisper_model`.
+        decoder: Decodes uploads to samples; defaults to :func:`decode_audio`.
     """
 
-    def __init__(self, loader: WhisperModelLoader = load_whisper_model) -> None:
+    def __init__(
+        self,
+        loader: WhisperModelLoader = load_whisper_model,
+        decoder: AudioDecoder = decode_audio,
+    ) -> None:
         self._loader = loader
+        self._decoder = decoder
         self._model: _WhisperModel | None = None
         self._lock = threading.Lock()
 
@@ -237,9 +304,10 @@ class WhisperTranscriber:
         _require_supported(language)
         if not audio:
             raise SpeechError("no audio to transcribe")
+        samples = self._decoder(audio)
         model = self._get_model()
         try:
-            segments, _ = model.transcribe(io.BytesIO(audio), language=language)
+            segments, _ = model.transcribe(samples, language=language)
             # Segments are a lazy generator: decoding errors surface while iterating.
             return " ".join(segment.text.strip() for segment in segments).strip()
         except (RuntimeError, ValueError, OSError) as exc:

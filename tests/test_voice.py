@@ -10,6 +10,8 @@ import types
 from typing import Any
 
 import httpx
+import numpy as np
+import numpy.typing as npt
 import pytest
 
 from app.core.config import Settings
@@ -19,6 +21,7 @@ from app.services.voice import (
     SupabaseAudioStore,
     WhisperTranscriber,
     advisory_audio_path,
+    decode_audio,
 )
 
 SETTINGS = Settings(
@@ -88,13 +91,23 @@ class Segment:
         self.text = text
 
 
+SAMPLES = np.zeros(16_000, dtype=np.float32)
+
+
+def fake_decoder(audio: bytes) -> npt.NDArray[np.float32]:
+    assert audio in {b"webm-bytes", b"x"}
+    return SAMPLES
+
+
 class FakeWhisper:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def transcribe(self, audio: io.BytesIO, *, language: str) -> tuple[list[Segment], object]:
+    def transcribe(
+        self, audio: npt.NDArray[np.float32], *, language: str
+    ) -> tuple[list[Segment], object]:
         self.calls.append(language)
-        assert audio.read() == b"webm-bytes"
+        assert audio is SAMPLES  # the decoded samples, not the raw upload
         return [Segment(" my sugar is "), Segment("one forty ")], object()
 
 
@@ -106,7 +119,7 @@ def test_whisper_loads_lazily_once_and_joins_segments() -> None:
         loads.append(1)
         return model
 
-    transcriber = WhisperTranscriber(loader)
+    transcriber = WhisperTranscriber(loader, fake_decoder)
     assert loads == []  # nothing loaded at construction
     assert transcriber.transcribe(b"webm-bytes", "en") == "my sugar is one forty"
     assert transcriber.transcribe(b"webm-bytes", "en") == "my sugar is one forty"
@@ -123,7 +136,7 @@ def test_whisper_concurrent_first_calls_load_once() -> None:
         gate.wait(0.2)
         return FakeWhisper()
 
-    transcriber = WhisperTranscriber(slow_loader)
+    transcriber = WhisperTranscriber(slow_loader, fake_decoder)
     threads = [
         threading.Thread(target=transcriber.transcribe, args=(b"webm-bytes", "en"))
         for _ in range(4)
@@ -138,15 +151,48 @@ def test_whisper_concurrent_first_calls_load_once() -> None:
 
 def test_whisper_rejects_bad_input_and_wraps_decode_errors() -> None:
     class Broken:
-        def transcribe(self, audio: io.BytesIO, *, language: str) -> tuple[list[Segment], object]:
+        def transcribe(
+            self, audio: npt.NDArray[np.float32], *, language: str
+        ) -> tuple[list[Segment], object]:
             raise RuntimeError("Invalid data found when processing input")
 
     with pytest.raises(SpeechError, match="English-only"):
-        WhisperTranscriber(FakeWhisper).transcribe(b"x", "ta")
+        WhisperTranscriber(FakeWhisper, fake_decoder).transcribe(b"x", "ta")
     with pytest.raises(SpeechError, match="no audio"):
-        WhisperTranscriber(FakeWhisper).transcribe(b"", "en")
+        WhisperTranscriber(FakeWhisper, fake_decoder).transcribe(b"", "en")
     with pytest.raises(SpeechError, match="transcription failed"):
-        WhisperTranscriber(Broken).transcribe(b"x", "en")
+        WhisperTranscriber(Broken, fake_decoder).transcribe(b"x", "en")
+
+
+def _webm_opus_tone(seconds: float = 1.0) -> bytes:
+    """A 440 Hz tone encoded as webm/opus, like Chrome's MediaRecorder output."""
+    import av  # noqa: PLC0415
+
+    buf = io.BytesIO()
+    with av.open(buf, mode="w", format="webm") as out:
+        stream = out.add_stream("libopus", rate=48_000)
+        t = np.arange(int(48_000 * seconds)) / 48_000
+        pcm = (np.sin(2 * np.pi * 440 * t) * 8000).astype(np.int16).reshape(1, -1)
+        frame = av.AudioFrame.from_ndarray(pcm, format="s16", layout="mono")
+        frame.sample_rate = 48_000
+        for packet in stream.encode(frame):
+            out.mux(packet)
+        for packet in stream.encode(None):
+            out.mux(packet)
+    return buf.getvalue()
+
+
+def test_decode_audio_turns_media_recorder_webm_into_16k_samples() -> None:
+    samples = decode_audio(_webm_opus_tone(1.0))
+    assert samples.dtype == np.float32
+    # ~1 s at 16 kHz (opus adds a little padding).
+    assert 15_000 <= samples.size <= 17_500
+    assert 0.05 < float(np.abs(samples).max()) <= 1.0
+
+
+def test_decode_audio_rejects_garbage() -> None:
+    with pytest.raises(SpeechError, match="could not decode"):
+        decode_audio(b"definitely not audio")
 
 
 def test_default_loader_uses_small_int8_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,7 +208,12 @@ def test_default_loader_uses_small_int8_cpu(monkeypatch: pytest.MonkeyPatch) -> 
     module.WhisperModel = WhisperModel  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "faster_whisper", module)
     voice.load_whisper_model()
-    assert seen == {"size": "small", "device": "cpu", "compute_type": "int8"}
+    assert seen == {
+        "size": "small",
+        "device": "cpu",
+        "compute_type": "int8",
+        "use_auth_token": False,  # public model: never send a (possibly stale) saved token
+    }
 
 
 # --- Supabase Storage ----------------------------------------------------------------
