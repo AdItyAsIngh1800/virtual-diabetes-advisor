@@ -14,28 +14,35 @@
 <h1>Privacy Policy</h1>
 <p class="muted">Virtual Diabetes Advisor · Team 6, B.Tech Machine Learning mini project, SRM Institute of Science and Technology · Last updated 15 November 2026</p>
 
-<p>Virtual Diabetes Advisor is a student research prototype. It is <strong>not a medical service</strong> and does not diagnose, treat or prescribe. It is used only by the project team and invited test users.</p>
+<p>Virtual Diabetes Advisor is a student research prototype delivered as a web app. It is <strong>not a medical service</strong> and does not diagnose, treat or prescribe. It is used only by the project team and invited test users.</p>
 
 <h2>What we collect</h2>
 <ul>
-  <li>Your WhatsApp phone number and the name on your WhatsApp profile.</li>
+  <li>Your account email and password, handled by Supabase Auth. We never see your password.</li>
   <li>Health profile answers you give us (for example age, sex, blood pressure, cholesterol, BMI and general health questions).</li>
-  <li>Glucose readings you send, and the messages and voice notes you exchange with the advisor.</li>
-  <li>Delivery status of messages we send you.</li>
+  <li>Glucose readings you enter, and the text and voice messages you exchange with the advisor in the app.</li>
+  <li>If you turn on alerts: a push subscription for your browser or phone (an address at your browser's push service plus encryption keys) and the type of browser you use.</li>
+  <li>Whether each alert was sent and whether you opened it.</li>
 </ul>
 
 <h2>How we use it</h2>
 <ul>
-  <li>To calculate your personal glucose thresholds and send you advisories when a reading is close to or past them.</li>
+  <li>To calculate your personal glucose thresholds and alert you when a reading is close to or past them.</li>
   <li>To answer your questions and connect you to a practitioner when you ask or when a reading needs attention.</li>
   <li>To audit and improve the advisor's answers. Conversations are reviewed by the project team.</li>
 </ul>
 <p>We do not sell your data, use it for advertising, or share it with anyone outside the project except the service providers below.</p>
 
+<h2>Notifications</h2>
+<ul>
+  <li>Alerts are sent with Web Push only after you press <strong>Enable alerts</strong> and allow notifications in your browser.</li>
+  <li>An alert is delivered through your browser's push service (Google for Chrome on Android, Mozilla for Firefox, Apple for Safari). The content is encrypted end to end; the push service sees only that a message was sent to your device.</li>
+  <li>An alert contains only your reading and your personal limit, never your name or anyone else's data. Alerts older than one hour are not delivered.</li>
+</ul>
+
 <h2>Where it is stored and processed</h2>
 <ul>
-  <li>Messages travel through the WhatsApp Business Platform operated by Meta.</li>
-  <li>Data is stored in a Supabase (PostgreSQL) database with access restricted to the project team.</li>
+  <li>Data is stored in a Supabase (PostgreSQL) database. Row-level security lets each patient read only their own records; practitioners see only patients assigned to them.</li>
   <li>Questions may be processed by an AI model provider to draft answers; only the content needed to answer is sent.</li>
 </ul>
 
@@ -44,8 +51,8 @@
 
 <h2>Your choices</h2>
 <ul>
-  <li>You can stop at any time by sending <strong>STOP</strong> to the advisor or simply not replying.</li>
-  <li>You can ask for your data to be deleted by sending <strong>DELETE MY DATA</strong> to the advisor on WhatsApp, or by contacting the project team. We will remove it within 30 days.</li>
+  <li>You can turn alerts off at any time with <strong>Turn alerts off</strong> in the app, or by blocking notifications for the site in your browser settings.</li>
+  <li>You can ask for your account and data to be deleted by contacting the project team. We will remove it within 30 days.</li>
 </ul>
 
 <h2>Contact</h2>

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start the ngrok tunnel and the FastAPI server together for WhatsApp webhook testing.
+# Start the ngrok tunnel and the FastAPI server together, so a phone can open the
+# patient app over https (Web Push and service workers require a secure origin).
 #
 # - Reuses the static ngrok domain in PUBLIC_BASE_URL (.env) if one is set; otherwise
 #   starts a random tunnel and writes its URL into .env.
@@ -49,11 +50,11 @@ if grep -qE '^PUBLIC_BASE_URL=' .env; then
 else
   echo "PUBLIC_BASE_URL=$url" >> .env
 fi
-echo "$url/webhooks/whatsapp" > logs/callback_url.txt
+echo "$url/app/" > logs/app_url.txt
 
 echo
-echo "Tunnel:       $url"
-echo "Callback URL: $url/webhooks/whatsapp"
+echo "Tunnel:      $url"
+echo "Patient app: $url/app/   (open this on your phone)"
 echo "Starting API on port 8000 (Ctrl+C to stop both)..."
 echo
 uv run uvicorn app.main:app --port 8000 2>&1 | tee logs/uvicorn.log
