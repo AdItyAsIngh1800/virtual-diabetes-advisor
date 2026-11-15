@@ -15,6 +15,11 @@ Rules, applied to readings oldest first:
    not insert time: the batch job may process a day of readings in one run, and a
    window re-run must reach the same decisions. The check is symmetric, so a reading
    reported late is suppressed by an advisory for a later reading too.
+4. **Level 2 hypoglycaemia bypasses the cooldown:** every reading below 54 mg/dL
+   (``clinical_limits.HYPO_LEVEL_2_MG_DL``, ADA 2026 Table 6.4) gets its own escalated
+   advisory - each one is a clinically significant event a practitioner must see.
+   Idempotency still applies, and these advisories still count toward the cooldown
+   of later, less severe lows in the same state.
 
 Nothing here sends a message: rows are created with ``delivery_status = 'queued'`` and
 Phase 5 delivers them (whatsapp-voice-advisory skill).
@@ -294,9 +299,10 @@ def plan_advisories(
         if (ev.reading_id, band.limit_kind) in existing:
             duplicates += 1
             continue
-        # R3 cooldown: one advisory per user per limit per state per N hours.
+        # R3 cooldown: one advisory per user per limit per state per N hours, except
+        # Level 2 hypoglycaemia (< 54 mg/dL), which is never suppressed (rule 4).
         earlier = issued[(band.limit_kind, state)]
-        if any(abs(ev.measured_at - t) < cooldown for t in earlier):
+        if not band.escalate and any(abs(ev.measured_at - t) < cooldown for t in earlier):
             suppressed += 1
             continue
         drafts.append(

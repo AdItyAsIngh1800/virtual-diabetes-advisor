@@ -101,7 +101,8 @@ class Settings(BaseSettings):
     # never swallow the whole target range.
     pre_breach_band: float = Field(default=0.05, gt=0.0, lt=0.5)
     # R3: one advisory per user per metric per state per N hours. 24 h chosen by the
-    # team to avoid alert fatigue; a *breach* still escalates to the practitioner.
+    # team to avoid alert fatigue; a *breach* still escalates to the practitioner, and
+    # Level 2 hypoglycaemia (< 54 mg/dL) bypasses the cooldown entirely.
     advisory_cooldown_hours: int = Field(default=24, ge=1, le=24 * 7)
 
     # --- Batch job / admin API (R1) ---------------------------------------------

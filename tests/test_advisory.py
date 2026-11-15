@@ -217,3 +217,40 @@ def test_untranslated_languages_fall_back_to_english() -> None:
             urgent_low=False,
             language="hi",
         )
+
+
+# --- Level 2 hypoglycaemia bypasses the cooldown -------------------------------------
+
+LEVEL_2 = BandResult("breach_low", "low", Decimal("70.0"), escalate=True)
+BREACH_LOW = BandResult("breach_low", "low", Decimal("70.0"), escalate=False)
+
+
+def test_every_level_2_hypo_creates_an_escalated_advisory() -> None:
+    readings = [ev(0, LEVEL_2, "52.0"), ev(1, LEVEL_2, "49.0"), ev(1.5, LEVEL_2, "53.9")]
+    result = plan(readings)
+    assert len(result.drafts) == 3
+    assert result.suppressed == 0
+    assert all(d.escalated and d.state == "breach_low" for d in result.drafts)
+    assert all("emergency" in d.message_text for d in result.drafts)
+
+
+def test_level_2_hypo_not_suppressed_by_prior_advisory() -> None:
+    first = plan([ev(0, BREACH_LOW, "65.0")])
+    later = plan([ev(2, LEVEL_2, "50.0")], [as_prior(first.drafts[0])])
+    assert len(later.drafts) == 1
+    assert later.drafts[0].escalated
+
+
+def test_level_2_hypo_still_respects_idempotency() -> None:
+    readings = [ev(0, LEVEL_2, "50.0"), ev(1, LEVEL_2, "48.0")]
+    first = plan(readings)
+    second = plan(readings, [as_prior(d) for d in first.drafts])
+    assert second.drafts == []
+    assert second.duplicates == 2
+
+
+def test_ordinary_low_after_level_2_is_still_cooled_down() -> None:
+    # 54 mg/dL is not Level 2 (strictly < 54), so it follows the normal cooldown.
+    result = plan([ev(0, LEVEL_2, "50.0"), ev(3, BREACH_LOW, "54.0"), ev(4, BREACH_LOW, "66.0")])
+    assert [d.reading_value_mg_dl for d in result.drafts] == [Decimal("50.0")]
+    assert result.suppressed == 2

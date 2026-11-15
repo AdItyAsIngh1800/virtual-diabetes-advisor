@@ -509,3 +509,25 @@ def test_patient_without_diabetes_status_is_skipped(
     assert summary.status == "succeeded"
     assert summary.users_skipped == 1
     assert summary.users_processed == 0
+
+
+@live
+def test_level_2_hypos_bypass_cooldown_end_to_end(
+    conn: Connection, factory: Callable[[], Session], settings: Settings
+) -> None:
+    now = clock(conn)
+    user = add_patient(
+        factory,
+        [
+            (now - timedelta(hours=6), "fasting", "52.0"),  # Level 2
+            (now - timedelta(hours=4), "random", "49.5"),  # Level 2, 2 h later
+            (now - timedelta(hours=3), "random", "66.0"),  # ordinary low: cooled down
+        ],
+    )
+    summary = run(factory, settings, [user], now + timedelta(seconds=1))
+    assert summary.advisories_by_state == {"breach_low": 2}
+    with factory() as session:
+        rows = session.execute(
+            select(Advisory.reading_value_mg_dl, Advisory.escalated).where(Advisory.user_id == user)
+        ).all()
+    assert sorted(rows) == [(Decimal("49.5"), True), (Decimal("52.0"), True)]
