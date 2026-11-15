@@ -262,6 +262,7 @@ class SqlBatchRepository:
                 Advisory.limit_kind,
                 Advisory.state,
                 Reading.measured_at.label("reading_measured_at"),
+                Advisory.delivery_status,
             )
             .join(Reading, Reading.id == Advisory.reading_id)
             .where(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -9,13 +10,18 @@ from decimal import Decimal
 import pytest
 
 from app.services.advisory import (
+    DOSING_WORDS,
+    MAX_SPOKEN_SECONDS,
     AdvisoryDraft,
     AdvisoryPlan,
     EvaluatedReading,
     PriorAdvisory,
     advisory_language,
+    estimated_speech_seconds,
+    notification_text,
     plan_advisories,
     render_message,
+    spoken_text,
 )
 from app.services.thresholds import BandResult
 
@@ -170,7 +176,7 @@ def test_message_has_values_and_no_dosing_words() -> None:
         urgent_low=False,
         language="en",
     )
-    assert "after-meal glucose reading of 172 mg/dL" in text
+    assert "after-meal glucose is 172 mg/dL" in text
     assert "180 mg/dL" in text
     for banned in ("insulin", "dose", "units", "tablet", "medication"):
         assert banned not in text.lower()
@@ -185,21 +191,127 @@ def test_random_context_reads_naturally() -> None:
         urgent_low=False,
         language="en",
     )
-    assert text.startswith("Your glucose reading of 68.4 mg/dL")
+    assert text.startswith("Your glucose is 68.4 mg/dL")
+
+
+def _all_messages() -> list[tuple[str, bool, str]]:
+    """Every possible template combination: (state, urgent_low, text).
+
+    ``urgent_low`` (< 54 mg/dL) is always below the low limit, so only ``breach_low``.
+    """
+    out = []
+    for state in ("pre_breach_high", "breach_high", "pre_breach_low", "breach_low"):
+        for urgent in (False, True) if state == "breach_low" else (False,):
+            for context in ("fasting", "post_meal", "random"):
+                text = render_message(
+                    state=state,
+                    context=context,
+                    value_mg_dl=Decimal("185.5"),  # longest spoken numbers
+                    threshold_mg_dl=Decimal("180.5"),
+                    urgent_low=urgent,
+                    language="en",
+                )
+                out.append((state, urgent, text))
+    return out
 
 
 def test_messages_stay_short_enough_to_speak_in_25_seconds() -> None:
-    # ~150 spoken words per minute -> 25 s is about 60 words.
-    for state in ("pre_breach_high", "breach_high", "pre_breach_low", "breach_low"):
-        text = render_message(
-            state=state,
+    for _state, _urgent, text in _all_messages():
+        assert estimated_speech_seconds(spoken_text(text)) <= MAX_SPOKEN_SECONDS, text
+
+
+def test_template_never_contains_dosing_words() -> None:
+    for _state, _urgent, text in _all_messages():
+        words = set(re.findall(r"[a-z]+", text.lower()))
+        assert not words & DOSING_WORDS, text
+        title, body = notification_text(
+            state="breach_high",
             context="fasting",
-            value_mg_dl=Decimal("50.0"),
-            threshold_mg_dl=Decimal("70.0"),
-            urgent_low=True,
-            language="en",
+            value_mg_dl=Decimal("140"),
+            threshold_mg_dl=Decimal("130"),
+            urgent_low=_urgent,
         )
-        assert len(text.split()) <= 70
+        assert not set(re.findall(r"[a-z]+", f"{title} {body}".lower())) & DOSING_WORDS
+
+
+def test_every_template_has_reading_limit_direction_action_and_doctor_line() -> None:
+    direction = {
+        "pre_breach_high": "running high",
+        "breach_high": "That is high",
+        "pre_breach_low": "running low",
+        "breach_low": "That is low",
+    }
+    for state, _urgent, text in _all_messages():
+        assert "185.5 mg/dL" in text
+        assert "personal" in text and "limit of 180.5 mg/dL" in text
+        assert direction[state] in text
+        assert "Contact your doctor if" in text
+        assert "check again" in text.lower()  # the one safe general action
+
+
+def test_breach_and_below_54_add_the_care_team_and_emergency_line() -> None:
+    for state, urgent, text in _all_messages():
+        if urgent:
+            assert "call emergency services now" in text
+            assert "flagged for your care team" in text
+        elif state.startswith("breach_"):
+            assert "flagged for your care team" in text
+            assert "urgent help" in text
+        else:
+            assert "care team" not in text
+            assert "emergency" not in text
+
+
+def test_speech_estimate_counts_numbers_as_spoken_words() -> None:
+    # 3 plain words + "126" (4) + "130.5" (4 + 2) = 13 words at 150 wpm.
+    assert estimated_speech_seconds("Glucose is 126, limit 130.5.") == pytest.approx(13 * 0.4)
+
+
+def test_spoken_text_drops_units() -> None:
+    assert spoken_text("Your glucose is 124 mg/dL, near 130 mg/dL.") == (
+        "Your glucose is 124, near 130."
+    )
+
+
+def test_notification_text_has_only_reading_and_limit() -> None:
+    title, body = notification_text(
+        state="pre_breach_high",
+        context="fasting",
+        value_mg_dl=Decimal("126.0"),
+        threshold_mg_dl=Decimal("130.0"),
+        urgent_low=False,
+    )
+    assert title == "Glucose close to your upper limit"
+    assert body == "Fasting reading 126 mg/dL, your upper limit 130 mg/dL. Tap to open your advice."
+    title, body = notification_text(
+        state="breach_low",
+        context="random",
+        value_mg_dl=Decimal("48.5"),
+        threshold_mg_dl=Decimal("70"),
+        urgent_low=True,
+    )
+    assert title == "Very low glucose reading"
+    assert body.startswith("Reading 48.5 mg/dL, your lower limit 70 mg/dL.")
+
+
+def test_expired_prior_advisory_does_not_start_a_cooldown() -> None:
+    prior_time = ev(0).measured_at
+    expired = PriorAdvisory(
+        reading_id=uuid.uuid4(),
+        limit_kind="fasting_high",
+        state="pre_breach_high",
+        reading_measured_at=prior_time,
+        delivery_status="expired",
+    )
+    sent = expired.model_copy(update={"delivery_status": "sent"})
+    later = ev(1)  # one hour later, inside the 24 h cooldown
+    assert len(plan([later], [expired]).drafts) == 1
+    assert plan([later], [sent]).drafts == []
+    # Idempotency still holds for the expired advisory's own reading.
+    same_reading = EvaluatedReading(
+        expired.reading_id, prior_time, "fasting", Decimal("125.0"), PRE_HIGH
+    )
+    assert plan([same_reading], [expired]).drafts == []
 
 
 def test_untranslated_languages_fall_back_to_english() -> None:

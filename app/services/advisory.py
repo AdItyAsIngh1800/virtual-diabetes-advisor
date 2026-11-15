@@ -11,7 +11,8 @@ Rules, applied to readings oldest first:
 2. **Idempotency (R1):** a reading that already has an advisory for the same limit is
    skipped. Mirrors the ``advisories_reading_limit_key`` unique constraint.
 3. **Cooldown (R3):** no two advisories for the same user, limit and state whose
-   readings were *measured* less than ``ADVISORY_COOLDOWN_HOURS`` apart. Measured time,
+   readings were *measured* less than ``ADVISORY_COOLDOWN_HOURS`` apart. Advisories
+   that ``expired`` unsent do not count (the patient never saw them). Measured time,
    not insert time: the batch job may process a day of readings in one run, and a
    window re-run must reach the same decisions. The check is symmetric, so a reading
    reported late is suppressed by an advisory for a later reading too.
@@ -22,12 +23,14 @@ Rules, applied to readings oldest first:
    of later, less severe lows in the same state.
 
 Nothing here sends a message: rows are created with ``delivery_status = 'queued'`` and
-the Web Push dispatcher delivers them (web-push-voice-advisory skill).
+``app.jobs.dispatch_advisories`` delivers them. This module also builds the text the
+dispatcher needs: :func:`spoken_text` for TTS and :func:`notification_text` for the push.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -40,16 +43,19 @@ from typing import Final
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.core.clinical_limits import GlucoseLimitKind
-from app.db.models import AdvisoryState, Language, ReadingContext
+from app.db.models import AdvisoryState, DeliveryStatus, Language, ReadingContext
 from app.services.thresholds import BandResult
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Message templates (web-push-voice-advisory skill: fixed templates, never free LLM
-# text for alerts; no dosing advice, no diagnosis; low-glucose guidance only with a
-# cited source - clinical_limits.py has none for treatment, so lows say "contact your
-# doctor"). Each message is ~40-60 words, under the skill's ~25 s spoken limit.
+# text for alerts; no dosing advice, no diagnosis). Every template states the reading,
+# the patient's personal limit, the direction (high / low), ONE safe general action
+# and "Contact your doctor if ...". Breaches add the care-team / urgent-help line;
+# readings below 54 mg/dL add the emergency line instead. Low-glucose *treatment*
+# (e.g. grams of fast carbohydrate) is deliberately absent: clinical_limits.py has no
+# cited source for it, so lows point to the doctor and to emergency help.
 # ---------------------------------------------------------------------------
 
 # Only English templates exist so far. Tamil and Hindi versions need a reviewed
@@ -65,34 +71,92 @@ _CONTEXT_WORDS: Final[Mapping[ReadingContext, str]] = MappingProxyType(
 _TEMPLATES_EN: Final[Mapping[AdvisoryState, str]] = MappingProxyType(
     {
         "pre_breach_high": (
-            "Your {context}glucose reading of {value} mg/dL is close to your personal "
-            "upper limit of {threshold} mg/dL. Keep to your usual meal plan and "
-            "activity, and check again at your next planned time. Contact your doctor "
-            "if your readings keep rising."
+            "Your {context}glucose is {value} mg/dL, running high: close to your personal "
+            "upper limit of {threshold} mg/dL. Keep to your usual meals and activity, and "
+            "check again at your next planned time. Contact your doctor if your readings "
+            "keep rising."
         ),
         "breach_high": (
-            "Your {context}glucose reading of {value} mg/dL is at or above your personal "
-            "upper limit of {threshold} mg/dL. Your care team has been notified. Please "
-            "check again at your next planned time, and contact your doctor if it stays "
-            "high or you feel unwell."
+            "Your {context}glucose is {value} mg/dL. That is high, at or above your "
+            "personal upper limit of {threshold} mg/dL. Check again at your next planned "
+            "time. Contact your doctor if it stays high."
         ),
         "pre_breach_low": (
-            "Your {context}glucose reading of {value} mg/dL is close to your personal "
-            "lower limit of {threshold} mg/dL. Please check again soon. Contact your "
-            "doctor if your readings keep falling or you feel unwell."
+            "Your {context}glucose is {value} mg/dL, running low: close to your personal "
+            "lower limit of {threshold} mg/dL. Have your next meal or snack on time, and "
+            "check again soon. Contact your doctor if your readings keep falling or you "
+            "feel unwell."
         ),
         "breach_low": (
-            "Your {context}glucose reading of {value} mg/dL is at or below your personal "
-            "lower limit of {threshold} mg/dL. Your care team has been notified. Please "
-            "contact your doctor now."
+            "Your {context}glucose is {value} mg/dL. That is low, at or below your "
+            "personal lower limit of {threshold} mg/dL. Do not drive, and check again "
+            "soon. Contact your doctor if it stays low."
         ),
     }
 )
-# Appended when the reading is below 54 mg/dL (ADA Level 2 hypoglycaemia, see
-# clinical_limits.HYPO_LEVEL_2_MG_DL): urgent, so point to emergency help.
+# Every breach is escalated (advisories.escalated, DB CHECK), so the dashboard shows
+# it to the care team (R6); tell the patient, and where to go if they feel very unwell.
+_BREACH_LINE_EN: Final = (
+    " This reading is flagged for your care team. If you feel very unwell, get urgent help."
+)
+# Replaces the breach line when the reading is below 54 mg/dL (ADA Level 2
+# hypoglycaemia, see clinical_limits.HYPO_LEVEL_2_MG_DL): urgent, so name emergency
+# services explicitly.
 _URGENT_LOW_EN: Final = (
-    " This is a very low reading. If you feel unwell, confused or faint, call emergency "
-    "services or get urgent medical help now."
+    " This very low reading is flagged for your care team. If you feel confused or "
+    "faint, call emergency services now."
+)
+
+# Words an advisory must never contain: no dosing or medication instructions
+# (web-push-voice-advisory skill). Checked by tests over every template combination.
+DOSING_WORDS: Final[frozenset[str]] = frozenset(
+    {
+        "dose",
+        "dosage",
+        "insulin",
+        "units",
+        "tablet",
+        "tablets",
+        "pill",
+        "pills",
+        "medication",
+        "medicine",
+        "metformin",
+        "inject",
+        "injection",
+        "grams",
+    }
+)
+
+# Spoken length budget (skill rule: under ~25 s). Fitted to gTTS's Indian-English
+# voice (tld co.in) on these templates, Nov 2026: 150 words per minute when a number
+# counts as the words it is read out as ("185.5" -> "one hundred eighty-five point
+# five"). Fit error was within +/-1.5 s; the longest variants (breach_high and
+# below-54, after-meal, decimal values) measured 23.6 s and 23.5 s.
+SPOKEN_WORDS_PER_MINUTE: Final = 150
+MAX_SPOKEN_SECONDS: Final = 25
+_NUMBER: Final = re.compile(r"^\d+(?:\.\d+)?[.,:]?$")
+# "123" -> one hundred twenty-three (4 words); a decimal adds "point" plus a digit.
+_WORDS_PER_INTEGER: Final = 4
+_WORDS_PER_DECIMAL: Final = 2
+
+# Push notification headings per state (the body carries reading and limit only).
+_TITLES_EN: Final[Mapping[AdvisoryState, str]] = MappingProxyType(
+    {
+        "pre_breach_high": "Glucose close to your upper limit",
+        "breach_high": "High glucose reading",
+        "pre_breach_low": "Glucose close to your lower limit",
+        "breach_low": "Low glucose reading",
+    }
+)
+_URGENT_TITLE_EN: Final = "Very low glucose reading"
+_LIMIT_WORD: Final[Mapping[AdvisoryState, str]] = MappingProxyType(
+    {
+        "pre_breach_high": "upper",
+        "breach_high": "upper",
+        "pre_breach_low": "lower",
+        "breach_low": "lower",
+    }
 )
 
 
@@ -128,6 +192,8 @@ class PriorAdvisory(BaseModel):
         limit_kind: Limit it refers to.
         state: Band state it was raised for.
         reading_measured_at: When that reading was measured.
+        delivery_status: Where its notification got to. ``expired`` advisories were
+            never shown to the patient, so they do not start a cooldown.
     """
 
     model_config = ConfigDict(frozen=True, from_attributes=True)
@@ -136,6 +202,7 @@ class PriorAdvisory(BaseModel):
     limit_kind: GlucoseLimitKind
     state: AdvisoryState
     reading_measured_at: AwareDatetime
+    delivery_status: DeliveryStatus = "queued"
 
 
 class AdvisoryDraft(BaseModel):
@@ -244,7 +311,77 @@ def render_message(
         value=_format_mg_dl(value_mg_dl),
         threshold=_format_mg_dl(threshold_mg_dl),
     )
-    return text + _URGENT_LOW_EN if urgent_low else text
+    if urgent_low:
+        return text + _URGENT_LOW_EN
+    if state.startswith("breach_"):
+        return text + _BREACH_LINE_EN
+    return text
+
+
+def spoken_text(message_text: str) -> str:
+    """Turn stored advisory text into what TTS should say.
+
+    "mg/dL" is dropped: TTS reads it letter by letter ("m g slash d l"), which costs
+    seconds and helps nobody; the numbers and "limit" carry the meaning.
+
+    Args:
+        message_text: ``advisories.message_text``.
+
+    Returns:
+        The text to synthesise.
+    """
+    return message_text.replace(" mg/dL", "")
+
+
+def estimated_speech_seconds(text: str) -> float:
+    """Estimate how long gTTS takes to speak ``text`` (numbers count as spoken words).
+
+    Args:
+        text: Text to be spoken.
+
+    Returns:
+        Seconds.
+    """
+    words = 0
+    for token in text.split():
+        if _NUMBER.match(token):
+            words += _WORDS_PER_INTEGER + (_WORDS_PER_DECIMAL if "." in token.rstrip(".,:") else 0)
+        else:
+            words += 1
+    return words * 60.0 / SPOKEN_WORDS_PER_MINUTE
+
+
+def notification_text(
+    *,
+    state: AdvisoryState,
+    context: ReadingContext,
+    value_mg_dl: Decimal,
+    threshold_mg_dl: Decimal,
+    urgent_low: bool,
+) -> tuple[str, str]:
+    """Build the push notification's title and body.
+
+    Only the reading and the patient's own limit appear (skill rule): a lock screen is
+    visible to anyone nearby.
+
+    Args:
+        state: Band state.
+        context: Reading context.
+        value_mg_dl: The reading.
+        threshold_mg_dl: The personal limit.
+        urgent_low: Reading is below 54 mg/dL.
+
+    Returns:
+        ``(title, body)``.
+    """
+    title = _URGENT_TITLE_EN if urgent_low else _TITLES_EN[state]
+    context_word = _CONTEXT_WORDS[context]
+    reading = f"{context_word.capitalize()} reading" if context_word else "Reading"
+    body = (
+        f"{reading} {_format_mg_dl(value_mg_dl)} mg/dL, your {_LIMIT_WORD[state]} limit "
+        f"{_format_mg_dl(threshold_mg_dl)} mg/dL. Tap to open your advice."
+    )
+    return title, body
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +420,11 @@ def plan_advisories(
     }
     issued: defaultdict[tuple[GlucoseLimitKind, AdvisoryState], list[datetime]] = defaultdict(list)
     for p in prior:
-        issued[(p.limit_kind, p.state)].append(p.reading_measured_at)
+        # An expired advisory was never sent (its reading was too old by the time the
+        # dispatcher saw it), so it must not silence a fresh alert. It still counts
+        # for idempotency above: its reading never gets a second advisory.
+        if p.delivery_status != "expired":
+            issued[(p.limit_kind, p.state)].append(p.reading_measured_at)
 
     drafts: list[AdvisoryDraft] = []
     duplicates = suppressed = 0
