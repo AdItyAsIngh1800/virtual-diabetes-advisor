@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, NamedTuple
@@ -31,6 +32,16 @@ _VAPID_PUBLIC_LEN = 65
 _VAPID_UNCOMPRESSED_PREFIX = 0x04
 _VAPID_PRIVATE_LEN = 32
 
+# VAPID "sub" claim (RFC 8292 section 2.1). py_vapid, which pywebpush signs with, only
+# accepts ``mailto:user@domain`` or a bare ``https://host`` - no path, port or trailing
+# slash - and raises VapidException at *send* time otherwise. This mirrors its rule
+# (py_vapid._check_sub) but anchors both alternatives, so a bad value fails at startup
+# instead of inside the dispatcher.
+VAPID_SUBJECT_PATTERN = (
+    r"^(?:mailto:[^@\s]+@(?:localhost|[%\w-]+(?:\.[%\w-]+)+)"
+    r"|https://(?:localhost|[\w-]+\.[\w.-]+))$"
+)
+
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
@@ -49,7 +60,8 @@ class Settings(BaseSettings):
             with Supabase Auth. Public by design; optional until ``/app`` is used.
         vapid_public_key: Web Push VAPID public key (base64url, uncompressed P-256 point).
         vapid_private_key: Web Push VAPID private key (base64url, raw 32 bytes).
-        vapid_subject: VAPID contact, ``mailto:...`` or ``https://...`` (RFC 8292).
+        vapid_subject: VAPID contact, ``mailto:user@domain`` or ``https://host`` with no
+            path or port (RFC 8292, as py_vapid enforces it).
             The three VAPID settings are optional until a push is sent; read them via
             :meth:`require_vapid`.
         advisory_max_age_minutes: Advisories whose reading is older than this are
@@ -93,7 +105,7 @@ class Settings(BaseSettings):
     # loudly if any is missing.
     vapid_public_key: str | None = None
     vapid_private_key: SecretStr | None = None
-    vapid_subject: str | None = Field(default=None, pattern=r"^(mailto:\S+@\S+|https://\S+)$")
+    vapid_subject: str | None = None
     # R3: an alert about a reading more than an hour old no longer helps the patient
     # act on it (team choice, matching the 1 h push TTL); such advisories expire.
     advisory_max_age_minutes: int = Field(default=60, ge=5, le=24 * 60)
@@ -170,6 +182,29 @@ class Settings(BaseSettings):
         if raw is None or len(raw) != _VAPID_PRIVATE_LEN:
             raise ValueError("VAPID_PRIVATE_KEY must be a base64url raw 32-byte key")
         return SecretStr(secret)
+
+    @field_validator("vapid_subject")
+    @classmethod
+    def _check_vapid_subject(cls, value: str | None) -> str | None:
+        """Require a subject py_vapid will sign with (see ``VAPID_SUBJECT_PATTERN``).
+
+        Args:
+            value: Raw ``VAPID_SUBJECT``.
+
+        Returns:
+            The subject, stripped.
+
+        Raises:
+            ValueError: If it is not ``mailto:user@domain`` or ``https://host``.
+        """
+        if value is None:
+            return None
+        subject = value.strip()
+        if re.fullmatch(VAPID_SUBJECT_PATTERN, subject, re.IGNORECASE) is None:
+            raise ValueError(
+                "VAPID_SUBJECT must be mailto:user@domain or https://host (no path or port)"
+            )
+        return subject
 
     @field_validator(
         "public_base_url",

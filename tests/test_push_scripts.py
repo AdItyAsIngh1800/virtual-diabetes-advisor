@@ -108,3 +108,9 @@ def test_push_test_reports_setup_problems(
 
     monkeypatch.setattr(push_test, "find_recipient", fail)
     assert push_test.main([]) == 1
+
+
+@pytest.mark.parametrize("subject", ["https://example.com/contact", "you@example.com"])
+def test_gen_vapid_keys_rejects_subjects_py_vapid_refuses(subject: str) -> None:
+    with pytest.raises(SystemExit):
+        gen_vapid_keys.main(["--subject", subject])

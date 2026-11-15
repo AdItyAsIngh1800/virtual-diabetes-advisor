@@ -260,3 +260,53 @@ def test_batch_interval_bounds(env: pytest.MonkeyPatch, minutes: str) -> None:
     env.setenv("BATCH_INTERVAL_MINUTES", minutes)
     with pytest.raises(ConfigurationError, match="BATCH_INTERVAL_MINUTES"):
         load_settings(env_file=None)
+
+
+# --- VAPID subject must satisfy py_vapid, which pywebpush signs with -----------------
+
+_ACCEPTED_SUBJECTS = [
+    "mailto:team6@example.com",
+    "mailto:dev.team+alerts@uni.ac.in",
+    "https://advisor.example.com",
+    "https://abc-123.ngrok-free.app",
+    "https://localhost",
+]
+_REJECTED_SUBJECTS = [
+    "https://advisor.example.com/contact",  # path: py_vapid crashes at send time
+    "https://advisor.example.com/",  # trailing slash is a path too
+    "https://advisor.example.com:8443",  # port
+    "mailto:team6@example.com/extra",  # py_vapid's own regex misses this one
+    "mailto:team6",  # no domain
+    "https://example",  # bare word host
+    "team6@example.com",
+    "http://example.com",
+]
+
+
+@pytest.mark.parametrize("subject", _ACCEPTED_SUBJECTS)
+def test_vapid_subject_accepted_values_also_pass_py_vapid(
+    env: pytest.MonkeyPatch, subject: str
+) -> None:
+    from py_vapid import _check_sub  # noqa: PLC0415 - the library's own rule
+
+    _with_vapid(env)
+    env.setenv("VAPID_SUBJECT", subject)
+    assert load_settings(env_file=None).require_vapid().subject == subject
+    assert _check_sub(subject)
+
+
+@pytest.mark.parametrize("subject", _REJECTED_SUBJECTS)
+def test_vapid_subject_with_path_or_port_is_rejected(env: pytest.MonkeyPatch, subject: str) -> None:
+    _with_vapid(env)
+    env.setenv("VAPID_SUBJECT", subject)
+    with pytest.raises(ConfigurationError, match="VAPID_SUBJECT"):
+        load_settings(env_file=None)
+
+
+def test_rejected_url_subjects_really_crash_py_vapid() -> None:
+    """Guards the reason for the tight rule: the library refuses these URL subjects."""
+    from py_vapid import _check_sub  # noqa: PLC0415
+
+    for subject in _REJECTED_SUBJECTS[:3]:
+        assert not _check_sub(subject)
+

@@ -15,13 +15,14 @@ from __future__ import annotations
 import argparse
 import base64
 import logging
+import re
 import sys
 from typing import NamedTuple
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from app.core.config import get_settings
+from app.core.config import VAPID_SUBJECT_PATTERN, get_settings
 from app.core.exceptions import ConfigurationError
 from app.core.logging import configure_logging
 
@@ -93,6 +94,25 @@ def public_key_for(private_key_b64: str) -> str:
     return _public_from_private(key)
 
 
+def vapid_subject(value: str) -> str:
+    """Validate a ``--subject`` the way py_vapid will (same rule as ``VAPID_SUBJECT``).
+
+    Args:
+        value: The ``--subject`` argument.
+
+    Returns:
+        The subject.
+
+    Raises:
+        argparse.ArgumentTypeError: If it is not ``mailto:user@domain`` or ``https://host``.
+    """
+    if re.fullmatch(VAPID_SUBJECT_PATTERN, value, re.IGNORECASE) is None:
+        raise argparse.ArgumentTypeError(
+            "must be mailto:user@domain or https://host (no path or port)"
+        )
+    return value
+
+
 def main(argv: list[str] | None = None) -> int:
     """Print new keys, or check the configured ones.
 
@@ -106,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--subject",
         default="mailto:you@example.com",
-        help="VAPID contact sent to push services (mailto: or https: URL)",
+        type=vapid_subject,
+        help="VAPID contact sent to push services: mailto:user@domain or https://host",
     )
     parser.add_argument(
         "--check", action="store_true", help="verify the VAPID_* keys in .env form a pair"
