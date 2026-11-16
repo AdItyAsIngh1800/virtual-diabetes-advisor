@@ -142,6 +142,55 @@ window.DA = (() => {
     return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
+  /** Local calendar day of a Date, as "YYYY-MM-DD" (for comparing days). */
+  function dayKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  /**
+   * Label for a message's day: "Today", "Yesterday", "16 Nov", or "16 Nov 2025" in
+   * another year. Local time, so a turn from late last night is not "Today".
+   */
+  function dayLabel(iso, now = new Date()) {
+    const date = new Date(iso);
+    if (dayKey(date) === dayKey(now)) return "Today";
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    if (dayKey(date) === dayKey(yesterday)) return "Yesterday";
+    const opts = { day: "numeric", month: "short" };
+    if (date.getFullYear() !== now.getFullYear()) opts.year = "numeric";
+    return date.toLocaleDateString("en-GB", opts);
+  }
+
+  /**
+   * Messages as [{day}, message, message, {day}, ...]: a day separator before the
+   * first message of each local calendar day.
+   */
+  function withDays(messages, now = new Date()) {
+    const out = [];
+    let last = null;
+    for (const m of messages) {
+      const key = dayKey(new Date(m.created_at));
+      if (key !== last) {
+        out.push({ day: dayLabel(m.created_at, now) });
+        last = key;
+      }
+      out.push(m);
+    }
+    return out;
+  }
+
+  /** Render messages with day separators; renderBubble(message) returns an element. */
+  function renderWithDays(messages, renderBubble) {
+    return withDays(messages).map((item) => {
+      if (!("day" in item)) return renderBubble(item);
+      const sep = document.createElement("div");
+      sep.className = "day";
+      sep.setAttribute("role", "separator");
+      sep.textContent = item.day;
+      return sep;
+    });
+  }
+
   /** Random client message id (de-duplicates retried sends). */
   function messageId() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -150,6 +199,7 @@ window.DA = (() => {
 
   return {
     $, UUID, say, init, session, api, enableAlerts, disableAlerts, listen, guarded, clock, messageId,
+    dayLabel, withDays, renderWithDays,
     get sb() { return sb; },
     get config() { return config; },
   };
