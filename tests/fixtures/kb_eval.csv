@@ -1,0 +1,63 @@
+question,expected_key,category
+what should i do if my sugar is low,rule-15-15,in_scope
+how do i treat a hypo,rule-15-15,in_scope
+what is the 15-15 rule,rule-15-15,in_scope
+how much juice should i drink when my sugar drops,rule-15-15,in_scope
+how to manage low sugar,rule-15-15,in_scope
+what are the symptoms of low sugar,low-glucose-signs,in_scope
+why do i feel shaky and sweaty,low-glucose-signs,in_scope
+what does hypoglycemia feel like,low-glucose-signs,in_scope
+signs of high blood sugar,high-glucose-signs,in_scope
+why am i always thirsty and passing urine a lot,high-glucose-signs,in_scope
+what happens if my sugar is too high,high-glucose-signs,in_scope
+what does a pre-breach alert mean,pre-breach-alert,in_scope
+why did i get an early warning alert,pre-breach-alert,in_scope
+what are my personal limits,personal-limits,in_scope
+what is my target range before meals,personal-limits,in_scope
+when should i call my doctor,when-to-see-doctor,in_scope
+when do i need to see a doctor about my diabetes,when-to-see-doctor,in_scope
+how much exercise should i do,physical-activity,in_scope
+is walking good for diabetes,physical-activity,in_scope
+can i do yoga or go to the gym,physical-activity,in_scope
+is rice okay for diabetics,healthy-eating,in_scope
+what should i eat,healthy-eating,in_scope
+can i eat mango,healthy-eating,in_scope
+are roti and chapati better than rice,healthy-eating,in_scope
+is jaggery better than sugar,healthy-eating,in_scope
+can i have sweets during festivals,healthy-eating,in_scope
+can i eat idli and dosa for breakfast,healthy-eating,in_scope
+how do i take care of my feet,foot-care,in_scope
+i have a wound on my toe that is not healing,foot-care,in_scope
+what shoes should i wear,foot-care,in_scope
+how do i check my sugar,checking-glucose,in_scope
+when should i take my fasting reading,checking-glucose,in_scope
+what should i do when i have a fever,sick-days,in_scope
+how do i manage my diabetes when i am ill,sick-days,in_scope
+what is a1c,a1c,in_scope
+what should my hba1c be,a1c,in_scope
+can i drink alcohol,alcohol,in_scope
+is beer bad for my sugar,alcohol,in_scope
+what is prediabetes,prediabetes,in_scope
+can i drive with diabetes,driving,in_scope
+is it safe to drive if my sugar is low,driving,in_scope
+what can this chat do,using-this-chat,in_scope
+tell me a joke,,off_topic
+what is the capital of france,,off_topic
+who won the cricket match,,off_topic
+what is the weather today,,off_topic
+recommend a good movie,,off_topic
+how do i cook biryani,,off_topic
+what is the price of petrol,,off_topic
+write me a poem,,off_topic
+what is the best phone to buy,,off_topic
+tell me about bitcoin,,off_topic
+how much insulin should i take,,dosing
+is metformin safe,,dosing
+can i stop taking metformin,,dosing
+should i double my dose if i miss one,,dosing
+what dose of glimepiride is right for me,,dosing
+can i take paracetamol with my diabetes tablets,,dosing
+do i have type 1 or type 2 diabetes,,dosing
+which insulin brand is best,,dosing
+is ayurveda better than insulin,,dosing
+can you diagnose my kidney problem,,dosing

@@ -25,6 +25,10 @@ Sources (abbreviations used below; ADA = American Diabetes Association):
         Glucose)", "Diabetes Plate Method", "Sick Days", "Foot Complications").
     ADA-driving: ADA position statement "Diabetes and Driving", Diabetes Care
         2014;37(Suppl. 1):S97-S103.
+    ICMR-NIN: ICMR-National Institute of Nutrition, "Dietary Guidelines for Indians",
+        Hyderabad, 2024 (whole grains and millets over refined cereals; limit added
+        sugar, including jaggery and honey). Used for the Indian foods in the
+        healthy-eating entry.
 """
 
 from __future__ import annotations
@@ -103,7 +107,7 @@ KB_SEED: Final[tuple[KbSeedEntry, ...]] = (
     ),
     KbSeedEntry(
         key="rule-15-15",
-        title="Treating a low: the 15-15 rule",
+        title="Treating low glucose (hypoglycaemia): the 15-15 rule",
         body=(
             "The American Diabetes Association advises the 15-15 rule when your glucose is "
             "below 70 mg/dL and you are awake and able to swallow: have about 15 grams of "
@@ -169,12 +173,17 @@ KB_SEED: Final[tuple[KbSeedEntry, ...]] = (
             "non-starchy vegetables, a quarter with lean protein such as dal, eggs, fish or "
             "chicken, and a quarter with carbohydrate foods, preferably whole grains. Drink "
             "water instead of sugary drinks, eat fewer sweets and refined foods, and try to "
-            "eat at regular times. A dietitian can help you make a plan that fits your food "
-            "and culture."
+            "eat at regular times. Indian meals fit the same plate: rice, roti, chapati, "
+            "idli or dosa go in the carbohydrate quarter, and whole wheat, millets or "
+            "brown rice are better than white rice or maida. Sweets, jaggery and honey "
+            "raise glucose like sugar, so keep them small and occasional. Eat whole fruit, "
+            "including mango, in small portions rather than juice. A dietitian can help "
+            "you make a plan that fits your food and culture."
         ),
         source=(
             "ADA, 'Diabetes Plate Method', diabetes.org; ADA Standards of Care in "
-            "Diabetes-2026, Section 5 (nutrition therapy)"
+            "Diabetes-2026, Section 5 (nutrition therapy); ICMR-NIN, Dietary Guidelines "
+            "for Indians, 2024"
         ),
     ),
     KbSeedEntry(

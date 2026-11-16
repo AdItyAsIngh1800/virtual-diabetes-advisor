@@ -517,6 +517,12 @@ def test_messages_are_relayed_while_a_handoff_is_live() -> None:
         ("how much exercise should I do", "physical-activity"),
         ("when should I see a doctor", "when-to-see-doctor"),
         ("what does pre-breach mean", "pre-breach-alert"),
+        # Found in testing (Nov 2026): these went to the wrong entry or "don't know".
+        ("what should i do if my sugar is low", "rule-15-15"),
+        ("how do i treat a hypo", "rule-15-15"),
+        ("is rice okay for diabetics", "healthy-eating"),
+        ("can I eat roti or chapati", "healthy-eating"),
+        ("is jaggery better than sugar", "healthy-eating"),
     ],
 )
 def test_questions_are_answered_from_the_matching_entry(question: str, key: str) -> None:
@@ -567,7 +573,7 @@ def test_rephraser_output_is_used_and_audited() -> None:
     out = ask(FakeStore(), "what is the 15-15 rule", spy)
     assert spy.calls == ["what is the 15-15 rule"]
     assert out.reply_text.startswith("Have 15 grams")
-    assert "Source: Treating a low: the 15-15 rule" in out.reply_text
+    assert "Source: Treating low glucose (hypoglycaemia): the 15-15 rule" in out.reply_text
     assert out.model == out.model_version == "claude-opus-5-5"
     assert doc("rule-15-15").id in out.kb_ids_used
 
@@ -633,3 +639,9 @@ def test_15_15_entry_matches_ada_rec_6_15() -> None:
     assert "Check again after 15 minutes" in body and "repeat" in body
     assert "15 to 20" not in body and "meal or snack" not in body
 
+
+def test_healthy_eating_entry_covers_indian_foods_with_a_source() -> None:
+    entry = next(e for e in KB_SEED if e.key == "healthy-eating")
+    for food in ("rice", "roti", "chapati", "idli", "dosa", "jaggery", "mango", "fruit"):
+        assert food in entry.body.lower()
+    assert "Dietary Guidelines for Indians" in entry.source

@@ -287,7 +287,7 @@ def test_chat_works_without_an_anthropic_key(harness: Harness, world: World) -> 
     assert response.status_code == 200
     body = response.json()
     assert body["intent"] == "question"
-    assert "Source: Treating a low: the 15-15 rule" in body["reply"]
+    assert "Source: Treating low glucose (hypoglycaemia): the 15-15 rule" in body["reply"]
     assert body["audio_url"] is None  # typed, so no spoken reply
     (turn,) = world.turns
     assert (turn.direction, turn.raw_text, turn.transcript) == (

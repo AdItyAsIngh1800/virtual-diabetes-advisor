@@ -142,12 +142,13 @@ class Settings(BaseSettings):
 
     # --- Help chat (R4) -----------------------------------------------------------
     # Minimum TF-IDF cosine similarity for a KB entry to answer a question. Below it the
-    # chat says it does not know and offers practitioner connect. 0.15 was measured on
-    # the seeded diabetes-basics KB (scripts/kb_seed.py, Nov 2026): 16 paraphrased
-    # in-scope questions scored 0.16-0.38 and all hit the right entry; 18 off-topic or
-    # out-of-scope ones (jokes, weather, dosing, "what is diabetes") scored at most 0.143.
+    # chat says it does not know and offers practitioner connect. 0.19 is chosen by
+    # scripts/eval_retrieval.py on tests/fixtures/kb_eval.csv (62 labelled questions:
+    # 42 in scope, 20 off-topic or dosing/diagnosis; Nov 2026): the best accuracy (0.903)
+    # among thresholds at which no dosing/diagnosis question gets a KB answer.
+    # tests/test_eval_retrieval.py keeps this default equal to the script's choice.
     # Raise it to answer less often (safer), lower it to answer more.
-    chat_kb_min_similarity: float = Field(default=0.15, gt=0.0, lt=1.0)
+    chat_kb_min_similarity: float = Field(default=0.19, gt=0.0, lt=1.0)
     # Voice messages: ~60 s of MediaRecorder opus/aac is 250-500 KB; 2 MB leaves room for
     # browsers that record at higher bitrates while stopping uploads that are minutes long.
     chat_audio_max_bytes: int = Field(default=2 * 1024 * 1024, ge=64 * 1024, le=10 * 1024 * 1024)
