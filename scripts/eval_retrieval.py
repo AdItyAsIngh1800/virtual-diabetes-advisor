@@ -1,30 +1,39 @@
 """Evaluate help-chat KB retrieval and choose ``CHAT_KB_MIN_SIMILARITY`` (R4/R5).
 
-Runs every question in a labelled CSV (default ``tests/fixtures/kb_eval.csv``) through
-the same TF-IDF index the chat uses, built from the seeded knowledge base
-(:data:`scripts.kb_seed.KB_SEED`), and reports for each threshold from 0.10 to 0.25:
+Runs labelled questions through what the chat does before answering a question: the
+dosing/self-diagnosis guard (:func:`app.services.chat.is_medical_advice_request`),
+then the same TF-IDF index, built from the seeded knowledge base
+(:data:`scripts.kb_seed.KB_SEED`). Two question sets are kept apart:
+
+* **Tuning set** (``tests/fixtures/kb_eval.csv``): used to tune synonyms and to
+  choose the threshold.
+* **Held-out set** (``tests/fixtures/kb_eval_holdout.csv``): written after tuning and
+  never used for any choice. It is scored at the threshold already chosen, to show
+  how the tuned retrieval does on questions it has not seen.
+
+Metrics, for each threshold from 0.10 to 0.25:
 
 * **Top-1 accuracy** (threshold-free): share of in-scope questions whose best hit is
-  the expected entry.
-* **Answer precision / recall**: an *answer* is any question scoring at or above the
-  threshold. It is correct when the question is in scope and the best hit is the
-  expected entry. Precision = correct / answered; recall = correct / in-scope.
-* **Don't-know precision / recall**: a *don't know* is any question below the
-  threshold. It is correct when the question is out of scope (off-topic, or a
-  dosing/diagnosis question the KB must never answer). Precision = correct
-  don't-knows / don't-knows; recall = correct don't-knows / out-of-scope.
+  the expected entry (a guarded in-scope question counts as a miss).
+* **Answer precision / recall**: an *answer* is any unguarded question scoring at or
+  above the threshold. It is correct when the question is in scope and the best hit is
+  the expected entry. Precision = correct / answered; recall = correct / in-scope.
+* **Don't-know precision / recall**: a *don't know* is any question that is guarded
+  or below the threshold. It is correct when the question is out of scope (off-topic,
+  or dosing/diagnosis). Precision = correct don't-knows / don't-knows; recall =
+  correct don't-knows / out-of-scope.
 * **Accuracy**: (correct answers + correct don't-knows) / all questions.
 
-Threshold choice (:func:`choose_threshold`): never answer a dosing/diagnosis question
-(safety first), then the best accuracy; ties go to the middle of the tied run so the
-cut-off keeps a margin on both sides.
+Threshold choice (:func:`choose_threshold`): the best accuracy on the tuning set; ties
+go to the middle of the tied run so the cut-off keeps a margin on both sides. The guard,
+not the threshold, keeps dosing and diagnosis questions away from KB answers.
 
 CSV columns: ``question``, ``expected_key`` (``kb_seed`` key; empty when out of scope),
 ``category`` (``in_scope``, ``off_topic`` or ``dosing``).
 
 Usage::
 
-    uv run python -m scripts.eval_retrieval [--csv PATH]
+    uv run python -m scripts.eval_retrieval [--csv PATH] [--holdout PATH]
 """
 
 from __future__ import annotations
@@ -38,10 +47,12 @@ from typing import Final, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.services.chat import KbDoc, TfidfIndex
+from app.services.chat import KbDoc, TfidfIndex, is_medical_advice_request
 from scripts.kb_seed import KB_SEED, SEED_PREFIX, KbSeedEntry
 
-DEFAULT_CSV: Final = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "kb_eval.csv"
+_FIXTURES: Final = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
+DEFAULT_CSV: Final = _FIXTURES / "kb_eval.csv"
+HOLDOUT_CSV: Final = _FIXTURES / "kb_eval_holdout.csv"
 # The range asked for in the course report: 0.10 to 0.25 in steps of 0.01.
 THRESHOLDS: Final[tuple[float, ...]] = tuple(round(0.10 + i / 100, 2) for i in range(16))
 
@@ -79,17 +90,19 @@ class EvalCase(BaseModel):
 
 
 class CaseResult(BaseModel):
-    """Retrieval result for one question.
+    """What the chat would do with one question.
 
     Attributes:
         case: The labelled question.
-        top_key: Key of the best hit, or ``None`` when nothing matched.
-        score: Best similarity (0 when nothing matched).
+        guarded: The dosing/diagnosis guard answered it (no retrieval).
+        top_key: Key of the best hit, or ``None`` when nothing matched or guarded.
+        score: Best similarity (0 when nothing matched or guarded).
     """
 
     model_config = ConfigDict(frozen=True)
 
     case: EvalCase
+    guarded: bool = False
     top_key: str | None
     score: float
 
@@ -98,9 +111,20 @@ class CaseResult(BaseModel):
         """Whether the best hit is the expected entry (in-scope rows only).
 
         Returns:
-            ``True`` for an in-scope question whose best hit is the expected entry.
+            ``True`` for an unguarded in-scope question whose best hit is expected.
         """
         return self.case.expected_key is not None and self.top_key == self.case.expected_key
+
+    def answered(self, threshold: float) -> bool:
+        """Whether the chat would answer from the KB at ``threshold``.
+
+        Args:
+            threshold: Minimum similarity (same rule as ``ChatEngine``).
+
+        Returns:
+            ``True`` if unguarded and the best score reaches the threshold.
+        """
+        return not self.guarded and self.score >= threshold
 
 
 class ThresholdRow(BaseModel):
@@ -181,7 +205,7 @@ def build_index(entries: Sequence[KbSeedEntry] = KB_SEED) -> TfidfIndex:
 
 
 def retrieve(cases: Sequence[EvalCase], index: TfidfIndex) -> list[CaseResult]:
-    """Run each question through the index.
+    """Run each question through the guard, then the index.
 
     Args:
         cases: Labelled questions.
@@ -192,6 +216,9 @@ def retrieve(cases: Sequence[EvalCase], index: TfidfIndex) -> list[CaseResult]:
     """
     results = []
     for case in cases:
+        if is_medical_advice_request(case.question):
+            results.append(CaseResult(case=case, guarded=True, top_key=None, score=0.0))
+            continue
         hits = index.search(case.question, k=1)
         top_key = hits[0].doc.entry_key.removeprefix(SEED_PREFIX) if hits else None
         results.append(CaseResult(case=case, top_key=top_key, score=hits[0].score if hits else 0.0))
@@ -234,8 +261,8 @@ def metrics_at(results: Sequence[CaseResult], threshold: float) -> ThresholdRow:
     Returns:
         The metrics.
     """
-    answered = [r for r in results if r.score >= threshold]
-    declined = [r for r in results if r.score < threshold]
+    answered = [r for r in results if r.answered(threshold)]
+    declined = [r for r in results if not r.answered(threshold)]
     in_scope = sum(r.case.category == "in_scope" for r in results)
     out_scope = len(results) - in_scope
     correct_answers = sum(r.top1_correct for r in answered)
@@ -267,7 +294,12 @@ def sweep(
 
 
 def choose_threshold(rows: Sequence[ThresholdRow]) -> float:
-    """Pick the threshold: no dosing answers, then best accuracy, then the middle of ties.
+    """Pick the threshold with the best accuracy.
+
+    Ties: first the higher don't-know recall (answering an off-topic question is the
+    worse error), then the middle of what is left, rounding toward the higher (safer)
+    threshold. Call it with tuning-set rows only: the held-out set must not influence
+    the choice.
 
     Args:
         rows: Sweep rows, sorted by threshold.
@@ -280,31 +312,25 @@ def choose_threshold(rows: Sequence[ThresholdRow]) -> float:
     """
     if not rows:
         raise ValueError("no thresholds to choose from")
-    # Safety first: a dosing/diagnosis question must get "I don't know", never KB text.
-    safe = [r for r in rows if r.dosing_answered == 0] or list(rows)
-    best = max(r.accuracy for r in safe)
-    tied = [r.threshold for r in safe if r.accuracy == best]
-    # Middle of the tied run: the furthest from flipping a question either way.
-    return tied[(len(tied) - 1) // 2]
+    best = max(r.accuracy for r in rows)
+    tied = [r for r in rows if r.accuracy == best]
+    safest = max(r.dont_know_recall for r in tied)
+    candidates = [r.threshold for r in tied if r.dont_know_recall == safest]
+    # Middle: the furthest from flipping a question either way.
+    return candidates[len(candidates) // 2]
 
 
-def format_report(results: Sequence[CaseResult], rows: Sequence[ThresholdRow]) -> str:
-    """Render the results as Markdown for the course report.
+def _table(rows: Sequence[ThresholdRow], chosen: float) -> list[str]:
+    """Render sweep rows as a Markdown table.
 
     Args:
-        results: Retrieval results.
         rows: Sweep rows.
+        chosen: Threshold to mark.
 
     Returns:
-        Markdown text: summary, threshold table and the questions it gets wrong.
+        Table lines.
     """
-    chosen = choose_threshold(rows)
-    in_scope = sum(r.case.category == "in_scope" for r in results)
     lines = [
-        f"KB retrieval evaluation: {len(results)} questions ({in_scope} in scope, "
-        f"{len(results) - in_scope} off-topic or dosing), {len(KB_SEED)} KB entries.",
-        f"Top-1 accuracy (in scope, any threshold): {top1_accuracy(results):.3f}",
-        "",
         "| Threshold | Accuracy | Answer P | Answer R | Don't-know P | Don't-know R "
         "| Dosing answered |",
         "|---:|---:|---:|---:|---:|---:|---:|",
@@ -316,20 +342,77 @@ def format_report(results: Sequence[CaseResult], rows: Sequence[ThresholdRow]) -
             f"| {row.answer_recall:.3f} | {row.dont_know_precision:.3f} "
             f"| {row.dont_know_recall:.3f} | {row.dosing_answered} |"
         )
-    lines += ["", f"Chosen threshold: {chosen:.2f}", "", f"Errors at {chosen:.2f}:"]
+    return lines
+
+
+def _section(title: str, results: Sequence[CaseResult], chosen: float) -> list[str]:
+    """Summary, threshold table and errors for one question set.
+
+    Args:
+        title: Section heading.
+        results: Retrieval results for the set.
+        chosen: The threshold chosen on the tuning set.
+
+    Returns:
+        Markdown lines.
+    """
+    in_scope = sum(r.case.category == "in_scope" for r in results)
+    guarded = sum(r.guarded for r in results)
+    lines = [
+        f"## {title}",
+        "",
+        f"{len(results)} questions ({in_scope} in scope, {len(results) - in_scope} "
+        f"off-topic or dosing); {guarded} stopped by the dosing/diagnosis guard.",
+        f"Top-1 accuracy (in scope, any threshold): {top1_accuracy(results):.3f}",
+        "",
+        *_table(sweep(results), chosen),
+        "",
+        f"Errors at {chosen:.2f}:",
+    ]
     errors = [
         r
         for r in results
-        if (r.case.category == "in_scope" and not (r.score >= chosen and r.top1_correct))
-        or (r.case.category != "in_scope" and r.score >= chosen)
+        if (r.case.category == "in_scope" and not (r.answered(chosen) and r.top1_correct))
+        or (r.case.category != "in_scope" and r.answered(chosen))
     ]
     for r in errors:
+        where = "guarded" if r.guarded else f"top {r.top_key} at {r.score:.3f}"
         lines.append(
             f"- {r.case.question!r} ({r.case.category}, expected "
-            f"{r.case.expected_key or 'dont-know'}): top {r.top_key} at {r.score:.3f}"
+            f"{r.case.expected_key or 'dont-know'}): {where}"
         )
     if not errors:
         lines.append("- none")
+    return lines
+
+
+def format_report(tuning: Sequence[CaseResult], holdout: Sequence[CaseResult]) -> str:
+    """Render both sets as Markdown for the course report.
+
+    The threshold is chosen from ``tuning`` alone; ``holdout`` is only scored.
+
+    Args:
+        tuning: Results on the tuning set.
+        holdout: Results on the held-out set.
+
+    Returns:
+        Markdown text.
+    """
+    chosen = choose_threshold(sweep(tuning))
+    held = metrics_at(holdout, chosen)
+    lines = [
+        f"# KB retrieval evaluation ({len(KB_SEED)} KB entries)",
+        "",
+        f"Chosen threshold: {chosen:.2f} (best accuracy on the tuning set; ties: higher "
+        "don't-know recall, then the middle).",
+        f"Held-out at {chosen:.2f}: accuracy {held.accuracy:.3f}, answer precision "
+        f"{held.answer_precision:.3f}, answer recall {held.answer_recall:.3f}, "
+        f"dosing answered {held.dosing_answered}.",
+        "",
+        *_section("Tuning set (used to choose the threshold)", tuning, chosen),
+        "",
+        *_section("Held-out set (not used for any choice)", holdout, chosen),
+    ]
     return "\n".join(lines)
 
 
@@ -343,11 +426,15 @@ def main(argv: list[str] | None = None) -> int:
         Process exit code.
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0] if __doc__ else None)
-    parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="labelled questions")
+    parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="tuning questions")
+    parser.add_argument("--holdout", type=Path, default=HOLDOUT_CSV, help="held-out questions")
     args = parser.parse_args(argv)
-    results = retrieve(load_cases(args.csv), build_index())
+    index = build_index()
+    report = format_report(
+        retrieve(load_cases(args.csv), index), retrieve(load_cases(args.holdout), index)
+    )
     # A CLI report for the user to paste, so stdout rather than the log.
-    print(format_report(results, sweep(results)))
+    print(report)
     return 0
 
 

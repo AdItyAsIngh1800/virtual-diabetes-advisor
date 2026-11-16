@@ -1,0 +1,26 @@
+question,expected_key,category
+my reading was a bit higher than usual and the app warned me what does that mean,pre-breach-alert,in_scope
+what number should my sugar be when i wake up,personal-limits,in_scope
+i am sweating and shaking is my sugar dropping,low-glucose-signs,in_scope
+how many grams of sugar should i take when i am low,rule-15-15,in_scope
+i keep feeling thirsty and tired all day,high-glucose-signs,in_scope
+when is it time to go and see my doctor,when-to-see-doctor,in_scope
+how many days a week should i be exercising,physical-activity,in_scope
+what kind of breakfast is good for diabetes,healthy-eating,in_scope
+can i still eat chapati at dinner,healthy-eating,in_scope
+i have a blister on my foot what should i do,foot-care,in_scope
+how long after eating should i check my sugar,checking-glucose,in_scope
+i have a cold and my sugar keeps going up,sick-days,in_scope
+what is the hba1c test,a1c,in_scope
+is it ok to have a glass of wine,alcohol,in_scope
+my doctor said i have borderline diabetes what does that mean,prediabetes,in_scope
+should i check my sugar before driving,driving,in_scope
+what kind of questions can i ask here,using-this-chat,in_scope
+what time does the pharmacy close,,off_topic
+can you book a train ticket for me,,off_topic
+who is the prime minister of india,,off_topic
+suggest a name for my dog,,off_topic
+how many units of insulin before dinner,,dosing
+my doctor gave me metformin 500 can i take 1000 instead,,dosing
+is my diabetes type 1,,dosing
+can i reduce my glimepiride if my sugar is normal,,dosing
