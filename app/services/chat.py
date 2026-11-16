@@ -228,6 +228,19 @@ _NOT_GLUCOSE_UNIT: Final = re.compile(
     r"^\s*(?:min\w*|hr\w*|hour\w*|sec\w*|day\w*|week\w*|month\w*|year\w*|yrs?|kg|kgs|kilo\w*"
     r"|lb\w*|steps?|cm|km|%|percent|bpm|calorie\w*|kcal|g\b|grams?|ml|units?|mmol\w*)"
 )
+# Diabetes medicines common in India. A number next to one is a dose, not a reading
+# ("metformin 500 mg", "500 mg metformin").
+_MEDICINE_NAMES: Final = (
+    r"(?:insulin|metformin|glimepiride|gliclazide|glipizide|glibenclamide|sitagliptin"
+    r"|vildagliptin|teneligliptin|linagliptin|empagliflozin|dapagliflozin|canagliflozin"
+    r"|pioglitazone|acarbose|voglibose|semaglutide|ozempic|rybelsus|liraglutide|dulaglutide"
+    r"|tirzepatide)"
+)
+# "500 mg metformin" / "500 mg of metformin": mg of a medicine, not mg/dL of glucose.
+_MEDICINE_AMOUNT: Final = re.compile(
+    rf"^\s*mg\s+(?:of\s+)?(?:{_MEDICINE_NAMES}|tablets?|pills?|medicines?)\b"
+)
+_MEDICINE_BEFORE: Final = re.compile(rf"\b{_MEDICINE_NAMES}\s*$")
 # Words that make a number a glucose report.
 _GLUCOSE_CUE: Final = re.compile(
     # "random" is how Indian labs and patients label a non-fasting check ("random 300",
@@ -253,7 +266,12 @@ def _numbers(text: str) -> list[tuple[Decimal, int]]:
     """
     found: list[tuple[Decimal, int]] = []
     for match in _NUMBER.finditer(text):
-        if _NOT_GLUCOSE_UNIT.match(text[match.end() :]):
+        after = text[match.end() :]
+        if (
+            _NOT_GLUCOSE_UNIT.match(after)
+            or _MEDICINE_AMOUNT.match(after)
+            or _MEDICINE_BEFORE.search(text[: match.start()])
+        ):
             continue
         try:
             value = Decimal(match.group(1))

@@ -402,6 +402,10 @@ def test_parse_reading(message: str, value: str, context: str) -> None:
         "fasting 132 and after lunch 190",
         "I weigh 70 kg",
         "how do I check my sugar",
+        # Medicine doses are not glucose readings (found while adding the dosing guard).
+        "I take 500 mg metformin",
+        "metformin 500 mg twice a day",
+        "500 mg of metformin",
     ],
 )
 def test_not_a_reading_report(message: str) -> None:
@@ -422,6 +426,13 @@ def test_random_180_is_stored_as_a_random_reading() -> None:
     out = ask(store, "random 180")
     assert out.intent == "reading_report"
     assert store.readings == [ParsedReading(value_mg_dl=Decimal(180), context="random")]
+
+
+def test_a_metformin_dose_is_not_a_very_high_reading() -> None:
+    assert detect_red_flag("I take 500 mg metformin, is that ok") is None
+    assert parse_reading("my sugar is 132 mg") == ParsedReading(
+        value_mg_dl=Decimal(132), context="random"
+    )
 
 
 def test_fasting_and_after_food_contexts_differ() -> None:
