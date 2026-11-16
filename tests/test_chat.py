@@ -182,7 +182,11 @@ EMERGENCY_CASES = [
     ("I have a problem breathing", "breathing"),
     ("heart pain", "chest_pain"),
     ("pain in my chest", "chest_pain"),
-    ("feeling very drowsy", "confusion"),  # drowsiness counts as confusion
+    # Drowsiness counts as confusion when it describes someone's state now.
+    ("feeling very drowsy", "confusion"),
+    ("I feel very drowsy", "confusion"),
+    ("she is drowsy and confused", "confusion"),
+    ("my father is very drowsy since morning", "confusion"),
 ]
 URGENT_CASES = [
     ("fasting 45", "very_low"),
@@ -331,6 +335,9 @@ def test_red_flag_inside_a_live_handoff_reuses_it() -> None:
         "breathing exercises help",
         # Everyday phrases the broader self-harm list must not catch.
         "my feet are killing me",
+        # Questions about drowsiness are not a report of it.
+        "does metformin make you drowsy",
+        "can low sugar make you drowsy?",
         "can I take it all at once",
         "I cut myself while chopping vegetables",
         "random 180",

@@ -190,10 +190,34 @@ _RED_FLAG_PATTERNS: Final[tuple[tuple[RedFlag, re.Pattern[str]], ...]] = (
             r"|collaps\w*|seizure|fitting|convuls\w*|won'?t wake up|not waking up)\b"
         ),
     ),
-    # Drowsiness counts as altered mental status (ADA-6: a sign of severe hypoglycaemia
-    # and of hyperglycaemic crisis), so it gets the same emergency reply as confusion.
-    ("confusion", re.compile(r"\b(confus\w*|disoriented|can'?t think straight|drows\w*)\b")),
+    # Drowsiness is handled by _describes_drowsiness (current state only).
+    ("confusion", re.compile(r"\b(confus\w*|disoriented|can'?t think straight)\b")),
 )
+
+# Drowsiness counts as altered mental status (ADA-6: a sign of severe hypoglycaemia and
+# of hyperglycaemic crisis), so it gets the confusion reply - but only when it
+# describes someone's state now ("I feel very drowsy", "she is drowsy", "drowsy since
+# morning"), not a question about it ("does metformin make you drowsy").
+_DROWSY_STATE: Final = re.compile(
+    r"^(?:very |so |really |too |extremely )?drows\w*"
+    r"|\b(?:i|i'?m|im|am|is|are|was|were|been|feel\w*|felt|seems?|look\w*|getting|got"
+    r"|gets|became|becoming|very|so|really|too|extremely)\s+(?:\w+\s+){0,2}?drows\w*"
+)
+
+
+def _describes_drowsiness(norm: str) -> bool:
+    """Whether a message says someone is drowsy now (not a question about drowsiness).
+
+    Args:
+        norm: Normalised message.
+
+    Returns:
+        ``True`` for a statement of current drowsiness.
+    """
+    if norm.endswith("?") or _QUESTION_START.match(norm):
+        return False
+    return _DROWSY_STATE.search(norm) is not None
+
 
 # A trailing full stop is punctuation, not a decimal point: Whisper transcripts end
 # sentences with one ("My fasting sugar is 132.").
@@ -320,9 +344,13 @@ def detect_red_flag(text: str) -> RedFlag | None:
         return "self_harm"
     if _high_reading_with_emergency_signs(norm) is not None:
         return "high_with_symptoms"
-    for flag, pattern in _RED_FLAG_PATTERNS[1:]:
-        if pattern.search(norm):
-            return flag
+    symptom: RedFlag | None = next(
+        (flag for flag, pattern in _RED_FLAG_PATTERNS[1:] if pattern.search(norm)), None
+    )
+    if symptom is None and _describes_drowsiness(norm):
+        symptom = "confusion"
+    if symptom is not None:
+        return symptom
     value = glucose_value(norm)
     if value is not None:
         # ADA-6 Table 6.4 / IHSG: < 54 mg/dL is Level 2 (clinically significant)
