@@ -210,7 +210,7 @@ class PatientSpec:
 _HEALTHY_OLDER: Final[Mapping[ConditionName, bool]] = dict.fromkeys(_CONDITIONS, False)
 # Thresholds quoted below are the engine's defaults (5% band): diabetes fasting 130,
 # post-meal 180, low 70; complex older adults fasting 140, low 75; no diabetes
-# fasting 112/106/100 and post-meal 160/150/140 for risk tier low/moderate/high.
+# fasting 112 and post-meal 160 (the risk tier does not change any limit).
 DEMO_PATIENTS: Final[tuple[PatientSpec, ...]] = (
     # --- People with diabetes ------------------------------------------------
     PatientSpec(
@@ -283,18 +283,18 @@ DEMO_PATIENTS: Final[tuple[PatientSpec, ...]] = (
     # --- People without diabetes ---------------------------------------------
     PatientSpec(
         "vikram", "Vikram Singh", 55, 1, "no_diabetes", "en", "high",
-        "high risk tier tightens fasting limit to 100; readings ~96 are pre-breach",
-        steady(96.5, 1.5), steady(125, 6),
+        "fasting ~108 is pre-breach of the 112 limit",
+        steady(108.5, 1.2), steady(125, 6),
     ),
     PatientSpec(
         "arjun", "Arjun Patel", 60, 1, "no_diabetes", "hi", "high",
-        "fasting rises 92 -> 108 past the tightened 100 limit",
-        Series(92, 108, 2.0), steady(130, 5),
+        "fasting rises 100 -> 116 past the 112 limit",
+        Series(100, 116, 2.0), steady(130, 5),
     ),
     PatientSpec(
         "suresh", "Suresh Babu", 47, 1, "no_diabetes", "ta", "moderate",
-        "post-meal ~145 in the pre-breach band of the 150 limit",
-        steady(95, 3), steady(145, 2.5),
+        "post-meal ~155 in the pre-breach band of the 160 limit",
+        steady(95, 3), steady(155, 2.5),
     ),
     PatientSpec(
         "deepa", "Deepa Joshi", 66, 0, "no_diabetes", "en", "moderate",
@@ -315,7 +315,7 @@ DEMO_PATIENTS: Final[tuple[PatientSpec, ...]] = (
     ),
     PatientSpec(
         "joseph", "Joseph Thomas", 71, 1, "no_diabetes", "en", "high",
-        "high risk tier (tighter limits); readings mostly normal",
+        "high risk tier (limits unchanged); readings mostly normal",
         steady(89, 2.5), steady(124, 6),
     ),
 )  # fmt: skip

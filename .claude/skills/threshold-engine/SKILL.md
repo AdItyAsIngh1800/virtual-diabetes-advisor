@@ -12,7 +12,7 @@ Thresholds are computed per user per metric (fasting glucose, post-meal glucose,
 ```
 base       = clinical_limits[metric][diabetes_status]        # from app/core/clinical_limits.py, cited
 demo_adj   = age_band_adj + sex_adj                          # small, bounded, documented
-risk_adj   = f(model_risk_tier)                              # higher risk -> tighter upper limit
+risk_adj   = 0                                                # ML risk tier NEVER moves a limit (mentor review, Nov 2026); needs practitioner approval first
 trend_adj  = f(user's recent readings slope)                 # from trend analysis, bounded
 threshold  = clamp(base + demo_adj + risk_adj + trend_adj, hard_min, hard_max)
 ```

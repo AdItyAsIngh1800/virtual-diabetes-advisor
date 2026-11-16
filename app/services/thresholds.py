@@ -126,19 +126,20 @@ _DEMO_ADJ_BOUNDS: Final[Mapping[LimitDirection, tuple[Decimal, Decimal]]] = Mapp
 # Risk-tier adjustment (R2)
 # ---------------------------------------------------------------------------
 
-# The BRFSS model predicts whether someone *has* prediabetes/diabetes - it is a
-# screening model. So the tier only personalises limits for users WITHOUT diabetes,
-# and only *upper* limits (it says nothing about hypoglycaemia). For users WITH
-# diabetes the question it answers is already settled; it does not predict how well
-# their glucose is controlled, so it must not move their limits (risk_adj = 0).
+# The BRFSS model estimates the chance that someone *has* prediabetes/diabetes from
+# survey answers. That is a screening signal, not evidence about which glucose range is
+# safe for that person, so it must NOT move a glucose limit by itself. All fractions are
+# therefore 0 and the limits come only from the cited ADA values, the bounded
+# age/sex term and the bounded trend term. The tier is still recorded with every
+# threshold (audit) and may be shown to a practitioner as information.
 #
-# For users without diabetes the tier moves the upper limit from its base toward the
-# clamp floor by this fraction of (base - hard_min): low stays at the base, moderate
-# goes half-way, high reaches the floor (fasting 112 -> 106 -> 100, post-meal
-# 160 -> 150 -> 140). Bound: the fraction is at most 1, so this term alone can never
-# go below the cited floor (ADA 2026 Sec. 2 Table 2.2: normal fasting / 2-h OGTT values).
+# A non-zero fraction may be set only once a qualified practitioner has approved the
+# adjustment for the patient; that approval workflow is NOT implemented, so changing
+# these values without it would reintroduce an unreviewed clinical decision.
+# Meaning of a fraction f: the upper limit would move from its base toward the clamp
+# floor by f * (base - hard_min), never below the cited floor (ADA 2026 Sec. 2 Table 2.2).
 RISK_TIGHTENING_FRACTION: Final[Mapping[RiskTier, Decimal]] = MappingProxyType(
-    {"low": _ZERO, "moderate": Decimal("0.5"), "high": Decimal(1)}
+    {"low": _ZERO, "moderate": _ZERO, "high": _ZERO}
 )
 
 # ---------------------------------------------------------------------------
@@ -570,10 +571,11 @@ def demographic_adjustment(limit: GlucoseLimit, inputs: ThresholdInputs) -> Deci
 
 
 def risk_adjustment(limit: GlucoseLimit, tier: RiskTier | None) -> Decimal:
-    """Bounded risk-tier adjustment for users without diabetes.
+    """Risk-tier adjustment, currently always zero (R2).
 
-    ``adj = -fraction(tier) * (base - hard_min)``: low 0, moderate half-way to the
-    floor, high to the floor.
+    ``adj = -fraction(tier) * (base - hard_min)`` with every fraction set to 0 in
+    :data:`RISK_TIGHTENING_FRACTION`: the survey-based risk tier never changes a limit
+    until a practitioner-approval workflow exists.
 
     Args:
         limit: The cited limit being personalised.
@@ -581,8 +583,9 @@ def risk_adjustment(limit: GlucoseLimit, tier: RiskTier | None) -> Decimal:
             if the profile could not be scored.
 
     Returns:
-        ``0`` for users with diabetes, lower limits or no tier; otherwise a value
-        in ``[-(base - hard_min), 0]``, rounded to 0.1 mg/dL.
+        ``0`` today for every input. If fractions are ever enabled: ``0`` for users
+        with diabetes, lower limits or no tier, otherwise a value in
+        ``[-(base - hard_min), 0]``, rounded to 0.1 mg/dL.
     """
     # R2: BRFSS predicts diabetes presence, not glycaemic-control risk -> no effect
     # once a user has diabetes (see RISK_TIGHTENING_FRACTION).
@@ -590,6 +593,8 @@ def risk_adjustment(limit: GlucoseLimit, tier: RiskTier | None) -> Decimal:
         return _ZERO
     headroom = _to_decimal(limit.base_mg_dl) - _to_decimal(limit.hard_min_mg_dl)
     fraction = _clip(RISK_TIGHTENING_FRACTION[tier], _ZERO, Decimal(1))
+    if fraction == _ZERO:
+        return _ZERO
     return _quantize(-fraction * headroom, _MG_DL_STEP)
 
 

@@ -300,11 +300,11 @@ def test_band_defaults_to_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     [
         (None, Decimal(0), Decimal(0)),
         ("low", Decimal(0), Decimal(0)),
-        ("moderate", Decimal("-6.0"), Decimal("-10.0")),
-        ("high", Decimal("-12.0"), Decimal("-20.0")),
+        ("moderate", Decimal(0), Decimal(0)),
+        ("high", Decimal(0), Decimal(0)),
     ],
 )
-def test_risk_tightens_non_diabetic_upper_limits_toward_floor(
+def test_risk_tier_never_moves_a_limit(
     tier: RiskTier | None, fasting: Decimal, post_meal: Decimal
 ) -> None:
     assert risk_adjustment(NO_DM_FASTING, tier) == fasting
@@ -325,16 +325,18 @@ def test_risk_never_moves_diabetic_limits(tier: RiskTier | None) -> None:
 
 @pytest.mark.parametrize(
     ("tier", "fasting", "post_meal"),
-    [("low", "112.0", "160.0"), ("moderate", "106.0", "150.0"), ("high", "100.0", "140.0")],
+    [("low", "112.0", "160.0"), ("moderate", "112.0", "160.0"), ("high", "112.0", "160.0")],
 )
-def test_non_diabetic_limits_by_tier(tier: RiskTier, fasting: str, post_meal: str) -> None:
+def test_non_diabetic_limits_ignore_the_risk_tier(
+    tier: RiskTier, fasting: str, post_meal: str
+) -> None:
     limits = _limits_for(ADULT_NO_DM, _risk(tier))
     assert limits["fasting_high"] == Decimal(fasting)
     assert limits["post_meal_high"] == Decimal(post_meal)
     assert limits["low"] == Decimal("70.0")
 
 
-def test_high_risk_non_diabetic_reaches_floor_without_clamping() -> None:
+def test_high_risk_non_diabetic_keeps_the_cited_base_limit() -> None:
     d = plan_threshold_update(
         limit_kind="fasting_high",
         inputs=ADULT_NO_DM,
@@ -342,7 +344,8 @@ def test_high_risk_non_diabetic_reaches_floor_without_clamping() -> None:
         trend=analyse_trend([], AS_OF),
         previous=None,
     )
-    assert d.threshold.unclamped_mg_dl == d.threshold.threshold_mg_dl == Decimal("100.0")
+    assert d.threshold.risk_adj_mg_dl == 0
+    assert d.threshold.unclamped_mg_dl == d.threshold.threshold_mg_dl == Decimal("112.0")
 
 
 def test_diabetic_limits_unaffected_by_tier() -> None:
@@ -518,8 +521,8 @@ def test_clamps_at_hard_max() -> None:
     assert t.threshold_mg_dl == DM_FASTING.hard_max_mg_dl
 
 
-def test_high_risk_and_rising_trend_without_diabetes_clamps_at_normal_fasting() -> None:
-    # 112 - 12 (high risk) - 10 (trend) = 90, below the ADA-2 normal-fasting floor.
+def test_high_risk_and_rising_trend_without_diabetes_applies_only_the_trend() -> None:
+    # 112 - 10 (trend) = 102; the high tier adds nothing, so the floor is not reached.
     trend = analyse_trend(_series(RISING), AS_OF)
     d = plan_threshold_update(
         limit_kind="fasting_high",
@@ -528,8 +531,8 @@ def test_high_risk_and_rising_trend_without_diabetes_clamps_at_normal_fasting() 
         trend=trend,
         previous=None,
     )
-    assert d.threshold.unclamped_mg_dl == Decimal("90.0")
-    assert d.threshold.threshold_mg_dl == NO_DM_FASTING.hard_min_mg_dl
+    assert d.threshold.risk_adj_mg_dl == 0
+    assert d.threshold.unclamped_mg_dl == d.threshold.threshold_mg_dl == Decimal("102.0")
 
 
 def test_falling_trend_without_diabetes_is_clamped_at_fixed_low() -> None:
@@ -728,7 +731,7 @@ def test_significant_trend_with_no_change_keeps_previous() -> None:
     assert again.action == "kept"
 
 
-def test_risk_change_without_trend_is_profile_change() -> None:
+def test_risk_change_without_trend_keeps_the_limit() -> None:
     initial = plan_threshold_update(
         limit_kind="fasting_high",
         inputs=ADULT_NO_DM,
@@ -751,14 +754,16 @@ def test_risk_change_without_trend_is_profile_change() -> None:
         trend=analyse_trend(_series(NOISY_FLAT), AS_OF),
         previous=revised,
     )
-    assert d.action == "profile_change"
-    assert d.threshold.risk_adj_mg_dl == Decimal("-6.0")
+    # The tier changed (low -> moderate) but no limit term did: nothing to log.
+    assert d.action == "kept"
+    assert d.threshold.risk_adj_mg_dl == 0
+    assert d.threshold.threshold_mg_dl == revised.threshold_mg_dl
     # The trend component and the statistics that justified it are carried forward.
     assert d.threshold.trend_adj_mg_dl == revised.trend_adj_mg_dl
     assert d.threshold.trend_p_value == revised.trend_p_value
     assert d.threshold.trend_slope_mg_dl_per_day == revised.trend_slope_mg_dl_per_day
     assert d.threshold.ewma_mg_dl == revised.ewma_mg_dl
-    assert d.threshold.threshold_mg_dl == Decimal("100.0")  # 112 - 6 - 10 = 96 -> clamp
+    assert d.threshold.threshold_mg_dl == Decimal("102.0")  # 112 - 10 (trend); tier adds 0
 
 
 def test_risk_change_for_diabetic_user_keeps_previous() -> None:
