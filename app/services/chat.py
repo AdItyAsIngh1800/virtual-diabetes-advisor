@@ -10,8 +10,8 @@ a. **Red flag** (:func:`detect_red_flag`), two levels (:data:`RED_FLAG_LEVELS`):
      with vomiting, confusion or fast breathing. The **fixed** reply opens with the
      emergency number (112).
    * ``urgent``: a reading below 54 or above 250 mg/dL on its own. The **fixed** reply
-     opens with what to do now (ADA hypoglycaemia treatment, or ketones and the care
-     team) and gives 112 only for when that is not possible or it gets worse.
+     opens with what to do now (ADA Rec 6.15 hypoglycaemia treatment, or ketones and the
+     care team) and gives 112 only for when that is not possible or it gets worse.
 
    Both open (or reuse) a handoff so the practitioner is told at once. Never sent to an
    LLM: no model is even constructed on this path.
@@ -54,7 +54,13 @@ from pydantic import BaseModel, ConfigDict
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 
-from app.core.clinical_limits import HYPO_LEVEL_2_MG_DL, LEVEL_2_HYPERGLYCAEMIA_MG_DL
+from app.core.clinical_limits import (
+    HYPO_LEVEL_2_MG_DL,
+    HYPO_RECHECK_MINUTES,
+    HYPO_TREATMENT_CARB_G,
+    KETONE_CHECK_GLUCOSE_MG_DL,
+    LEVEL_2_HYPERGLYCAEMIA_MG_DL,
+)
 from app.db.models import HandoffStatus, HandoffTrigger, ReadingContext, TurnIntent
 from app.services.thresholds import BandState
 
@@ -238,10 +244,17 @@ def glucose_value(text: str) -> Decimal | None:
 
 # Signs that turn a very high reading into an emergency. ADA-6 (Standards of Care in
 # Diabetes-2026, Section 6, hyperglycaemic crises): DKA and HHS present with nausea and
-# vomiting, altered mental status, and rapid (Kussmaul) breathing.
+# vomiting, abdominal pain, altered mental status (drowsiness, confusion) and rapid
+# (Kussmaul) breathing. Keep in step with HYPERGLYCAEMIC_CRISIS_SIGNS below.
 _HYPERGLYCAEMIA_EMERGENCY_SIGNS: Final = re.compile(
-    r"\b(vomit\w*|throw(?:ing|n)? up|threw up|being sick|confus\w*|disoriented|"
-    r"(?:fast|rapid|heavy|deep) breath\w*|breath\w* (?:fast|rapid\w*|heav\w*|hard))\b"
+    r"\b(vomit\w*|throw(?:ing|n)? up|threw up|being sick|nause\w*|"
+    r"(?:stomach|abdominal|belly|tummy) (?:pain|ache)|stomach ?ache|"
+    r"confus\w*|disoriented|drows\w*|"
+    r"(?:fast|rapid|heavy|deep) breath\w*|breath\w* (?:fast|rapid\w*|heav\w*|hard|deep\w*))\b"
+)
+# The same signs in patient words, listed in the fixed very-high replies.
+HYPERGLYCAEMIC_CRISIS_SIGNS: Final = (
+    "vomiting or nausea, stomach pain, fast or deep breathing, or severe drowsiness or confusion"
 )
 _HYPO_LEVEL_2: Final = Decimal(str(HYPO_LEVEL_2_MG_DL))
 _HYPER_LEVEL_2: Final = Decimal(str(LEVEL_2_HYPERGLYCAEMIA_MG_DL))
@@ -346,38 +359,41 @@ def emergency_reply(
         )
     if flag == "high_with_symptoms":
         # EMERGENCY. ADA-6 (SoC 2026, Section 6, hyperglycaemic crises): very high
-        # glucose with vomiting, altered mental status or rapid breathing can be DKA or
-        # HHS, which needs emergency treatment.
+        # glucose with vomiting, abdominal pain, altered mental status or rapid
+        # breathing can be DKA or HHS, which needs emergency treatment.
         return (
             f"Call {EMERGENCY_NUMBER} now or go to the nearest hospital. A glucose of "
-            f"{value} with vomiting, confusion or fast breathing can be a diabetes "
-            "emergency such as ketoacidosis. Do not wait for a reply in this chat. If "
-            f"someone is with you, ask them to help. {team}"
+            f"{value} with {HYPERGLYCAEMIC_CRISIS_SIGNS} can be a diabetes emergency "
+            "such as ketoacidosis. Do not wait for a reply in this chat. If someone is "
+            f"with you, ask them to help. {team}"
         )
     if flag == "very_low":
-        # URGENT. ADA-6 (SoC 2026, Section 6, hypoglycaemia treatment): glucose
-        # (15-20 g) is the preferred treatment for a conscious person; recheck after
-        # 15 minutes and repeat if still low; once normal, eat a meal or snack.
-        # Level 2 (< 54 mg/dL) is clinically significant: it escalates, but a person
-        # who can swallow treats it first.
+        # URGENT. ADA-6 Rec 6.15 (SoC 2026): glucose (about 15 g) is the preferred
+        # treatment for a conscious person; recheck 15 minutes after treatment and
+        # repeat if still low. Level 2 (< 54 mg/dL) is clinically significant: it
+        # escalates, but a person who can swallow treats it first.
         return (
             f"Your glucose of {value} is very low. If you are awake and able to swallow, "
-            "treat it now with 15 to 20 grams of fast-acting sugar, such as half a cup "
-            "of fruit juice or regular (not diet) soft drink. Check again in 15 minutes "
-            "and repeat if it is still low, then eat a meal or snack. Do not drive. Call "
+            f"treat it now with about {HYPO_TREATMENT_CARB_G} grams of fast-acting sugar. "
+            "Glucose tablets or gel are best; half a cup of fruit juice or regular (not "
+            f"diet) soft drink also works. Check again in {HYPO_RECHECK_MINUTES} minutes "
+            "and repeat if it is still low. Do not drive. Call "
             f"{EMERGENCY_NUMBER} if you cannot treat it, it does not come up, or you feel "
             f"confused or drowsy. {team}"
         )
     if flag == "very_high":
-        # URGENT. ADA-6 (SoC 2026, Table 6.2 / Section 6): > 250 mg/dL is Level 2
-        # hyperglycaemia; ketone testing screens for DKA, and vomiting, confusion or
-        # rapid breathing are signs of a hyperglycaemic crisis needing emergency care.
+        # URGENT. ADA-6 (SoC 2026): > 250 mg/dL is Level 2 hyperglycaemia (Table 6.2).
+        # Section 6 hyperglycaemic-crisis text after Rec 6.22: measure ketones when
+        # there are symptoms or likely triggers of a crisis, especially above
+        # 200 mg/dL; the crisis signs listed need emergency care.
+        ketone_mark = _mg(Decimal(str(KETONE_CHECK_GLUCOSE_MG_DL)))
         return (
-            f"Your glucose of {value} is very high. If you can, check your ketones with "
-            "a urine or blood ketone strip. Contact your care team today and check your "
-            "glucose again soon. Get emergency care (call "
-            f"{EMERGENCY_NUMBER}) if you start vomiting, feel confused or are breathing "
-            f"fast. {team}"
+            f"Your glucose of {value} is very high. Check your ketones now with a urine "
+            "or blood ketone strip: this is advised whenever glucose is above "
+            f"{ketone_mark} mg/dL and you feel unwell or have a likely trigger such as an "
+            "illness, an infection or missed diabetes medicine. Contact your care team "
+            "today and check your glucose again soon. Get emergency care (call "
+            f"{EMERGENCY_NUMBER}) if you have {HYPERGLYCAEMIC_CRISIS_SIGNS}. {team}"
         )
     # EMERGENCY symptoms: chest pain, breathing, consciousness, confusion.
     return (

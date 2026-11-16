@@ -68,6 +68,13 @@ HYPO_LEVEL_2_MG_DL = 54.0
 # (e.g. for hypoglycaemia-prone users) - any higher and it would fire on in-target
 # readings.
 PREPRANDIAL_TARGET_LOW_DM_MG_DL = 80.0
+# ADA-6 Rec 6.15: glucose (about 15 g) is the preferred treatment for a conscious
+# person with hypoglycaemia; recheck 15 minutes after treatment and repeat it if
+# glucose is still low. Used by the fixed chat reply for a < 54 mg/dL reading (R4).
+HYPO_TREATMENT_CARB_G = 15
+# ADA-6 Rec 6.15: recheck glucose 15 minutes after treating a low (the second "15"
+# of the 15-15 rule), and repeat the treatment if it is still low.
+HYPO_RECHECK_MINUTES = 15
 
 # ---------------------------------------------------------------------------
 # Demographics
@@ -106,6 +113,10 @@ POST_MEAL_HIGH_DM_MG_DL = 180.0
 # ADA-6 Table 6.2 (CGM metrics, time above range) + TIR: > 250 mg/dL is Level 2
 # hyperglycaemia. A post-meal limit is never relaxed into Level 2 territory.
 LEVEL_2_HYPERGLYCAEMIA_MG_DL = 250.0
+# ADA-6 Section 6, hyperglycaemic-crisis text after Rec 6.22: measure ketones when
+# there are symptoms or likely triggers of a crisis, especially with glucose above
+# 200 mg/dL. Quoted in the fixed chat reply for a > 250 mg/dL reading (R4).
+KETONE_CHECK_GLUCOSE_MG_DL = 200.0
 
 # ---------------------------------------------------------------------------
 # Adults without diabetes (upper limits)

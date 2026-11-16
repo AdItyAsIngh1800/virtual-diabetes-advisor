@@ -17,6 +17,7 @@ from app.db.models import HandoffTrigger
 from app.services.chat import (
     EMERGENCY_NUMBER,
     GREETING_REPLY,
+    HYPERGLYCAEMIC_CRISIS_SIGNS,
     MENTAL_HEALTH_HELPLINE,
     RED_FLAG_LEVELS,
     RELAY_REPLY,
@@ -217,15 +218,29 @@ def test_260_alone_is_urgent_but_260_and_vomiting_is_emergency() -> None:
 def test_very_high_alone_gives_ketone_and_care_team_guidance() -> None:
     reply = ask(FakeStore(), "260").reply_text
     assert reply.startswith("Your glucose of 260 mg/dL is very high.")
-    assert "ketones" in reply
+    # ADA-6 Section 6 crisis text after Rec 6.22: ketones with symptoms or likely
+    # triggers, especially above 200 mg/dL; then the crisis signs.
+    assert "Check your ketones now" in reply
+    assert "above 200 mg/dL" in reply and "likely trigger" in reply
     assert "care team today" in reply
-    assert "vomiting, feel confused or are breathing fast" in reply
+    assert f"call {EMERGENCY_NUMBER}) if you have {HYPERGLYCAEMIC_CRISIS_SIGNS}." in reply
+    for sign in ("vomiting", "nausea", "stomach pain", "fast or deep breathing", "drowsiness"):
+        assert sign in HYPERGLYCAEMIC_CRISIS_SIGNS
+
+
+def test_high_with_symptoms_lists_the_crisis_signs() -> None:
+    reply = ask(FakeStore(), "260 and vomiting").reply_text
+    assert f"260 mg/dL with {HYPERGLYCAEMIC_CRISIS_SIGNS}" in reply
 
 
 def test_very_low_gives_ada_treatment_then_when_to_call_112() -> None:
     reply = ask(FakeStore(), "fasting 45").reply_text
     assert reply.startswith("Your glucose of 45 mg/dL is very low.")
-    assert "15 to 20 grams" in reply and "15 minutes" in reply
+    # ADA-6 Rec 6.15: about 15 g, glucose preferred, recheck in 15 min, repeat.
+    assert "about 15 grams of fast-acting sugar" in reply
+    assert "Glucose tablets or gel are best" in reply
+    assert "Check again in 15 minutes and repeat if it is still low." in reply
+    assert "15 to 20" not in reply and "meal or snack" not in reply
     assert f"Call {EMERGENCY_NUMBER} if you cannot treat it" in reply
     assert "confused" in reply
 
@@ -549,3 +564,13 @@ def test_every_seed_entry_has_a_source() -> None:
     assert all(e.source for e in KB_SEED)
     rule = next(e for e in KB_SEED if e.key == "rule-15-15")
     assert "ADA" in rule.source and "15-15" in rule.source
+    assert "Recommendation 6.15" in rule.source
+
+
+def test_15_15_entry_matches_ada_rec_6_15() -> None:
+    body = next(e for e in KB_SEED if e.key == "rule-15-15").body
+    assert "about 15 grams of fast-acting sugar" in body
+    assert "Glucose tablets or gel are best" in body
+    assert "Check again after 15 minutes" in body and "repeat" in body
+    assert "15 to 20" not in body and "meal or snack" not in body
+

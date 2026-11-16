@@ -106,16 +106,15 @@ KB_SEED: Final[tuple[KbSeedEntry, ...]] = (
         title="Treating a low: the 15-15 rule",
         body=(
             "The American Diabetes Association advises the 15-15 rule when your glucose is "
-            "below 70 mg/dL and you are awake and able to swallow: have 15 grams of "
-            "fast-acting carbohydrate, such as half a cup of fruit juice or regular (not "
-            "diet) soft drink, or one tablespoon of sugar or honey. Check again after 15 "
-            "minutes. If it is still below 70 mg/dL, repeat. When it is back in range, eat a "
-            "meal or snack so it does not drop again. If someone is confused or cannot "
-            "swallow safely, call emergency services."
+            "below 70 mg/dL and you are awake and able to swallow: have about 15 grams of "
+            "fast-acting sugar. Glucose tablets or gel are best; half a cup of fruit juice "
+            "or regular (not diet) soft drink, or one tablespoon of sugar or honey, also "
+            "work. Check again after 15 minutes. If it is still below 70 mg/dL, repeat. If "
+            "someone is confused or cannot swallow safely, call emergency services."
         ),
         source=(
-            "ADA, 'Hypoglycemia (Low Blood Glucose)' (the 15-15 rule), diabetes.org; ADA "
-            "Standards of Care in Diabetes-2026, Section 6"
+            "ADA Standards of Care in Diabetes-2026, Section 6, Recommendation 6.15; ADA, "
+            "'Hypoglycemia (Low Blood Glucose)' (the 15-15 rule), diabetes.org"
         ),
     ),
     KbSeedEntry(
