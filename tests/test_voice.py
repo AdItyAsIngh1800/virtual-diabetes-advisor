@@ -253,6 +253,53 @@ def test_signed_url_is_absolute_and_short_lived() -> None:
     assert json.loads(requests[0].content) == {"expiresIn": 300}
 
 
+def test_signed_urls_signs_many_in_one_request_and_skips_missing_objects() -> None:
+    # Shape of Storage's batch sign answer (POST /object/sign/{bucket}, as storage-js
+    # createSignedUrls uses), checked against the live project on 2026-11-16.
+    store, requests = store_with(
+        lambda _r: httpx.Response(
+            200,
+            json=[
+                {
+                    "path": "chat/u1/t1.mp3",
+                    "signedURL": "/object/sign/b/chat/u1/t1.mp3?token=a",
+                    "error": None,
+                },
+                {
+                    "path": "chat/u1/gone.mp3",
+                    "signedURL": None,
+                    "error": "Either the object does not exist or you do not have access to it",
+                },
+            ],
+        )
+    )
+    urls = store.signed_urls(["chat/u1/t1.mp3", "chat/u1/gone.mp3"], 300)
+    assert urls == {
+        "chat/u1/t1.mp3": "https://abc.supabase.co/storage/v1/object/sign/b/chat/u1/t1.mp3?token=a"
+    }
+    (request,) = requests
+    assert request.url.path == "/storage/v1/object/sign/advisory-audio"
+    assert json.loads(request.content) == {
+        "expiresIn": 300,
+        "paths": ["chat/u1/t1.mp3", "chat/u1/gone.mp3"],
+    }
+
+
+def test_signed_urls_with_no_paths_makes_no_request() -> None:
+    store, requests = store_with(lambda _r: httpx.Response(500))
+    assert store.signed_urls([], 300) == {}
+    assert requests == []
+
+
+@pytest.mark.parametrize(
+    "response", [httpx.Response(500), httpx.Response(200, json={"not": "a list"})]
+)
+def test_signed_urls_errors_are_audio_storage_errors(response: httpx.Response) -> None:
+    store, _ = store_with(lambda _r: response)
+    with pytest.raises(AudioStorageError):
+        store.signed_urls(["chat/u1/t1.mp3"], 300)
+
+
 @pytest.mark.parametrize(
     "response",
     [httpx.Response(400, json={"error": "not found"}), httpx.Response(200, json={"oops": 1})],

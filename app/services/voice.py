@@ -22,13 +22,13 @@ from __future__ import annotations
 import io
 import logging
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Final, Protocol
 
 import httpx
 import numpy as np
 import numpy.typing as npt
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from app.core.config import Settings
 from app.core.exceptions import AudioStorageError, SpeechError
@@ -349,6 +349,21 @@ class AudioStore(Protocol):
         """
         ...
 
+    def signed_urls(self, paths: Sequence[str], expires_in_s: int) -> dict[str, str]:
+        """Sign several objects in one call.
+
+        Args:
+            paths: Object paths inside the bucket.
+            expires_in_s: Lifetime of the URLs.
+
+        Returns:
+            ``path -> URL`` for every path that exists; missing objects are left out.
+
+        Raises:
+            AudioStorageError: If the request itself fails.
+        """
+        ...
+
 
 def advisory_audio_path(user_id: object, advisory_id: object) -> str:
     """Object path of an advisory's mp3: one folder per patient.
@@ -367,6 +382,17 @@ class _SignedUrlOut(BaseModel):
     """Body of Storage's ``POST /object/sign/...`` response."""
 
     signedURL: str  # noqa: N815 - Supabase's field name
+
+
+class _BatchSignedUrlOut(BaseModel):
+    """One item of Storage's batch ``POST /object/sign/{bucket}`` response."""
+
+    path: str | None = None
+    signedURL: str | None = None  # noqa: N815 - Supabase's field name
+    error: str | None = None
+
+
+_BatchSignedUrls: Final = TypeAdapter(list[_BatchSignedUrlOut])
 
 
 class SupabaseAudioStore:
@@ -434,3 +460,37 @@ class SupabaseAudioStore:
             raise AudioStorageError("storage sign returned an unexpected body") from exc
         # Storage answers with a path relative to /storage/v1 ("/object/sign/...").
         return f"{self._base}{signed}"
+
+    def signed_urls(self, paths: Sequence[str], expires_in_s: int) -> dict[str, str]:
+        """Sign several objects with one request (Storage's batch sign endpoint).
+
+        Args:
+            paths: Object paths inside the bucket.
+            expires_in_s: Lifetime of the URLs in seconds.
+
+        Returns:
+            ``path -> URL``; objects Storage reports as missing are left out.
+
+        Raises:
+            AudioStorageError: On a network error, a non-2xx answer or an unexpected body.
+        """
+        if not paths:
+            return {}
+        url = f"{self._base}/object/sign/{self._bucket}"
+        try:
+            response = self._client.post(
+                url, json={"expiresIn": expires_in_s, "paths": list(paths)}, headers=self._headers
+            )
+        except httpx.HTTPError as exc:
+            raise AudioStorageError(f"storage batch sign failed ({type(exc).__name__})") from exc
+        if response.status_code not in _HTTP_OK:
+            raise AudioStorageError(f"storage batch sign answered HTTP {response.status_code}")
+        try:
+            items = _BatchSignedUrls.validate_json(response.content)
+        except ValidationError as exc:
+            raise AudioStorageError("storage batch sign returned an unexpected body") from exc
+        return {
+            item.path: f"{self._base}{item.signedURL}"
+            for item in items
+            if item.path is not None and item.signedURL and item.error is None
+        }
