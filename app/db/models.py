@@ -260,6 +260,9 @@ class BatchRun(Base):
     readings_evaluated: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     thresholds_written: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     advisories_created: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # 0009: counts of a kb_upgrade run (R5).
+    kb_candidates: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    kb_drafts_proposed: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(_TZ, nullable=False, server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(_TZ)
@@ -449,8 +452,10 @@ class KbEntry(Base):
     """One version of a knowledge-base entry (R5).
 
     Only ``approved`` rows are served to the chat, and the database requires an
-    approved row to name the approving practitioner, ``approved_at`` and ``kb_version``:
-    the system can never publish knowledge it generated itself.
+    approved row to name the approving practitioner, ``approved_at`` and ``kb_version``,
+    a non-empty body and a citation, and no ``review_hint``: the system can never
+    publish knowledge it generated itself. Approved and retired rows are frozen by a
+    trigger (0009); an edit is a new draft that supersedes the approved row.
     """
 
     __tablename__ = "kb_entries"
@@ -488,6 +493,11 @@ class KbEntry(Base):
     proposed_from_turn_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("conversation_turns.id", ondelete="SET NULL")
     )
+    # 0009: why the KB upgrade job proposed this draft. Staff only; the database
+    # requires it to be NULL on an approved (patient-visible) row.
+    review_hint: Mapped[str | None] = mapped_column(Text)
+    # 0009: proposed from an answer marked unsafe; listed first (R5). Cleared on approval.
+    priority: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 

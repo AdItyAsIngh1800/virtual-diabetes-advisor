@@ -81,6 +81,11 @@ class Settings(BaseSettings):
         chat_audio_max_bytes: Largest accepted voice-message upload.
         review_low_confidence_below: KB answers whose retrieval similarity is below
             this are listed under the "low confidence" review filter (R5).
+        kb_upgrade_enabled: Schedule the weekly knowledge-base upgrade job (R5),
+            which proposes draft entries for practitioners to write and approve.
+        kb_upgrade_min_repeats: How often an unanswered question must be asked
+            before the job proposes a draft for it.
+        kb_upgrade_lookback_days: Window, in days, over which repeats are counted.
         pre_breach_band: Fraction of a limit that defines the pre-breach band (R3).
         advisory_cooldown_hours: Minimum hours between repeat advisories (R3 de-dup).
         admin_api_key: Shared secret for ``POST /admin/batch-run`` (sent in the
@@ -167,6 +172,18 @@ class Settings(BaseSettings):
     # KB answer seen so far scored in [chat_kb_min_similarity, 0.21). Those are the answers
     # most worth a practitioner's time. Display filter only: it never changes a reply.
     review_low_confidence_below: float = Field(default=0.21, gt=0.0, lt=1.0)
+
+    # --- Knowledge-base upgrade (R5) ------------------------------------------------
+    # Weekly job that proposes empty DRAFT entries for a practitioner to write and
+    # approve. It never writes medical text or publishes anything, so it is on by
+    # default; it only runs when the in-process scheduler runs (BATCH_SCHEDULER_ENABLED).
+    kb_upgrade_enabled: bool = True
+    # A question the advisor could not answer becomes a draft once asked this many
+    # times. 2 = "asked again": one ask may be a typo, a repeat is a gap in the KB.
+    kb_upgrade_min_repeats: int = Field(default=2, ge=2, le=50)
+    # Repeats are counted over this many days, so an old one-off gap does not keep
+    # resurfacing. 30 days spans four weekly runs.
+    kb_upgrade_lookback_days: int = Field(default=30, ge=7, le=365)
 
     # --- Threshold engine / advisory behaviour ---------------------------------
     # R3: pre-breach band. 0.05 => warn when a reading is within 5% of a limit

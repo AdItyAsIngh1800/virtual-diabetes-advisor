@@ -35,6 +35,9 @@ it gets a (non-demo) ``practitioner`` user and ``practitioners`` row, every seed
 patient is assigned to it, and it approves the seeded knowledge base
 (``scripts.kb_seed``, ~15 diabetes-basics entries with sources). Without the flag, the
 KB is approved by an existing active practitioner, or skipped if there is none.
+Re-seeding never replaces an approved entry a practitioner may have edited or
+re-approved (it is reported as kept); ``--overwrite-seed`` replaces such entries with
+the seed text after printing which ones it retires.
 """
 
 from __future__ import annotations
@@ -726,6 +729,7 @@ def seed_demo(
     practitioner_email: str | None = None,
     patients: Sequence[PatientSpec] = DEMO_PATIENTS,
     rng_seed: int = DEFAULT_RNG_SEED,
+    overwrite_seed: bool = False,
 ) -> SeedReport:
     """Replace demo data with a fresh cohort (caller commits).
 
@@ -740,6 +744,8 @@ def seed_demo(
         practitioner_email: Validated login email of the demo practitioner (R4).
         patients: Cohort to create.
         rng_seed: Global seed.
+        overwrite_seed: Replace approved KB entries whose text differs from the seed
+            (see :func:`scripts.kb_seed.seed_kb`); off by default.
 
     Returns:
         What was deleted and created.
@@ -818,7 +824,7 @@ def seed_demo(
     )
     kb_report: KbSeedReport | None = None
     if approver is not None:
-        kb_report = seed_kb(session, approver_id=approver, now=now)
+        kb_report = seed_kb(session, approver_id=approver, now=now, overwrite=overwrite_seed)
     else:
         logger.warning("knowledge base not seeded: no practitioner to approve it")
     return SeedReport(
@@ -988,18 +994,42 @@ def _print_report(report: SeedReport) -> None:
                 f"{report.routed_handoffs} open handoff(s) opened before a practitioner was "
                 "linked are now routed to them."
             )
-    if report.kb is None:
-        lines.append("Knowledge base not seeded: pass --practitioner-email to approve it.")
-    elif report.kb.inserted or report.kb.retired:
-        lines.append(
-            f"Knowledge base: {report.kb.inserted} entries approved as kb_version "
-            f"{report.kb.kb_version} ({report.kb.unchanged} unchanged, "
-            f"{report.kb.retired} retired)."
-        )
-    else:
-        lines.append(f"Knowledge base: all {report.kb.unchanged} entries already approved.")
+    lines += kb_report_lines(report.kb)
     lines += ["", "Next: uv run python -m app.jobs.batch_update"]
     print("\n".join(lines))
+
+
+def kb_report_lines(kb: KbSeedReport | None) -> list[str]:
+    """Describe the knowledge-base part of a seed run.
+
+    Args:
+        kb: Result of :func:`scripts.kb_seed.seed_kb`, or ``None`` when not seeded.
+
+    Returns:
+        Report lines; an overwrite starts with a WARNING naming the retired entries.
+    """
+    if kb is None:
+        return ["Knowledge base not seeded: pass --practitioner-email to approve it."]
+    lines: list[str] = []
+    if kb.retired:
+        lines.append(
+            f"WARNING: --overwrite-seed retired {len(kb.retired)} approved entr"
+            f"{'y' if len(kb.retired) == 1 else 'ies'} and replaced practitioner text "
+            f"with the seed: {', '.join(kb.retired)}"
+        )
+    if kb.inserted:
+        lines.append(
+            f"Knowledge base: {kb.inserted} entries approved as kb_version {kb.kb_version} "
+            f"({kb.unchanged} unchanged)."
+        )
+    else:
+        lines.append(f"Knowledge base: {kb.unchanged} seed entries already approved.")
+    if kb.kept:
+        lines.append(
+            f"Knowledge base: {len(kb.kept)} kept (practitioner-owned): {', '.join(kb.kept)}. "
+            "Re-run with --overwrite-seed to replace them with the seed text."
+        )
+    return lines
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1025,6 +1055,14 @@ def main(argv: list[str] | None = None) -> int:
         help="link another existing /app login as the demo practitioner (R4)",
     )
     parser.add_argument("--rng-seed", type=int, default=DEFAULT_RNG_SEED)
+    parser.add_argument(
+        "--overwrite-seed",
+        action="store_true",
+        help=(
+            "replace approved KB entries whose text differs from the seed (practitioner "
+            "edits) and retire removed seed entries; prints the entries it retires"
+        ),
+    )
     args = parser.parse_args(argv)
     configure_logging(get_settings().log_level)
 
@@ -1046,6 +1084,7 @@ def main(argv: list[str] | None = None) -> int:
             my_email=my_email,
             practitioner_email=practitioner_email,
             rng_seed=args.rng_seed,
+            overwrite_seed=args.overwrite_seed,
         )
         session.commit()
     _print_report(report)

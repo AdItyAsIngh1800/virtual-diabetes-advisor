@@ -254,7 +254,7 @@ def visible_patient_ids(practitioner_id: uuid.UUID) -> Select[uuid.UUID]:
     return select(union(assigned, everyone).subquery().c[0])
 
 
-def _advisor_reply() -> ColumnElement[bool]:
+def advisor_reply() -> ColumnElement[bool]:
     """SQL condition for a turn that carries an advisor reply (see module docstring).
 
     Returns:
@@ -268,7 +268,7 @@ def _advisor_reply() -> ColumnElement[bool]:
     )
 
 
-def _unanswered() -> ColumnElement[bool]:
+def unanswered_reply() -> ColumnElement[bool]:
     """SQL condition for the "I don't know" reply.
 
     ``ChatEngine._question`` gives that reply, and only that reply, as a ``question``
@@ -286,7 +286,7 @@ def _unanswered() -> ColumnElement[bool]:
     )
 
 
-def _latest_reviews() -> Select[
+def latest_reviews() -> Select[
     uuid.UUID, uuid.UUID, ReviewVerdict, str | None, uuid.UUID, datetime, int
 ]:
     """Latest review of every reviewed turn, with the turn's review count.
@@ -380,7 +380,7 @@ def list_reviewable_turns(
     """
     if not 1 <= limit <= MAX_PAGE_SIZE:
         raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
-    latest = _latest_reviews().subquery()
+    latest = latest_reviews().subquery()
     reviewer = aliased(Practitioner)
     stmt = (
         select(
@@ -398,7 +398,7 @@ def list_reviewable_turns(
         .outerjoin(latest, latest.c.turn_id == ConversationTurn.id)
         .outerjoin(reviewer, reviewer.id == latest.c.reviewer_id)
         .where(
-            _advisor_reply(),
+            advisor_reply(),
             ConversationTurn.user_id.in_(visible_patient_ids(practitioner_id)),
         )
     )
@@ -412,7 +412,7 @@ def list_reviewable_turns(
             ConversationTurn.retrieval_confidence < low_confidence_below,
         )
     elif review_filter == "unanswered":
-        stmt = stmt.where(_unanswered())
+        stmt = stmt.where(unanswered_reply())
     if cursor is not None:
         stmt = stmt.where(
             tuple_(ConversationTurn.created_at, ConversationTurn.id)
@@ -513,7 +513,7 @@ def add_review(
     found = session.scalar(
         select(ConversationTurn.id).where(
             ConversationTurn.id == turn_id,
-            _advisor_reply(),
+            advisor_reply(),
             ConversationTurn.user_id.in_(visible_patient_ids(reviewer_id)),
         )
     )

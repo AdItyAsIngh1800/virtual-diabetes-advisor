@@ -1,4 +1,4 @@
-"""Admin routes: trigger the batch update and the advisory dispatcher on demand (R1/R3 demo).
+"""Admin routes: run the batch update, the advisory dispatcher and the KB upgrade on demand.
 
 Every route requires the ``X-Admin-Api-Key`` header to equal ``ADMIN_API_KEY``. The
 check fails closed: with no key configured, every request gets 503.
@@ -17,6 +17,7 @@ from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.db.session import get_session_factory
 from app.jobs.batch_update import BatchRunSummary, load_risk_scorer, run_batch_update
 from app.jobs.dispatch_advisories import DispatchSummary, run_dispatch, scheduled_dispatch
+from app.jobs.kb_upgrade import KbUpgradeSummary, run_kb_upgrade
 
 logger = logging.getLogger(__name__)
 
@@ -95,3 +96,23 @@ def trigger_dispatch_run() -> DispatchSummary:
     if summary is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "a dispatch is already running")
     return summary
+
+
+@router.post("/kb-upgrade-run")
+def trigger_kb_upgrade_run() -> KbUpgradeSummary:
+    """Run the knowledge-base upgrade job now (R5) and return what it proposed.
+
+    It only inserts empty DRAFT entries for practitioners to write and approve; it
+    never publishes anything. A run that failed still returns 200 with ``status``
+    ``failed`` (the error is in ``batch_runs`` and the log).
+
+    Returns:
+        Counts, status and the ids of the new drafts.
+
+    Raises:
+        HTTPException: 409 if a KB upgrade run is already in progress.
+    """
+    try:
+        return run_kb_upgrade(get_session_factory(), triggered_by="admin_api")
+    except BatchAlreadyRunningError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

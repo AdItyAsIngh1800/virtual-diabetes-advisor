@@ -47,6 +47,23 @@ class ReviewNoteRequiredError(DiabetesAdvisorError):
     """Raised when a review verdict that needs an explanation has no note (R5)."""
 
 
+class KbEntryNotFoundError(DiabetesAdvisorError):
+    """Raised when a knowledge-base entry id does not exist (R5; the API answers 404)."""
+
+
+class KbEntryStateError(DiabetesAdvisorError):
+    """Raised when a KB action does not fit the entry's status (R5; the API answers 409).
+
+    Only drafts may be edited, approved or rejected, only approved entries may be
+    superseded, and a draft cannot be approved once the entry it supersedes is no
+    longer the approved version.
+    """
+
+
+class KbApprovalIncompleteError(DiabetesAdvisorError):
+    """Raised when a draft is approved without a body or a source citation (R5; 422)."""
+
+
 class BatchAlreadyRunningError(DiabetesAdvisorError):
     """Raised when a batch job starts while another run of the same job is in progress.
 

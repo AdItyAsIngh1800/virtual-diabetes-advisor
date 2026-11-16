@@ -190,3 +190,10 @@ def test_replay_sees_0008_changes() -> None:
     turns, _ = _replayed_schema("conversation_turns")
     assert "author_practitioner_id" in turns
     assert models.ConversationTurn.__table__.c.author_practitioner_id.nullable is True
+
+
+def test_replay_sees_0009_changes() -> None:
+    kb, _ = _replayed_schema("kb_entries")
+    assert {"review_hint", "priority"} <= kb
+    runs, _ = _replayed_schema("batch_runs")
+    assert {"kb_candidates", "kb_drafts_proposed"} <= runs

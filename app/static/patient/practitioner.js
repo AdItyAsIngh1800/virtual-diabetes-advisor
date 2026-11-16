@@ -4,6 +4,9 @@
 // handoffs:<auth uid>; the API re-checks the assignment on every call.
 // The Review tab (R5) lists the advisor's answers to assigned patients and records a
 // verdict on each (append-only: a new review becomes the current verdict).
+// The Knowledge base tab (R5) lists drafts awaiting approval (proposed by the weekly
+// job or opened with Edit) and the approved entries. Only drafts are edited; approving
+// needs the entry text and a source citation, and retires the entry it supersedes.
 "use strict";
 
 const { $, say, guarded, clock, VERDICTS } = window.DA;
@@ -21,7 +24,8 @@ let reviewFilter = "unreviewed";
 let reviewCursor = null;
 let reviewLoaded = false;
 let reviewRequest = 0; // ignore a slow page that arrives after the filter changed
-const TABS = [["tab-inbox", "inbox"], ["tab-review", "review"]];
+let kbLoaded = false;
+const TABS = [["tab-inbox", "inbox"], ["tab-review", "review"], ["tab-kb", "kb"]];
 
 function bubble(message) {
   const el = document.createElement("div");
@@ -171,6 +175,7 @@ function showTab(name) {
     $(panelId).hidden = !on;
   }
   if (name === "review" && !reviewLoaded) loadTurns(true).catch((err) => say(err.message, true));
+  if (name === "kb" && !kbLoaded) loadKb().catch((err) => say(err.message, true));
 }
 
 function sourceLine(s) {
@@ -287,6 +292,163 @@ function setFilter(button) {
   return loadTurns(true);
 }
 
+// --- Knowledge base tab (R5) ------------------------------------------------------
+
+function when(iso) {
+  return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+function field(card, id, text, control) {
+  const label = el("label", "", text);
+  label.htmlFor = id;
+  control.id = id;
+  card.append(label, control);
+  return control;
+}
+
+function draftCard(entry) {
+  const card = el("li", `panel turn${entry.priority ? " priority" : ""}`);
+  card.id = `kb-${entry.id}`;
+  const head = el("div", "head");
+  for (const tag of window.DA.kbDraftTags(entry)) head.append(el("span", `tag${tag.urgent ? " urgent" : ""}`, tag.text));
+  head.append(el("span", "name", window.DA.kbDraftOrigin(entry)), el("span", "muted", when(entry.created_at)));
+  card.append(head);
+  if (entry.priority) {
+    card.append(el("p", "error", `${window.DA.KB_PRIORITY_LABEL}: the advisor's answer may have put a patient at risk. Write the correct answer first.`));
+  }
+
+  if (entry.proposed_from_turn_id) {
+    const turn = entry.source_turn;
+    card.append(el("h3", "", "Patient asked"));
+    if (turn) {
+      card.append(
+        el("p", "text question", turn.question || "(no text)"),
+        el("h3", "", "Advisor answered"),
+        el("p", "text answer", turn.answer || "(no reply)"),
+        el("p", "muted", `Asked ${when(turn.asked_at)}`),
+      );
+    } else {
+      card.append(el("p", "muted", "Asked by a patient who is not assigned to you; the draft title below is their question."));
+    }
+  }
+  if (entry.review_hint) {
+    card.append(el("h3", "", "Why it was proposed (staff only, never shown to patients)"), el("p", "text hint", entry.review_hint));
+  }
+
+  const title = el("input");
+  title.maxLength = 2000;
+  title.value = entry.title;
+  field(card, `kb-title-${entry.id}`, "Title (patients see this)", title);
+  const body = el("textarea");
+  body.rows = 6;
+  body.maxLength = 6000;
+  body.value = entry.body;
+  body.placeholder = "Write the answer in plain language, as you would say it to a patient.";
+  field(card, `kb-body-${entry.id}`, "Entry text (patients see this)", body);
+  const citation = el("input");
+  citation.maxLength = 500;
+  citation.value = entry.source_citation || "";
+  citation.placeholder = "e.g. ADA Standards of Care in Diabetes-2026, section 6";
+  field(card, `kb-cite-${entry.id}`, "Source citation (required to approve)", citation);
+
+  const status = el("p", "muted");
+  status.setAttribute("role", "status");
+  const buttons = el("div", "verdicts");
+  const values = () => ({ title: title.value.trim(), body: body.value.trim(), source_citation: citation.value.trim() || null });
+  const act = async (work) => {
+    status.classList.remove("error");
+    for (const b of buttons.querySelectorAll("button")) b.disabled = true;
+    try {
+      await work();
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.classList.add("error");
+    } finally {
+      for (const b of buttons.querySelectorAll("button")) b.disabled = false;
+    }
+  };
+  const save = el("button", "secondary", "Save draft");
+  save.type = "button";
+  save.addEventListener("click", () => act(async () => {
+    await window.DA.api(`/api/practitioner/kb/${entry.id}`, "PUT", values());
+    status.textContent = "Draft saved. It is not served until approved.";
+  }));
+  const approve = el("button", "", "Approve");
+  approve.type = "button";
+  approve.addEventListener("click", () => act(async () => {
+    const draft = values();
+    const problem = window.DA.kbApproveProblem(draft);
+    if (problem) throw new Error(problem);
+    if (!window.confirm("Approve this entry? Patients will get this text from their next question.")) return;
+    // Save first, so what is approved is exactly what is on screen.
+    await window.DA.api(`/api/practitioner/kb/${entry.id}`, "PUT", draft);
+    const approved = await window.DA.api(`/api/practitioner/kb/${entry.id}/approve`, "POST");
+    await loadKb();
+    say(`Approved as knowledge base version ${approved.kb_version}.`);
+  }));
+  const reject = el("button", "unsafe", "Reject");
+  reject.type = "button";
+  reject.addEventListener("click", () => act(async () => {
+    if (!window.confirm("Reject this draft? It is kept for the record but never served.")) return;
+    await window.DA.api(`/api/practitioner/kb/${entry.id}/reject`, "POST");
+    await loadKb();
+    say("Draft rejected.");
+  }));
+  buttons.append(save, approve, reject);
+  card.append(buttons, status);
+  return card;
+}
+
+function approvedCard(entry) {
+  const card = el("li", "panel turn");
+  const head = el("div", "head");
+  head.append(el("span", "name", entry.title), el("span", "tag", `v${entry.kb_version}`));
+  if (entry.open_draft_id) head.append(el("span", "tag urgent", "Draft open"));
+  const approvedBy = entry.approved_by_name ? ` by ${entry.approved_by_name}` : "";
+  card.append(
+    head,
+    el("p", "muted", `${entry.entry_key} · ${entry.source_citation || "no citation"}`),
+    el("p", "muted", `Approved${approvedBy}, ${when(entry.approved_at)}`),
+  );
+  const details = el("details");
+  details.append(el("summary", "", "Entry text"), el("p", "text answer", entry.body));
+  card.append(details);
+  const status = el("p", "muted");
+  status.setAttribute("role", "status");
+  const edit = el("button", "secondary", entry.open_draft_id ? "Go to open draft" : "Edit");
+  edit.type = "button";
+  edit.addEventListener("click", async () => {
+    edit.disabled = true;
+    try {
+      const draft = entry.open_draft_id
+        ? { id: entry.open_draft_id }
+        : await window.DA.api(`/api/practitioner/kb/${entry.id}/edit`, "POST");
+      await loadKb();
+      const target = $(`kb-${draft.id}`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        target.querySelector("textarea")?.focus({ preventScroll: true });
+      }
+    } catch (err) {
+      status.textContent = err.message || String(err);
+      status.classList.add("error");
+    } finally {
+      edit.disabled = false;
+    }
+  });
+  card.append(edit, status);
+  return card;
+}
+
+async function loadKb() {
+  const listing = await window.DA.api("/api/practitioner/kb");
+  kbLoaded = true;
+  $("kb-drafts").replaceChildren(...window.DA.kbSortDrafts(listing.drafts).map(draftCard));
+  $("kb-approved").replaceChildren(...listing.approved.map(approvedCard));
+  $("kb-drafts-empty").hidden = listing.drafts.length > 0;
+  $("kb-approved-empty").hidden = listing.approved.length > 0;
+}
+
 // --- Page --------------------------------------------------------------------------
 
 async function render() {
@@ -300,8 +462,12 @@ async function render() {
   $("tabs").hidden = true;
   $("inbox").hidden = true;
   $("review").hidden = true;
+  $("kb").hidden = true;
   $("turns").replaceChildren();
+  $("kb-drafts").replaceChildren();
+  $("kb-approved").replaceChildren();
   reviewLoaded = false;
+  kbLoaded = false;
   if (!session) return;
   $("who").textContent = session.user.email;
   const me = await window.DA.api("/api/me");
@@ -336,7 +502,9 @@ async function init() {
   for (const [tabId, panelId] of TABS) $(tabId).addEventListener("click", () => showTab(panelId));
   $("tabs").addEventListener("keydown", (event) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    const next = TABS.find(([, panelId]) => panelId !== activeTab);
+    const at = TABS.findIndex(([, panelId]) => panelId === activeTab);
+    const step = event.key === "ArrowRight" ? 1 : TABS.length - 1;
+    const next = TABS[(at + step) % TABS.length];
     showTab(next[1]);
     $(next[0]).focus();
   });

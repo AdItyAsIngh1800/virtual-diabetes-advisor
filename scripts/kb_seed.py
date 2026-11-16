@@ -6,12 +6,23 @@ without them, so nothing reaches patients unless a named practitioner approved i
 
 The entries were drafted by the project team from the cited sources, in plain language,
 and are approved by the demo practitioner whose login ``seed_demo --practitioner-email``
-links. That person should read them before a real demo; a reviewed entry that needs
-changes is edited here and re-seeded, which retires the old row and approves the new
-text as a new ``kb_version`` (approved rows are never edited in place).
+links. That person should read them before a real demo.
 
-Idempotent: unchanged entries are left alone; only new or changed ones create a new
-KB version.
+**Practitioners own the approved knowledge base.** Once a seed key has an approved row,
+re-seeding never replaces it: a practitioner may have edited or re-approved it on the
+Knowledge base tab (R5), and their approval wins over the team's text. For each seed key:
+
+* no approved row       -> the seed text is approved (new ``kb_version``);
+* same text as the seed -> left alone, reported as ``unchanged``;
+* different text        -> left alone, reported as kept (practitioner-owned).
+
+Approved seed rows whose key was removed from :data:`KB_SEED` are also left alone.
+Only ``overwrite=True`` (``seed_demo --overwrite-seed``) replaces differing entries and
+retires removed ones; it logs a warning naming every entry it retires first. Approved
+rows are never edited in place either way: an overwrite retires the old row and
+approves the seed text as a new row.
+
+Idempotent: a second run approves nothing.
 
 Sources (abbreviations used below; ADA = American Diabetes Association):
 
@@ -33,6 +44,7 @@ Sources (abbreviations used below; ADA = American Diabetes Association):
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Final
@@ -42,6 +54,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import KbEntry
+
+logger = logging.getLogger(__name__)
 
 # Seeded entries share this key prefix, so a re-seed only ever retires its own rows.
 SEED_PREFIX: Final = "seed:"
@@ -306,15 +320,31 @@ class KbSeedReport(BaseModel):
 
     Attributes:
         kb_version: KB version the new rows were approved into (``None`` if none).
-        inserted: New or changed entries approved now.
-        unchanged: Entries already approved with the same text.
-        retired: Earlier rows retired (superseded or removed from the seed).
+        inserted: Entries approved now (new keys, plus overwritten ones).
+        unchanged: Entries already approved with the seed's text.
+        kept: Keys whose approved text differs from the seed and was left alone
+            (practitioner-owned), plus approved keys no longer in the seed.
+        retired: Keys of approved rows retired by an overwrite (empty without one).
     """
 
     kb_version: int | None
     inserted: int
     unchanged: int
-    retired: int
+    kept: list[str] = Field(default_factory=list)
+    retired: list[str] = Field(default_factory=list)
+
+
+def _same_text(row: KbEntry, entry: KbSeedEntry) -> bool:
+    """Return whether an approved row carries exactly the seed's text.
+
+    Args:
+        row: Approved ``kb_entries`` row.
+        entry: Seed entry for the same key.
+
+    Returns:
+        ``True`` when title, body and citation all match.
+    """
+    return (row.title, row.body, row.source_citation) == (entry.title, entry.body, entry.source)
 
 
 def seed_kb(
@@ -323,17 +353,21 @@ def seed_kb(
     approver_id: uuid.UUID,
     now: datetime,
     entries: tuple[KbSeedEntry, ...] = KB_SEED,
+    overwrite: bool = False,
 ) -> KbSeedReport:
-    """Approve the seed entries, versioning only what changed (caller commits).
+    """Approve seed entries for keys with no approved row (caller commits).
 
     Args:
         session: Open session.
         approver_id: ``practitioners.id`` recorded as ``approved_by``.
         now: ``approved_at``.
         entries: Entries to seed.
+        overwrite: Also replace approved entries whose text differs from the seed and
+            retire approved seed keys no longer in ``entries``. Off by default:
+            practitioner-approved text is never replaced unless asked.
 
     Returns:
-        Counts and the new KB version.
+        Counts, kept and retired keys, and the new KB version.
     """
     approved = {
         row.entry_key: row
@@ -344,30 +378,60 @@ def seed_kb(
         )
     }
     wanted = {SEED_PREFIX + e.key: e for e in entries}
-    changed = [
+    missing = [(key, entry) for key, entry in wanted.items() if key not in approved]
+    unchanged = [
+        key for key, entry in wanted.items() if key in approved and _same_text(approved[key], entry)
+    ]
+    differing = [
         (key, entry)
         for key, entry in wanted.items()
-        if key not in approved
-        or (approved[key].title, approved[key].body, approved[key].source_citation)
-        != (entry.title, entry.body, entry.source)
+        if key in approved and not _same_text(approved[key], entry)
     ]
-    removed = [row for key, row in approved.items() if key not in wanted]
-    if not changed and not removed:
-        return KbSeedReport(kb_version=None, inserted=0, unchanged=len(wanted), retired=0)
+    removed = sorted(key for key in approved if key not in wanted)
 
-    latest = session.scalar(select(func.max(KbEntry.kb_version))) or 0
-    version = latest + 1
-    retired = 0
-    for row in removed:
-        row.status = "retired"
-        retired += 1
-    for key, entry in changed:
+    to_insert = list(missing)
+    to_retire: list[str] = []
+    kept: list[str] = []
+    if overwrite:
+        to_insert += differing
+        to_retire = sorted([key for key, _ in differing] + removed)
+        if to_retire:
+            logger.warning(
+                "--overwrite-seed: retiring %d approved entr%s and replacing practitioner "
+                "text with the seed: %s",
+                len(to_retire),
+                "y" if len(to_retire) == 1 else "ies",
+                "; ".join(
+                    f"{key} ({approved[key].title!r}, v{approved[key].kb_version})"
+                    for key in to_retire
+                ),
+            )
+    else:
+        kept = sorted([key for key, _ in differing] + removed)
+        if kept:
+            logger.info(
+                "kept %d practitioner-owned KB entr%s: %s",
+                len(kept),
+                "y" if len(kept) == 1 else "ies",
+                ", ".join(kept),
+            )
+
+    for key in to_retire:
+        # Approved rows are never edited in place: retire, then approve the new text.
+        approved[key].status = "retired"
+    session.flush()
+    if not to_insert:
+        return KbSeedReport(
+            kb_version=None,
+            inserted=0,
+            unchanged=len(unchanged),
+            kept=kept,
+            retired=to_retire,
+        )
+
+    version = (session.scalar(select(func.max(KbEntry.kb_version))) or 0) + 1
+    for key, entry in to_insert:
         old = approved.get(key)
-        if old is not None:
-            # Approved rows are never edited in place: retire, then approve the new text.
-            old.status = "retired"
-            retired += 1
-        session.flush()
         session.add(
             KbEntry(
                 id=uuid.uuid4(),
@@ -387,7 +451,8 @@ def seed_kb(
     session.flush()
     return KbSeedReport(
         kb_version=version,
-        inserted=len(changed),
-        unchanged=len(wanted) - len(changed),
-        retired=retired,
+        inserted=len(to_insert),
+        unchanged=len(unchanged),
+        kept=kept,
+        retired=to_retire,
     )

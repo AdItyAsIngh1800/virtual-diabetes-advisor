@@ -4,7 +4,10 @@ Run with ``uv run uvicorn app.main:app``. On startup the app schedules the batch
 every ``BATCH_INTERVAL_MINUTES`` (default 15) and the advisory dispatcher (R3) every
 ``DISPATCH_INTERVAL_MINUTES`` (default 2) with APScheduler, unless
 ``BATCH_SCHEDULER_ENABLED=false``. Every batch run is followed by a dispatch, so new
-advisories go out at once. ``POST /admin/batch-run`` triggers a run on demand.
+advisories go out at once. ``POST /admin/batch-run`` triggers a run on demand. The
+weekly knowledge-base upgrade (R5, ``KB_UPGRADE_ENABLED``) proposes draft entries for
+practitioners to write and approve; ``POST /admin/kb-upgrade-run`` runs it on demand,
+and ``/api/practitioner/kb`` is the practitioner's Knowledge base tab.
 ``/api/push/*`` manages Web Push subscriptions, ``/api/advisories/{id}`` serves one
 advisory to its patient, ``/api/chat`` and ``/api/practitioner/*`` are the two-way help
 chat and practitioner connect (R4), and ``/app`` serves the patient web app (Supabase
@@ -27,7 +30,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
-from app.api import admin, advisories, audit, chat, patient_app, push
+from app.api import admin, advisories, audit, chat, kb_admin, patient_app, push
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.core.logging import configure_logging
@@ -40,11 +43,13 @@ from app.db.session import (
 )
 from app.jobs.batch_update import load_risk_scorer, run_batch_update
 from app.jobs.dispatch_advisories import scheduled_dispatch
+from app.jobs.kb_upgrade import scheduled_kb_upgrade
 
 logger = logging.getLogger(__name__)
 
 BATCH_JOB_ID = "batch_update"
 DISPATCH_JOB_ID = "dispatch_advisories"
+KB_UPGRADE_JOB_ID = "kb_upgrade"
 
 
 def scheduled_batch_run() -> None:
@@ -65,10 +70,11 @@ def scheduled_batch_run() -> None:
 
 
 def build_scheduler(settings: Settings) -> BackgroundScheduler:
-    """Create (not start) the scheduler with the batch and dispatch jobs registered.
+    """Create (not start) the scheduler with the batch, dispatch and KB upgrade jobs.
 
     Args:
-        settings: Supplies ``batch_interval_minutes`` and ``dispatch_interval_minutes``.
+        settings: Supplies ``batch_interval_minutes``, ``dispatch_interval_minutes``
+            and ``kb_upgrade_enabled``.
 
     Returns:
         A configured, stopped scheduler.
@@ -94,6 +100,20 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
         max_instances=1,
         coalesce=True,
     )
+    if settings.kb_upgrade_enabled:
+        # R5: weekly, Monday 02:30 UTC (08:00 in India), so the week's drafts are
+        # waiting when the clinic opens. It only proposes empty drafts; a missed run
+        # (server down) is harmless because the next one picks up the same questions.
+        scheduler.add_job(
+            scheduled_kb_upgrade,
+            "cron",
+            day_of_week="mon",
+            hour=2,
+            minute=30,
+            id=KB_UPGRADE_JOB_ID,
+            max_instances=1,
+            coalesce=True,
+        )
     return scheduler
 
 
@@ -178,8 +198,8 @@ def create_app() -> FastAPI:
     """Build the FastAPI application.
 
     Returns:
-        The app with the admin, push, advisory, chat/practitioner, answer-review
-        and patient-app routes mounted.
+        The app with the admin, push, advisory, chat/practitioner, answer-review,
+        knowledge-base and patient-app routes mounted.
     """
     app = FastAPI(title="Virtual Diabetes Advisor", version="0.1.0", lifespan=lifespan)
     app.add_exception_handler(OperationalError, database_unavailable)
@@ -189,6 +209,7 @@ def create_app() -> FastAPI:
     app.include_router(advisories.router)
     app.include_router(chat.router)
     app.include_router(audit.router)
+    app.include_router(kb_admin.router)
     # Before mount_patient_app: the /app static mount would otherwise swallow
     # /app/advisory/{id}.
     app.include_router(patient_app.router)

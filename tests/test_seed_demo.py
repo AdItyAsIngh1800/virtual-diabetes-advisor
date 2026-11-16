@@ -26,6 +26,7 @@ from app.services.thresholds import (
     classify_reading,
     plan_threshold_update,
 )
+from scripts.kb_seed import KbSeedReport
 from scripts.seed_demo import (
     DAYS,
     DEMO_PATIENTS,
@@ -34,6 +35,7 @@ from scripts.seed_demo import (
     SeedError,
     build_risk_profile,
     generate_readings,
+    kb_report_lines,
     match_kept_users,
     validate_my_email,
 )
@@ -264,3 +266,38 @@ def test_patient_and_practitioner_must_be_different_logins() -> None:
             my_email="same@example.com",
             practitioner_email="same@example.com",
         )
+
+
+# --- knowledge-base part of the report ----------------------------------------------------
+
+
+def test_kb_report_without_an_approver() -> None:
+    assert kb_report_lines(None) == [
+        "Knowledge base not seeded: pass --practitioner-email to approve it."
+    ]
+
+
+def test_kb_report_names_kept_practitioner_entries() -> None:
+    report = KbSeedReport(kb_version=None, inserted=0, unchanged=14, kept=["seed:a1c", "seed:diet"])
+    assert kb_report_lines(report) == [
+        "Knowledge base: 14 seed entries already approved.",
+        "Knowledge base: 2 kept (practitioner-owned): seed:a1c, seed:diet. "
+        "Re-run with --overwrite-seed to replace them with the seed text.",
+    ]
+
+
+def test_kb_report_warns_first_about_an_overwrite() -> None:
+    report = KbSeedReport(kb_version=7, inserted=1, unchanged=15, retired=["seed:a1c"])
+    lines = kb_report_lines(report)
+    assert lines[0] == (
+        "WARNING: --overwrite-seed retired 1 approved entry and replaced practitioner "
+        "text with the seed: seed:a1c"
+    )
+    assert lines[1] == "Knowledge base: 1 entries approved as kb_version 7 (15 unchanged)."
+
+
+def test_kb_report_after_a_fresh_seed() -> None:
+    report = KbSeedReport(kb_version=1, inserted=16, unchanged=0)
+    assert kb_report_lines(report) == [
+        "Knowledge base: 16 entries approved as kb_version 1 (0 unchanged)."
+    ]

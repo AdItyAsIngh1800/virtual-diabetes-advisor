@@ -166,6 +166,8 @@ class SqlBatchRepository:
         thresholds_written: int,
         advisories_created: int,
         error: str | None,
+        kb_candidates: int = 0,
+        kb_drafts_proposed: int = 0,
     ) -> None:
         """Record a run's final status and counts.
 
@@ -178,6 +180,8 @@ class SqlBatchRepository:
             thresholds_written: ``thresholds_history`` rows written.
             advisories_created: ``advisories`` rows written.
             error: Failure summary, or ``None``.
+            kb_candidates: Questions a ``kb_upgrade`` run considered (R5).
+            kb_drafts_proposed: Draft KB entries it inserted (R5).
         """
         self._session.execute(
             update(BatchRun)
@@ -189,6 +193,8 @@ class SqlBatchRepository:
                 readings_evaluated=readings_evaluated,
                 thresholds_written=thresholds_written,
                 advisories_created=advisories_created,
+                kb_candidates=kb_candidates,
+                kb_drafts_proposed=kb_drafts_proposed,
                 error=error,
             )
         )

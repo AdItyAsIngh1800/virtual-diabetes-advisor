@@ -232,9 +232,52 @@ window.DA = (() => {
     return tags;
   }
 
+  // --- Knowledge base (R5, practitioner page) --------------------------------------
+
+  /**
+   * Why a draft cannot be approved yet, or null when it can. Mirrors approve_draft in
+   * app/db/kb_repository.py: the API answers 422 without a body or a source citation.
+   */
+  function kbApproveProblem(draft) {
+    const missing = [];
+    if (!(draft.body || "").trim()) missing.push("the entry text");
+    if (!(draft.source_citation || "").trim()) missing.push("a source citation");
+    return missing.length ? `Add ${missing.join(" and ")} before approving.` : null;
+  }
+
+  /** One line saying where a draft came from. */
+  function kbDraftOrigin(entry) {
+    if (entry.supersedes_id) {
+      const version = entry.supersedes_version ? ` v${entry.supersedes_version}` : "";
+      return `Edit of approved entry ${entry.entry_key}${version}${entry.created_by_name ? ` by ${entry.created_by_name}` : ""}`;
+    }
+    if (entry.origin === "proposed_from_review") return "Proposed by the weekly knowledge-base review";
+    return `New entry${entry.created_by_name ? ` by ${entry.created_by_name}` : ""}`;
+  }
+
+  // Mirrors PRIORITY_LABEL in app/services/kb_upgrade.py.
+  const KB_PRIORITY_LABEL = "Marked unsafe by a reviewer";
+
+  /** Tags on a draft card: [{ text, urgent }], the unsafe-answer priority first. */
+  function kbDraftTags(entry) {
+    const tags = [];
+    if (entry.priority) tags.push({ text: KB_PRIORITY_LABEL, urgent: true });
+    if (entry.supersedes_id) tags.push({ text: "Edit", urgent: false });
+    else if (entry.origin === "proposed_from_review") tags.push({ text: "Proposed", urgent: false });
+    return tags;
+  }
+
+  /** Drafts in display order: priority first, otherwise as the API sent them. */
+  function kbSortDrafts(drafts) {
+    return drafts.map((d, i) => [d, i])
+      .sort(([a, i], [b, j]) => (Number(Boolean(b.priority)) - Number(Boolean(a.priority))) || i - j)
+      .map(([d]) => d);
+  }
+
   return {
     $, UUID, say, init, session, api, enableAlerts, disableAlerts, listen, guarded, clock, messageId,
     dayLabel, withDays, renderWithDays, VERDICTS, needsNote, reviewQuery, reviewTags,
+    kbApproveProblem, kbDraftOrigin, kbDraftTags, kbSortDrafts, KB_PRIORITY_LABEL,
     get sb() { return sb; },
     get config() { return config; },
   };

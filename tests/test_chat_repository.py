@@ -43,7 +43,7 @@ from app.db.models import (
 )
 from app.db.session import make_engine
 from app.services.chat import ParsedReading
-from scripts.kb_seed import KB_SEED, SEED_PREFIX, seed_kb
+from scripts.kb_seed import KB_SEED, SEED_PREFIX, KbSeedEntry, seed_kb
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_DB_TESTS") != "1", reason="set RUN_DB_TESTS=1 to hit Supabase"
@@ -225,6 +225,11 @@ def test_kb_seed_is_approved_versioned_and_idempotent(factory: Callable[[], Sess
         first = seed_kb(session, approver_id=doctor, now=now)
         second = seed_kb(session, approver_id=doctor, now=now)
         assert second.inserted == 0 and second.kb_version is None
+        # Every seed key now has an approved row; a re-seed retires nothing and keeps
+        # whatever practitioners own (the live database may already hold such edits).
+        assert second.retired == [] and first.retired == []
+        assert second.kept == first.kept
+        assert second.unchanged + len([k for k in second.kept if k in _seed_keys()]) == len(KB_SEED)
         rows = list(
             session.scalars(
                 select(KbEntry).where(
@@ -239,6 +244,100 @@ def test_kb_seed_is_approved_versioned_and_idempotent(factory: Callable[[], Sess
         assert len(store.approved_kb_entries()) >= len(KB_SEED)
         if first.inserted == len(KB_SEED):  # a fresh database: this run approved them all
             assert all(r.approved_by == doctor for r in rows)
+
+
+def _seed_keys() -> set[str]:
+    return {SEED_PREFIX + e.key for e in KB_SEED}
+
+
+def _test_seed(key: str, body: str = "seed text") -> KbSeedEntry:
+    return KbSeedEntry(
+        key=key,
+        title="What a test entry says",
+        body=f"{body}: " + "plain-language text a patient reads, long enough for the seed. " * 2,
+        source="ADA Standards of Care in Diabetes-2026",
+    )
+
+
+def test_practitioner_approved_edit_survives_a_reseed(
+    factory: Callable[[], Session], caplog: pytest.LogCaptureFixture
+) -> None:
+    from app.db.kb_repository import approve_draft, start_edit, update_draft  # noqa: PLC0415
+
+    now = datetime.now(UTC)
+    key = f"kb-seed-test-{uuid.uuid4().hex[:10]}"
+    entry_key = SEED_PREFIX + key
+    entries = (_test_seed(key),)
+    with factory() as session:
+        team = _practitioner(session)
+        doctor = _practitioner(session)
+        assert seed_kb(session, approver_id=team, now=now, entries=entries).inserted == 1
+        seeded = session.scalar(
+            select(KbEntry).where(KbEntry.entry_key == entry_key, KbEntry.status == "approved")
+        )
+        assert seeded is not None
+
+        # A practitioner edits the entry on the Knowledge base tab and approves it.
+        draft, _ = start_edit(session, seeded.id, doctor)
+        update_draft(
+            session,
+            draft.id,
+            doctor,
+            title="What a test entry says",
+            body="The practitioner's own wording.",
+            source_citation="Clinic protocol 2026",
+        )
+        mine = approve_draft(session, draft.id, doctor)
+
+        def approved_now() -> list[KbEntry]:
+            return list(
+                session.scalars(
+                    select(KbEntry).where(
+                        KbEntry.entry_key == entry_key, KbEntry.status == "approved"
+                    )
+                )
+            )
+
+        # Re-seeding keeps it: nothing inserted, nothing retired, reported as kept.
+        again = seed_kb(session, approver_id=team, now=now, entries=entries)
+        # (The real seed rows are not in this one-entry seed, so they are kept too.)
+        assert (again.inserted, again.kb_version, again.retired) == (0, None, [])
+        assert entry_key in again.kept and again.unchanged == 0
+        (current,) = approved_now()
+        assert current.id == mine.id and current.approved_by == doctor
+        assert current.body == "The practitioner's own wording."
+
+        # A key dropped from the seed is not retired either.
+        dropped = seed_kb(session, approver_id=team, now=now, entries=())
+        assert entry_key in dropped.kept and dropped.retired == []
+        assert [r.id for r in approved_now()] == [mine.id]
+
+        # Only an explicit overwrite replaces it, after warning which entry it retires.
+        with caplog.at_level("WARNING", logger="scripts.kb_seed"):
+            forced = seed_kb(session, approver_id=team, now=now, entries=entries, overwrite=True)
+        assert entry_key in forced.retired and forced.inserted == 1 and forced.kept == []
+        assert entry_key in caplog.text and "--overwrite-seed: retiring" in caplog.text
+        (replaced,) = approved_now()
+        assert replaced.approved_by == team and replaced.supersedes_id == mine.id
+        assert replaced.body == entries[0].body
+        old = session.get(KbEntry, mine.id)
+        assert old is not None and old.status == "retired"
+        assert old.body == "The practitioner's own wording."  # retired, never edited
+
+
+def test_unchanged_seed_entry_is_reported_unchanged_not_kept(
+    factory: Callable[[], Session],
+) -> None:
+    now = datetime.now(UTC)
+    entries = (_test_seed(f"kb-seed-test-{uuid.uuid4().hex[:10]}"),)
+    with factory() as session:
+        team = _practitioner(session)
+        seed_kb(session, approver_id=team, now=now, entries=entries)
+        entry_key = SEED_PREFIX + entries[0].key
+        again = seed_kb(session, approver_id=team, now=now, entries=entries, overwrite=True)
+        # Identical text is never replaced, even with overwrite.
+        assert (again.inserted, again.unchanged) == (0, 1)
+        assert entry_key not in again.retired and entry_key not in again.kept
 
 
 def _auth_login(session: Session) -> tuple[uuid.UUID, str]:
