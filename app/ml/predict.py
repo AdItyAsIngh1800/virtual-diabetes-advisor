@@ -6,9 +6,11 @@ Usage::
     assessment = model.assess(profile)  # profile is a validated RiskProfile
     assessment.tier                     # "low" | "moderate" | "high"
 
-The risk tier feeds the threshold engine (R2): a higher tier tightens a user's
-personal glucose limits within clinically safe bounds. It is a screening signal from
-survey answers, not a diagnosis.
+The model estimates the chance that someone has diabetes from BRFSS 2015 survey answers
+(self-reported, US, 2015). It does NOT predict glucose levels, is not real-time and is
+not a diagnosis. At the chosen threshold it favours recall over precision (about 0.88 vs
+0.28 on the held-out test set), so most people it flags do not have diabetes. The tier is
+stored for audit and shown as information only; it never changes a glucose limit (R2).
 """
 
 from __future__ import annotations

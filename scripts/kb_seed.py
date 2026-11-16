@@ -291,7 +291,8 @@ KB_SEED: Final[tuple[KbSeedEntry, ...]] = (
         body=(
             "You can type or say a glucose reading with its timing and the app compares it "
             "with your personal limits. You can ask questions about diabetes, and the app "
-            "answers only from information approved by your care team. You can type 'talk "
+            "answers only from a short list of diabetes basics with named sources, which a "
+            "practitioner has not yet reviewed. You can type 'talk "
             "to a doctor' to reach a practitioner. This chat is not for emergencies: for "
             "chest pain, trouble breathing, confusion or fainting, call 112."
         ),

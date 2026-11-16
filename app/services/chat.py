@@ -123,6 +123,12 @@ MAX_CONTEXT_ENTRIES: Final = 3
 _SECOND_HIT_RATIO: Final = 0.6
 # Replies are read on a phone and maybe spoken: keep them short.
 MAX_REPLY_CHARS: Final = 1200
+# Appended to every knowledge-base answer. "Sourced" is not "verified": the entries cite
+# ADA guidance but have not been reviewed by a practising clinician.
+KB_REVIEW_NOTICE: Final = (
+    "\nStudent prototype: this is general information from a short list of sourced "
+    "diabetes basics, not yet reviewed by a practitioner and not personal medical advice."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1508,6 +1514,9 @@ class ChatEngine:
         source = f"\n\nSource: {top.title}"
         if top.source_citation:
             source += f" ({top.source_citation})"
+        # Shown on screen only (the voice reply stops at "Source:"). Keeps the answer
+        # honest: it is sourced, but no practitioner has reviewed this text yet.
+        source += KB_REVIEW_NOTICE
         if len(answer) > MAX_REPLY_CHARS:
             answer = answer[: MAX_REPLY_CHARS - 1].rsplit(" ", 1)[0] + "…"
         return ChatOutcome(

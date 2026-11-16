@@ -117,3 +117,17 @@ def test_no_entries_means_no_call() -> None:
     fake = FakeMessages(reply("x"))
     assert rephraser(fake).rephrase("q", []) is None
     assert fake.kwargs == {}
+
+
+def test_rephrasing_is_off_even_with_an_api_key() -> None:
+    from app.api.chat import get_rephraser  # noqa: PLC0415
+
+    assert get_rephraser(settings(anthropic_api_key="sk-test")) is None
+
+
+def test_rephrasing_needs_the_explicit_flag_and_a_key() -> None:
+    from app.api.chat import get_rephraser  # noqa: PLC0415
+
+    on = settings(anthropic_api_key="sk-test", chat_llm_rephrase_enabled=True)
+    assert isinstance(get_rephraser(on), ClaudeRephraser)
+    assert get_rephraser(settings(chat_llm_rephrase_enabled=True)) is None

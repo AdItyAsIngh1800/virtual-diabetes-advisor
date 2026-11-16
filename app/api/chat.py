@@ -184,8 +184,11 @@ def get_rephraser(settings: Annotated[Settings, Depends(get_settings)]) -> Rephr
         settings: Application settings.
 
     Returns:
-        A rephraser when ``ANTHROPIC_API_KEY`` is set, else ``None``.
+        A rephraser only when ``CHAT_LLM_REPHRASE_ENABLED`` is true and
+        ``ANTHROPIC_API_KEY`` is set, else ``None`` (knowledge-base text as written).
     """
+    if not settings.chat_llm_rephrase_enabled:
+        return None
     return build_rephraser(settings)
 
 

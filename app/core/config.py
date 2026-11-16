@@ -139,6 +139,10 @@ class Settings(BaseSettings):
     # Claude model that may rephrase a retrieved KB answer (never used for red flags,
     # readings or anything outside the retrieved entries).
     chat_llm_model: str = Field(default="claude-opus-5-5", min_length=1)
+    # Rephrasing can change the meaning of medical text, so it is OFF by default and the
+    # chat returns the knowledge-base wording as written. Having an API key is not enough:
+    # set CHAT_LLM_REPHRASE_ENABLED=true to turn it on.
+    chat_llm_rephrase_enabled: bool = False
 
     # --- Help chat (R4) -----------------------------------------------------------
     # Minimum TF-IDF cosine similarity for a KB entry to answer a question. Below it the

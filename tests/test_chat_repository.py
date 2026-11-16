@@ -237,7 +237,7 @@ def test_kb_seed_is_approved_versioned_and_idempotent(factory: Callable[[], Sess
         store = SqlChatStore(session, settings)
         assert store.kb_version().kb_version is not None
         assert len(store.approved_kb_entries()) >= len(KB_SEED)
-        if first.inserted:  # a fresh database: this run approved them
+        if first.inserted == len(KB_SEED):  # a fresh database: this run approved them all
             assert all(r.approved_by == doctor for r in rows)
 
 

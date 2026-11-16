@@ -554,6 +554,7 @@ def test_no_relay_before_claim_the_chat_keeps_answering() -> None:
     # Answered from the KB (and rephrased), not relayed.
     assert spy.calls == ["what is the 15-15 rule"]
     assert "Source: Treating low glucose (hypoglycaemia): the 15-15 rule" in out.reply_text
+    assert "not yet reviewed by a practitioner" in out.reply_text  # sourced, not "verified"
     assert doc("rule-15-15").id in out.kb_ids_used
     assert out.intent == "question" and not out.relayed
     # Attached to the open handoff so the practitioner sees it (refresh, no push).

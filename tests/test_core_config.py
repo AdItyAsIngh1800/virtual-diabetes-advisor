@@ -28,6 +28,7 @@ OPTIONAL_ENV = (
     "PUBLIC_BASE_URL",
     "ANTHROPIC_API_KEY",
     "CHAT_LLM_MODEL",
+    "CHAT_LLM_REPHRASE_ENABLED",
     "CHAT_KB_MIN_SIMILARITY",
     "CHAT_AUDIO_MAX_BYTES",
     "PRE_BREACH_BAND",
@@ -75,6 +76,7 @@ def test_defaults(env: pytest.MonkeyPatch) -> None:
     assert s.advisory_max_age_minutes == 60
     assert (s.vapid_public_key, s.vapid_private_key, s.vapid_subject) == (None, None, None)
     assert s.supabase_anon_key is None
+    assert s.chat_llm_rephrase_enabled is False  # rephrasing is opt-in
 
 
 def test_defaults_can_be_overridden(env: pytest.MonkeyPatch) -> None:
