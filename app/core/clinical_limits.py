@@ -68,12 +68,13 @@ HYPO_LEVEL_2_MG_DL = 54.0
 # (e.g. for hypoglycaemia-prone users) - any higher and it would fire on in-target
 # readings.
 PREPRANDIAL_TARGET_LOW_DM_MG_DL = 80.0
-# ADA-6 Rec 6.15: glucose (about 15 g) is the preferred treatment for a conscious
-# person with hypoglycaemia; recheck 15 minutes after treatment and repeat it if
-# glucose is still low. Used by the fixed chat reply for a < 54 mg/dL reading (R4).
+# ADA-6 Section 6 text with Rec 6.15: "For most individuals, 15 g carbohydrates should
+# be ingested"; Rec 6.15: "Glucose is the preferred treatment for the conscious
+# individual with glucose <70 mg/dL". Used by the fixed chat reply for a < 54 mg/dL
+# reading and the 15-15 KB entry (R4).
 HYPO_TREATMENT_CARB_G = 15
-# ADA-6 Rec 6.15: recheck glucose 15 minutes after treating a low (the second "15"
-# of the 15-15 rule), and repeat the treatment if it is still low.
+# ADA-6 Rec 6.15: "Fifteen minutes after initial treatment, repeat the treatment if
+# hypoglycemia persists" (the second "15" of the 15-15 rule).
 HYPO_RECHECK_MINUTES = 15
 
 # ---------------------------------------------------------------------------

@@ -243,29 +243,42 @@ def test_260_alone_is_urgent_but_260_and_vomiting_is_emergency() -> None:
 def test_very_high_alone_gives_ketone_and_care_team_guidance() -> None:
     reply = ask(FakeStore(), "260").reply_text
     assert reply.startswith("Your glucose of 260 mg/dL is very high.")
-    # ADA-6 Section 6 crisis text after Rec 6.22: ketones with symptoms or likely
-    # triggers, especially above 200 mg/dL; then the crisis signs.
-    assert "Check your ketones now" in reply
-    assert "above 200 mg/dL" in reply and "likely trigger" in reply
+    # ADA-6 Section 6 text after Rec 6.22: ketones with symptoms or likely triggers,
+    # especially above 200 mg/dL; then that text's crisis signs.
+    assert "Check your ketones" in reply
+    assert "symptoms or a likely trigger" in reply and "above 200 mg/dL" in reply
     assert "care team today" in reply
-    assert f"call {EMERGENCY_NUMBER}) if you have {HYPERGLYCAEMIC_CRISIS_SIGNS}." in reply
-    for sign in ("vomiting", "nausea", "stomach pain", "fast or deep breathing", "drowsiness"):
-        assert sign in HYPERGLYCAEMIC_CRISIS_SIGNS
+    assert f"call {EMERGENCY_NUMBER}) if you notice signs of a crisis: " in reply
+    assert reply.count(HYPERGLYCAEMIC_CRISIS_SIGNS) == 1
 
 
-def test_high_with_symptoms_lists_the_crisis_signs() -> None:
+def test_crisis_signs_are_the_ada_section_6_list() -> None:
+    assert HYPERGLYCAEMIC_CRISIS_SIGNS == (
+        "passing a lot of urine, intense thirst, weight loss, vomiting, dehydration, "
+        "confusion or drowsiness"
+    )
+
+
+def test_high_with_symptoms_names_the_emergency_symptoms() -> None:
     reply = ask(FakeStore(), "260 and vomiting").reply_text
-    assert f"260 mg/dL with {HYPERGLYCAEMIC_CRISIS_SIGNS}" in reply
+    assert "260 mg/dL with symptoms like vomiting, confusion, drowsiness" in reply
+    assert "ketoacidosis" in reply
+
+
+def test_dehydration_with_a_very_high_reading_is_an_emergency() -> None:
+    assert detect_red_flag("sugar 320 and I am dehydrated") == "high_with_symptoms"
 
 
 def test_very_low_gives_ada_treatment_then_when_to_call_112() -> None:
     reply = ask(FakeStore(), "fasting 45").reply_text
     assert reply.startswith("Your glucose of 45 mg/dL is very low.")
-    # ADA-6 Rec 6.15: about 15 g, glucose preferred, recheck in 15 min, repeat.
-    assert "about 15 grams of fast-acting sugar" in reply
+    # ADA-6 Rec 6.15 + Section 6 text: 15 g, glucose preferred, recheck at 15 min,
+    # repeat; meal or snack once above 70 (ADA 15-15 rule page).
+    assert "treat it now with 15 grams of fast-acting carbohydrate." in reply
     assert "Glucose tablets or gel are best" in reply
     assert "Check again in 15 minutes and repeat if it is still low." in reply
-    assert "15 to 20" not in reply and "meal or snack" not in reply
+    assert "Once you are back above 70 mg/dL, eat a meal or snack." in reply
+    assert "15 to 20" not in reply and "about 15" not in reply
     assert f"Call {EMERGENCY_NUMBER} if you cannot treat it" in reply
     assert "confused" in reply
 
@@ -637,14 +650,18 @@ def test_every_seed_entry_has_a_source() -> None:
     rule = next(e for e in KB_SEED if e.key == "rule-15-15")
     assert "ADA" in rule.source and "15-15" in rule.source
     assert "Recommendation 6.15" in rule.source
+    assert "Glucose is the preferred treatment for the conscious individual" in rule.source
+    assert "For most individuals, 15 g carbohydrates should be ingested" in rule.source
+    assert "'The 15-15 Rule', diabetes.org" in rule.source
 
 
 def test_15_15_entry_matches_ada_rec_6_15() -> None:
     body = next(e for e in KB_SEED if e.key == "rule-15-15").body
-    assert "about 15 grams of fast-acting sugar" in body
+    assert "have 15 grams of fast-acting carbohydrate" in body
     assert "Glucose tablets or gel are best" in body
     assert "Check again after 15 minutes" in body and "repeat" in body
-    assert "15 to 20" not in body and "meal or snack" not in body
+    assert "Once you are back above 70 mg/dL, eat a meal or snack" in body
+    assert "15 to 20" not in body and "about 15" not in body
 
 
 def test_healthy_eating_entry_covers_indian_foods_with_a_source() -> None:
