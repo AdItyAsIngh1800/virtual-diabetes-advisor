@@ -197,9 +197,44 @@ window.DA = (() => {
     return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   }
 
+  // --- Answer review (R5, practitioner page) ---------------------------------------
+  const VERDICTS = Object.freeze({
+    correct: "Correct", incorrect: "Incorrect", unsafe: "Unsafe", needs_kb_update: "Needs KB update",
+  });
+  // Mirrors NOTE_REQUIRED in app/db/audit_repository.py (the API answers 422 without one).
+  const NOTE_REQUIRED = Object.freeze(["incorrect", "unsafe", "needs_kb_update"]);
+
+  /** True when a review with this verdict must explain itself in a note. */
+  function needsNote(verdict) {
+    return NOTE_REQUIRED.includes(verdict);
+  }
+
+  /** URL of one page of the review list (cursor: next_cursor of the previous page). */
+  function reviewQuery(filter, cursor = null, limit = 25) {
+    let url = `/api/practitioner/turns?filter=${encodeURIComponent(filter)}&limit=${limit}`;
+    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+    return url;
+  }
+
+  /** Tags shown on a review card: [{ text, urgent }], current verdict last. */
+  function reviewTags(turn) {
+    const tags = [];
+    if (turn.escalated) tags.push({ text: "Escalated", urgent: true });
+    if (turn.unanswered) tags.push({ text: "Didn't know", urgent: false });
+    if (turn.low_confidence && turn.retrieval_confidence !== null) {
+      tags.push({ text: `Low confidence ${turn.retrieval_confidence.toFixed(2)}`, urgent: false });
+    }
+    if (turn.spoken) tags.push({ text: "Voice", urgent: false });
+    const review = turn.current_review;
+    tags.push(review
+      ? { text: VERDICTS[review.verdict] || review.verdict, urgent: review.verdict !== "correct" }
+      : { text: "Unreviewed", urgent: false });
+    return tags;
+  }
+
   return {
     $, UUID, say, init, session, api, enableAlerts, disableAlerts, listen, guarded, clock, messageId,
-    dayLabel, withDays, renderWithDays,
+    dayLabel, withDays, renderWithDays, VERDICTS, needsNote, reviewQuery, reviewTags,
     get sb() { return sb; },
     get config() { return config; },
   };

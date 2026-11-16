@@ -79,6 +79,8 @@ class Settings(BaseSettings):
         chat_kb_min_similarity: Minimum TF-IDF similarity for a KB entry to answer a
             chat question (below it: "I don't know" + practitioner connect).
         chat_audio_max_bytes: Largest accepted voice-message upload.
+        review_low_confidence_below: KB answers whose retrieval similarity is below
+            this are listed under the "low confidence" review filter (R5).
         pre_breach_band: Fraction of a limit that defines the pre-breach band (R3).
         advisory_cooldown_hours: Minimum hours between repeat advisories (R3 de-dup).
         admin_api_key: Shared secret for ``POST /admin/batch-run`` (sent in the
@@ -157,6 +159,14 @@ class Settings(BaseSettings):
     # Voice messages: ~60 s of MediaRecorder opus/aac is 250-500 KB; 2 MB leaves room for
     # browsers that record at higher bitrates while stopping uploads that are minutes long.
     chat_audio_max_bytes: int = Field(default=2 * 1024 * 1024, ge=64 * 1024, le=10 * 1024 * 1024)
+
+    # --- Answer review (R5) -------------------------------------------------------
+    # The "low confidence" review filter lists KB answers whose similarity is below this.
+    # 0.21 from retrieval_eval.txt (scripts/eval_retrieval.py, Nov 2026): answer precision
+    # is 1.000 at 0.21 on the tuning set and from 0.17 on the held-out set, so every wrong
+    # KB answer seen so far scored in [chat_kb_min_similarity, 0.21). Those are the answers
+    # most worth a practitioner's time. Display filter only: it never changes a reply.
+    review_low_confidence_below: float = Field(default=0.21, gt=0.0, lt=1.0)
 
     # --- Threshold engine / advisory behaviour ---------------------------------
     # R3: pre-breach band. 0.05 => warn when a reading is within 5% of a limit

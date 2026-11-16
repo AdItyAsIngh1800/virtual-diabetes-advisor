@@ -27,7 +27,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
-from app.api import admin, advisories, chat, patient_app, push
+from app.api import admin, advisories, audit, chat, patient_app, push
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.core.logging import configure_logging
@@ -178,8 +178,8 @@ def create_app() -> FastAPI:
     """Build the FastAPI application.
 
     Returns:
-        The app with the admin, push, advisory, chat/practitioner and patient-app
-        routes mounted.
+        The app with the admin, push, advisory, chat/practitioner, answer-review
+        and patient-app routes mounted.
     """
     app = FastAPI(title="Virtual Diabetes Advisor", version="0.1.0", lifespan=lifespan)
     app.add_exception_handler(OperationalError, database_unavailable)
@@ -188,6 +188,7 @@ def create_app() -> FastAPI:
     app.include_router(push.router)
     app.include_router(advisories.router)
     app.include_router(chat.router)
+    app.include_router(audit.router)
     # Before mount_patient_app: the /app static mount would otherwise swallow
     # /app/advisory/{id}.
     app.include_router(patient_app.router)

@@ -1,24 +1,31 @@
 """Tests for the pure helpers in the web app's ``common.js`` (run with Node).
 
 Day separators in both chat views (patient ``/app`` and practitioner page): "Today",
-"Yesterday", "16 Nov", grouped by *local* calendar day. Skipped where Node is missing.
+"Yesterday", "16 Nov", grouped by *local* calendar day. The practitioner page's Review
+tab (R5): verdict labels, the note rule, list URLs and card tags, kept in step with the
+API. Node tests are skipped where Node is missing; the static checks always run.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Final
+from typing import Final, get_args
 
 import pytest
 
-COMMON_JS: Final = Path(__file__).resolve().parents[1] / "app" / "static" / "patient" / "common.js"
+from app.db.audit_repository import NOTE_REQUIRED, ReviewFilter
+from app.db.models import ReviewVerdict
+
+STATIC: Final = Path(__file__).resolve().parents[1] / "app" / "static" / "patient"
+COMMON_JS: Final = STATIC / "common.js"
 NODE: Final = shutil.which("node")
 
-pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
+needs_node = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
 # Loads common.js the way a browser would (it only needs `window` to attach to) and
 # evaluates one expression against window.DA.
@@ -59,6 +66,7 @@ def run_js(expression: str) -> object:
 NOW_JS: Final = 'new Date("2026-11-16T20:00:00+05:30")'
 
 
+@needs_node
 @pytest.mark.parametrize(
     ("iso", "label"),
     [
@@ -75,6 +83,7 @@ def test_day_label(iso: str, label: str) -> None:
     assert run_js(f'DA.dayLabel("{iso}", {NOW_JS})') == label
 
 
+@needs_node
 def test_with_days_inserts_one_separator_per_local_day() -> None:
     messages = [
         {"id": "a", "created_at": "2026-11-15T09:00:00+05:30"},  # the 15 Nov "Hello"
@@ -93,5 +102,84 @@ def test_with_days_inserts_one_separator_per_local_day() -> None:
     ]
 
 
+@needs_node
 def test_with_days_on_an_empty_conversation() -> None:
     assert run_js(f"DA.withDays([], {NOW_JS})") == []
+
+
+# --- Review tab (R5) -------------------------------------------------------------------
+
+TURN: Final = {
+    "escalated": False,
+    "unanswered": False,
+    "low_confidence": False,
+    "retrieval_confidence": 0.42,
+    "spoken": False,
+    "current_review": None,
+}
+
+
+@needs_node
+def test_verdicts_match_the_api() -> None:
+    labels = run_js("DA.VERDICTS")
+    assert isinstance(labels, dict)
+    assert list(labels) == list(get_args(ReviewVerdict))
+
+
+@needs_node
+@pytest.mark.parametrize("verdict", get_args(ReviewVerdict))
+def test_needs_note_matches_the_api(verdict: str) -> None:
+    # The same rule as NOTE_REQUIRED, so the page never sends a review the API refuses.
+    assert run_js(f'DA.needsNote("{verdict}")') is (verdict in NOTE_REQUIRED)
+
+
+@needs_node
+def test_review_query_builds_the_list_url() -> None:
+    assert run_js('DA.reviewQuery("unreviewed")') == (
+        "/api/practitioner/turns?filter=unreviewed&limit=25"
+    )
+    # URL-safe base64 cursors can end in "=" padding, which must be encoded.
+    assert run_js('DA.reviewQuery("all", "eyJh=", 10)') == (
+        "/api/practitioner/turns?filter=all&limit=10&cursor=eyJh%3D"
+    )
+
+
+def test_every_filter_button_is_a_filter_the_api_accepts() -> None:
+    html = (STATIC / "practitioner.html").read_text(encoding="utf-8")
+    buttons = re.findall(r'data-filter="([a-z_]+)"', html)
+    assert sorted(buttons) == sorted(get_args(ReviewFilter))
+
+
+def test_every_element_the_practitioner_script_uses_exists() -> None:
+    html = (STATIC / "practitioner.html").read_text(encoding="utf-8")
+    script = (STATIC / "practitioner.js").read_text(encoding="utf-8")
+    ids = set(re.findall(r'\bid="([\w-]+)"', html))
+    used = set(re.findall(r'\$\("([\w-]+)"\)', script))
+    used |= {i for pair in re.findall(r'\["(tab-\w+)", "(\w+)"\]', script) for i in pair}
+    assert {"tabs", "tab-review", "review", "turns", "more"} <= used
+    assert used <= ids, f"missing in practitioner.html: {sorted(used - ids)}"
+
+
+@needs_node
+@pytest.mark.parametrize(
+    ("changes", "tags"),
+    [
+        ({}, [("Unreviewed", False)]),
+        (
+            {"escalated": True, "spoken": True},
+            [("Escalated", True), ("Voice", False), ("Unreviewed", False)],
+        ),
+        ({"unanswered": True}, [("Didn't know", False), ("Unreviewed", False)]),
+        (
+            {"low_confidence": True, "retrieval_confidence": 0.184},
+            [("Low confidence 0.18", False), ("Unreviewed", False)],
+        ),
+        ({"current_review": {"verdict": "correct"}}, [("Correct", False)]),
+        ({"current_review": {"verdict": "unsafe"}}, [("Unsafe", True)]),
+        ({"current_review": {"verdict": "needs_kb_update"}}, [("Needs KB update", True)]),
+    ],
+)
+def test_review_tags(changes: dict[str, object], tags: list[tuple[str, bool]]) -> None:
+    turn = json.dumps({**TURN, **changes})
+    out = run_js(f"DA.reviewTags({turn})")
+    assert out == [{"text": text, "urgent": urgent} for text, urgent in tags]

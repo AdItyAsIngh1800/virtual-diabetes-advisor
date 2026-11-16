@@ -55,13 +55,35 @@
     .notice { align-self: center; font-size: .8rem; font-style: italic; color: var(--muted); text-align: center; }
     #claim-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: 10px; background: var(--pt); margin-bottom: .5rem; }
     #claim-bar p { margin: 0; flex: 1 1 14rem; }
+    /* Tabs: Handoffs | Review (R5). */
+    .tabs { display: flex; gap: .25rem; margin-top: 1rem; border-bottom: 1px solid var(--line); }
+    .tabs button { margin: 0; background: transparent; color: var(--muted); border-radius: 8px 8px 0 0;
+                   border-bottom: 3px solid transparent; }
+    .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+    .filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .filters button { margin: 0; min-height: 36px; padding: .3rem .8rem; font-size: .9rem; border-radius: 999px;
+                      background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .filters button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    #turns { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
+    .turn .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; margin-bottom: .5rem; }
+    .turn .name { font-weight: 700; }
+    .turn h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: .6rem 0 .2rem; }
+    .turn .text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; padding: .5rem .7rem; border-radius: 10px; }
+    .turn .question { background: var(--pt); }
+    .turn .answer { background: var(--bot); border: 1px dashed var(--line); font-size: .92rem; }
+    .turn .sources { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
+    .turn .verdict-now { font-size: .9rem; margin: .6rem 0 0; }
+    .turn .verdicts { display: flex; flex-wrap: wrap; }
+    .turn .verdicts button { flex: 1 1 9rem; }
+    .turn button.unsafe { background: var(--urgent); }
+    .turn .error { color: var(--err); font-weight: 600; }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
 <main>
   <h1>Practitioner inbox</h1>
-  <p class="muted">Patients who asked for help. You only see patients assigned to you.</p>
+  <p class="muted">Patients who asked for help, and the advisor's answers to review. You only see patients assigned to you.</p>
 
   <section id="signed-out" hidden>
     <form id="login-form">
@@ -85,7 +107,12 @@
     <p class="muted">Enable alerts to get a notification when a patient asks for help. On iPhone, add this page to the Home Screen first.</p>
   </section>
 
-  <div class="layout" id="inbox" hidden>
+  <div class="tabs" role="tablist" aria-label="Practitioner views" id="tabs" hidden>
+    <button type="button" role="tab" id="tab-inbox" aria-controls="inbox" aria-selected="true">Handoffs</button>
+    <button type="button" role="tab" id="tab-review" aria-controls="review" aria-selected="false" tabindex="-1">Review</button>
+  </div>
+
+  <div class="layout" id="inbox" role="tabpanel" aria-labelledby="tab-inbox" hidden>
     <div class="panel">
       <h2>Handoffs</h2>
       <ul id="list" aria-label="Handoffs"></ul>
@@ -109,6 +136,23 @@
       </form>
       <p id="resolved-note" class="muted" hidden>This handoff is resolved.</p>
     </div>
+  </div>
+
+  <div id="review" role="tabpanel" aria-labelledby="tab-review" hidden>
+    <div class="panel">
+      <h2>Review advisor answers</h2>
+      <p class="muted">What the automatic advisor told your patients. Mark each answer; a note is required unless it is correct. Reviews are never edited: a new review becomes the current verdict and the history is kept.</p>
+      <div class="filters" role="group" aria-label="Show">
+        <button type="button" data-filter="unreviewed" aria-pressed="true">Unreviewed</button>
+        <button type="button" data-filter="escalated" aria-pressed="false">Escalated</button>
+        <button type="button" data-filter="low_confidence" aria-pressed="false">Low confidence</button>
+        <button type="button" data-filter="unanswered" aria-pressed="false">"I don't know"</button>
+        <button type="button" data-filter="all" aria-pressed="false">All</button>
+      </div>
+    </div>
+    <ul id="turns" aria-label="Advisor answers" aria-live="polite"></ul>
+    <p id="turns-empty" class="panel muted" hidden>Nothing to review under this filter.</p>
+    <button type="button" id="more" class="secondary" hidden>Load more</button>
   </div>
 
   <p id="status" role="status" aria-live="polite"></p>

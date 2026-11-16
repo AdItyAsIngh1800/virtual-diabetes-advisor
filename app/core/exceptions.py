@@ -35,6 +35,18 @@ class AuditLogImmutableError(DiabetesAdvisorError):
     """Raised when code tries to update or delete an append-only audit row (R5)."""
 
 
+class TurnNotReviewableError(DiabetesAdvisorError):
+    """Raised when a review names a turn the reviewer may not review (R5).
+
+    The turn does not exist, is not an advisor reply, or belongs to a patient the
+    reviewer cannot see. The API answers 404 in every case, so ids cannot be probed.
+    """
+
+
+class ReviewNoteRequiredError(DiabetesAdvisorError):
+    """Raised when a review verdict that needs an explanation has no note (R5)."""
+
+
 class BatchAlreadyRunningError(DiabetesAdvisorError):
     """Raised when a batch job starts while another run of the same job is in progress.
 

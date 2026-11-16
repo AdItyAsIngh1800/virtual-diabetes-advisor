@@ -2,9 +2,11 @@
 // conversation, a reply box, a resolve button and "Enable alerts" (Web Push for new
 // handoffs). New handoffs and patient messages arrive on the private Realtime topic
 // handoffs:<auth uid>; the API re-checks the assignment on every call.
+// The Review tab (R5) lists the advisor's answers to assigned patients and records a
+// verdict on each (append-only: a new review becomes the current verdict).
 "use strict";
 
-const { $, say, guarded, clock } = window.DA;
+const { $, say, guarded, clock, VERDICTS } = window.DA;
 const POLL_MS = 20_000;
 const TRIGGERS = { red_flag: "Red flag", practitioner_request: "Asked for help", breach_escalation: "Breach" };
 const WHO = { patient: "Patient", assistant: "Advisor (automatic)", practitioner: "You" };
@@ -14,6 +16,12 @@ let myName = null;
 const STATUS = { open: "Waiting to be claimed", assigned: "Claimed", resolved: "Resolved" };
 let channel = null;
 let pollTimer = null;
+let activeTab = "inbox";
+let reviewFilter = "unreviewed";
+let reviewCursor = null;
+let reviewLoaded = false;
+let reviewRequest = 0; // ignore a slow page that arrives after the filter changed
+const TABS = [["tab-inbox", "inbox"], ["tab-review", "review"]];
 
 function bubble(message) {
   const el = document.createElement("div");
@@ -145,6 +153,142 @@ async function resolveSelected() {
   await select(selected);
 }
 
+// --- Review tab (R5) -------------------------------------------------------------
+
+function el(tag, className = "", text = null) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== null) node.textContent = text;
+  return node;
+}
+
+function showTab(name) {
+  activeTab = name;
+  for (const [tabId, panelId] of TABS) {
+    const on = panelId === name;
+    $(tabId).setAttribute("aria-selected", String(on));
+    $(tabId).tabIndex = on ? 0 : -1;
+    $(panelId).hidden = !on;
+  }
+  if (name === "review" && !reviewLoaded) loadTurns(true).catch((err) => say(err.message, true));
+}
+
+function sourceLine(s) {
+  const version = s.kb_version ? `, KB v${s.kb_version}` : "";
+  const citation = s.source_citation ? ` · ${s.source_citation}` : "";
+  return `${s.title} (${s.entry_key}${version})${citation}`;
+}
+
+function currentVerdict(turn) {
+  const r = turn.current_review;
+  if (!r) return null;
+  const when = new Date(r.created_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  const note = r.note ? `: "${r.note}"` : "";
+  const history = turn.review_count > 1 ? ` (${turn.review_count} reviews in total)` : "";
+  return `Current verdict: ${VERDICTS[r.verdict] || r.verdict} by ${r.reviewer_name || "a practitioner"}, ${when}${note}${history}`;
+}
+
+function turnCard(turn) {
+  const card = el("li", "panel turn");
+  const head = el("div", "head");
+  head.append(
+    el("span", "name", turn.patient_first_name || "Patient"),
+    el("span", "muted", new Date(turn.created_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })),
+  );
+  for (const tag of window.DA.reviewTags(turn)) head.append(el("span", `tag${tag.urgent ? " urgent" : ""}`, tag.text));
+  card.append(
+    head,
+    el("h3", "", turn.spoken ? "Patient said (voice)" : "Patient asked"),
+    el("p", "text question", turn.question || "(no text: the Talk to a doctor button)"),
+    el("h3", "", "Advisor answered"),
+    el("p", "text answer", turn.answer),
+    el("h3", "", "Source entry"),
+  );
+  if (turn.sources.length) {
+    const list = el("ul", "sources");
+    for (const s of turn.sources) list.append(el("li", "", sourceLine(s)));
+    card.append(list);
+  } else {
+    card.append(el("p", "muted", turn.unanswered
+      ? "None: no knowledge-base entry was close enough, so the advisor said it did not know."
+      : "None: a fixed rule answered (reading, red flag, dosing guard or greeting)."));
+  }
+  const similarity = turn.retrieval_confidence !== null ? ` · similarity ${turn.retrieval_confidence.toFixed(2)}` : "";
+  card.append(el("p", "muted", `${turn.intent || "other"} · ${turn.model || "unknown model"}${similarity}`));
+  const verdictText = currentVerdict(turn);
+  if (verdictText) card.append(el("p", "verdict-now", verdictText));
+
+  const noteId = `note-${turn.turn_id}`;
+  const label = el("label", "", "Note (required unless Correct: what is wrong, or what the knowledge base should say)");
+  label.htmlFor = noteId;
+  const note = el("textarea");
+  note.id = noteId;
+  note.rows = 2;
+  note.maxLength = 1000;
+  const status = el("p", "muted");
+  status.setAttribute("role", "status");
+  const buttons = el("div", "verdicts");
+  for (const [verdict, text] of Object.entries(VERDICTS)) {
+    const cls = verdict === "correct" ? "" : verdict === "unsafe" ? "unsafe" : "secondary";
+    const btn = el("button", cls, text);
+    btn.type = "button";
+    btn.addEventListener("click", () => { submitReview(turn, verdict, card, note, status); });
+    buttons.append(btn);
+  }
+  card.append(label, note, buttons, status);
+  return card;
+}
+
+async function submitReview(turn, verdict, card, noteBox, status) {
+  const note = noteBox.value.trim();
+  status.classList.remove("error");
+  if (window.DA.needsNote(verdict) && !note) {
+    status.textContent = `Add a note before marking this "${VERDICTS[verdict]}".`;
+    status.classList.add("error");
+    noteBox.focus();
+    return;
+  }
+  const buttons = card.querySelectorAll(".verdicts button");
+  for (const b of buttons) b.disabled = true;
+  try {
+    const review = await window.DA.api(`/api/practitioner/turns/${turn.turn_id}/review`, "POST", { verdict, note: note || null });
+    const updated = { ...turn, current_review: review, review_count: turn.review_count + 1 };
+    const fresh = turnCard(updated);
+    fresh.querySelector('[role="status"]').textContent = `Saved: ${VERDICTS[verdict]}.`;
+    card.replaceWith(fresh);
+  } catch (err) {
+    status.textContent = err.message || String(err);
+    status.classList.add("error");
+    for (const b of buttons) b.disabled = false;
+  }
+}
+
+async function loadTurns(reset) {
+  const request = reset ? ++reviewRequest : reviewRequest;
+  if (reset) reviewCursor = null;
+  $("more").disabled = true;
+  try {
+    const page = await window.DA.api(window.DA.reviewQuery(reviewFilter, reviewCursor));
+    if (request !== reviewRequest) return;
+    if (reset) $("turns").replaceChildren();
+    reviewLoaded = true;
+    for (const turn of page.items) $("turns").append(turnCard(turn));
+    reviewCursor = page.next_cursor;
+    $("more").hidden = !reviewCursor;
+    $("turns-empty").hidden = $("turns").children.length > 0;
+  } finally {
+    $("more").disabled = false;
+  }
+}
+
+function setFilter(button) {
+  reviewFilter = button.dataset.filter;
+  for (const b of document.querySelectorAll(".filters button")) b.setAttribute("aria-pressed", String(b === button));
+  return loadTurns(true);
+}
+
+// --- Page --------------------------------------------------------------------------
+
 async function render() {
   const session = await window.DA.session();
   if (channel) {
@@ -153,7 +297,11 @@ async function render() {
   }
   $("signed-out").hidden = Boolean(session);
   $("signed-in").hidden = !session;
+  $("tabs").hidden = true;
   $("inbox").hidden = true;
+  $("review").hidden = true;
+  $("turns").replaceChildren();
+  reviewLoaded = false;
   if (!session) return;
   $("who").textContent = session.user.email;
   const me = await window.DA.api("/api/me");
@@ -162,7 +310,8 @@ async function render() {
     return;
   }
   myName = me.name;
-  $("inbox").hidden = false;
+  $("tabs").hidden = false;
+  showTab(activeTab);
   channel = await window.DA.listen(`handoffs:${session.user.id}`, "handoff", () => { refresh().catch(() => {}); });
   await loadList();
   schedulePoll();
@@ -184,6 +333,15 @@ async function init() {
   $("reply-form").addEventListener("submit", guarded(sendReply));
   $("resolve").addEventListener("click", guarded(resolveSelected));
   $("claim").addEventListener("click", guarded(claimSelected));
+  for (const [tabId, panelId] of TABS) $(tabId).addEventListener("click", () => showTab(panelId));
+  $("tabs").addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const next = TABS.find(([, panelId]) => panelId !== activeTab);
+    showTab(next[1]);
+    $(next[0]).focus();
+  });
+  for (const b of document.querySelectorAll(".filters button")) b.addEventListener("click", guarded(() => setFilter(b)));
+  $("more").addEventListener("click", guarded(() => loadTurns(false)));
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && !$("inbox").hidden) refresh().catch(() => {});
   });
