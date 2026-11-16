@@ -482,8 +482,13 @@ def test_push_ttl_is_the_time_left_until_expiry() -> None:
 def test_run_dispatch_needs_vapid_and_skips_when_busy(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.exceptions import ConfigurationError  # noqa: PLC0415
 
+    # Explicit: module-level SETTINGS is built at import time, before conftest clears
+    # exported shell variables, so a shell that exports .env would supply real keys.
+    no_vapid = SETTINGS.model_copy(
+        update={"vapid_public_key": None, "vapid_private_key": None, "vapid_subject": None}
+    )
     with pytest.raises(ConfigurationError, match="VAPID"):
-        job.run_dispatch(settings=SETTINGS, session_factory=lambda: None)  # type: ignore[arg-type,return-value]
+        job.run_dispatch(settings=no_vapid, session_factory=lambda: None)  # type: ignore[arg-type,return-value]
     job._RUN_LOCK.acquire()
     try:
         assert job.run_dispatch(settings=SETTINGS, session_factory=lambda: None) is None  # type: ignore[arg-type,return-value]
