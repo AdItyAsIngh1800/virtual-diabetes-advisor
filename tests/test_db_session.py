@@ -7,6 +7,7 @@ this is exactly where the API, the scheduler and the test suite hung forever.
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 import warnings
@@ -14,6 +15,8 @@ from typing import Any
 
 import psycopg
 import pytest
+import sqlalchemy
+from sqlalchemy import event, text
 from sqlalchemy.exc import OperationalError
 
 with warnings.catch_warnings():
@@ -22,18 +25,22 @@ with warnings.catch_warnings():
 
 from app import main
 from app.api.auth import current_auth_user
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, load_settings
 from app.db import session as db_session
 from app.db.session import (
     CONNECT_ARGS,
     DB_CONNECT_TIMEOUT_S,
+    DB_STATEMENT_TIMEOUT_MS,
     DatabaseHealth,
     DatabaseStatus,
     database_port,
     describe_connection_error,
     get_database_health,
     get_session_factory,
+    make_engine,
+    open_connection,
     probe_database,
+    set_statement_timeout,
     unreachable_message,
 )
 from app.services.supabase_auth import AuthUser
@@ -69,18 +76,72 @@ def default_settings() -> Settings:
 # --- connect timeout everywhere --------------------------------------------------------
 
 
+EXPECTED_CONNECT_ARGS = {
+    "prepare_threshold": None,
+    "connect_timeout": 10,
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
+    "options": "-c statement_timeout=30000",
+}
+
+
 def test_every_connection_gets_a_10_second_timeout() -> None:
     assert DB_CONNECT_TIMEOUT_S == 10
     assert CONNECT_ARGS["connect_timeout"] == 10
     assert CONNECT_ARGS["prepare_threshold"] is None
 
 
+def test_every_connection_gets_keepalives_and_a_30_second_statement_timeout() -> None:
+    # A silently dropped connection is detected in ~30 + 3 * 10 s instead of hanging.
+    assert dict(CONNECT_ARGS) == EXPECTED_CONNECT_ARGS
+    assert DB_STATEMENT_TIMEOUT_MS == 30_000
+
+
+class FakeCursor:
+    def __init__(self, log: list[str]) -> None:
+        self.log = log
+
+    def execute(self, sql: str) -> None:
+        self.log.append(sql)
+
+    def close(self) -> None:
+        self.log.append("close")
+
+
+class FakeDbapiConnection:
+    def __init__(self) -> None:
+        self.log: list[str] = []
+
+    def cursor(self) -> FakeCursor:
+        return FakeCursor(self.log)
+
+    def commit(self) -> None:
+        self.log.append("commit")
+
+
+def test_statement_timeout_is_set_and_committed_on_each_new_connection() -> None:
+    # The pooler drops the startup option, so the SET is what actually applies.
+    conn = FakeDbapiConnection()
+    set_statement_timeout(conn)  # type: ignore[arg-type]
+    assert conn.log == ["SET statement_timeout = 30000", "close", "commit"]
+
+
+def test_make_engine_registers_the_statement_timeout_hook() -> None:
+    engine = make_engine("postgresql://u:p@localhost:5432/db")
+    assert engine.url.drivername == "postgresql+psycopg"
+    assert event.contains(engine, "connect", db_session._on_connect)
+
+
 def test_engine_is_built_with_the_connect_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, Any] = {}
 
+    real_create_engine = sqlalchemy.create_engine
+
     def fake_create_engine(url: str, **kwargs: Any) -> object:
         seen.update(url=url, **kwargs)
-        return object()
+        return real_create_engine(url, **kwargs)  # builds the engine; does not connect
 
     monkeypatch.setattr(db_session, "create_engine", fake_create_engine)
     monkeypatch.setattr(db_session, "get_settings", settings)
@@ -89,7 +150,8 @@ def test_engine_is_built_with_the_connect_timeout(monkeypatch: pytest.MonkeyPatc
         db_session.get_engine()
     finally:
         db_session.get_engine.cache_clear()
-    assert seen["connect_args"] == {"prepare_threshold": None, "connect_timeout": 10}
+    assert seen["connect_args"] == EXPECTED_CONNECT_ARGS
+    assert seen["pool_pre_ping"] is True
     assert seen["url"].startswith("postgresql+psycopg://")
 
 
@@ -224,3 +286,29 @@ def test_startup_probe_against_an_unreachable_host_is_bounded() -> None:
     status = main.database_status_at_startup(settings(database_url=REFUSED_DSN))
     assert status.reachable is False
     assert time.monotonic() - started < DB_CONNECT_TIMEOUT_S + 2
+
+
+# --- live database (opt-in) ------------------------------------------------------------
+
+live_db = pytest.mark.skipif(
+    os.environ.get("RUN_DB_TESTS") != "1", reason="set RUN_DB_TESTS=1 to hit Supabase"
+)
+
+
+@live_db
+def test_live_engine_connections_have_the_30_second_statement_timeout() -> None:
+    engine = make_engine(load_settings().database_url.get_secret_value())
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(text("show statement_timeout")).scalar() == "30s"
+            connection.rollback()  # the committed SET survives a rollback
+            assert connection.execute(text("show statement_timeout")).scalar() == "30s"
+    finally:
+        engine.dispose()
+
+
+@live_db
+def test_live_raw_connections_have_the_30_second_statement_timeout() -> None:
+    with open_connection(load_settings().database_url.get_secret_value()) as conn:
+        row = conn.execute("show statement_timeout").fetchone()
+        assert row is not None and row[0] == "30s"

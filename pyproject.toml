@@ -39,6 +39,7 @@ dev = [
     "pandas-stubs",
     "types-requests",
     "jupyter>=1.1",
+    "pytest-timeout>=2.3",
 ]
 
 # ---------------------------------------------------------------------------
@@ -75,4 +76,8 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# pytest-timeout: fail any single test that runs longer than 120 s instead of hanging
+# the whole run (a silently dropped database connection did, twice, in Nov 2026).
+# The slowest real test (a live seed-and-batch round trip) takes about 27 s.
+timeout = 120
 addopts = "-q --cov=app --cov-report=term-missing"

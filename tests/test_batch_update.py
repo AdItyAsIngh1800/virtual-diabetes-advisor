@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import Connection, create_engine, func, select, text, update
+from sqlalchemy import Connection, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, load_settings
@@ -30,7 +30,7 @@ from app.db.models import (
     ThresholdHistory,
     User,
 )
-from app.db.session import CONNECT_ARGS, sqlalchemy_url
+from app.db.session import make_engine, sqlalchemy_url
 from app.jobs import batch_update
 from app.jobs.batch_update import (
     BatchRunSummary,
@@ -141,8 +141,7 @@ def test_failure_summary_lists_ids_and_types_only() -> None:
 
 @pytest.fixture
 def conn() -> Iterator[Connection]:
-    url = sqlalchemy_url(load_settings().database_url.get_secret_value())
-    engine = create_engine(url, connect_args=dict(CONNECT_ARGS))
+    engine = make_engine(load_settings().database_url.get_secret_value())
     with engine.connect() as connection:
         outer = connection.begin()
         try:

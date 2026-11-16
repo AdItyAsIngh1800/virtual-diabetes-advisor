@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import Connection, create_engine, func, select
+from sqlalchemy import Connection, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -35,7 +35,7 @@ from app.db.models import (
     Reading,
     User,
 )
-from app.db.session import CONNECT_ARGS, sqlalchemy_url
+from app.db.session import make_engine
 from app.services.chat import ParsedReading
 from scripts.kb_seed import KB_SEED, SEED_PREFIX, seed_kb
 
@@ -46,8 +46,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def conn() -> Iterator[Connection]:
-    url = sqlalchemy_url(load_settings().database_url.get_secret_value())
-    engine = create_engine(url, connect_args=dict(CONNECT_ARGS))
+    engine = make_engine(load_settings().database_url.get_secret_value())
     with engine.connect() as connection:
         outer = connection.begin()
         try:

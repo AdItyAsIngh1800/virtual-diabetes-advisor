@@ -19,7 +19,7 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import Connection, create_engine, func, select, text
+from sqlalchemy import Connection, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, load_settings
@@ -31,7 +31,7 @@ from app.db.advisory_repository import (
     mark_opened,
 )
 from app.db.models import Advisory, Profile, Reading, User
-from app.db.session import CONNECT_ARGS, sqlalchemy_url
+from app.db.session import make_engine
 from app.jobs import dispatch_advisories as job
 from app.jobs.dispatch_advisories import (
     DispatchDeps,
@@ -563,8 +563,7 @@ def test_realtime_publisher_raises_on_failure() -> None:
 
 @pytest.fixture
 def conn() -> Iterator[Connection]:
-    url = sqlalchemy_url(load_settings().database_url.get_secret_value())
-    engine = create_engine(url, connect_args=dict(CONNECT_ARGS))
+    engine = make_engine(load_settings().database_url.get_secret_value())
     with engine.connect() as connection:
         outer = connection.begin()
         try:
