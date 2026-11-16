@@ -15,7 +15,7 @@ Access rules enforced here (the backend bypasses RLS, so these mirror 0002):
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Final
@@ -23,7 +23,7 @@ from typing import Final
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.clinical_limits import GlucoseLimitKind
 from app.core.config import Settings
@@ -83,17 +83,22 @@ def _live_filter() -> object:
     return Handoff.status.in_(LIVE_STATUSES)
 
 
-def _handoff_info(row: Handoff) -> HandoffInfo:
+def _handoff_info(row: Handoff, *, just_linked: bool = False) -> HandoffInfo:
     """Convert a ``handoffs`` row.
 
     Args:
         row: The row.
+        just_linked: The row got its practitioner in this call.
 
     Returns:
         The engine's view of it.
     """
     return HandoffInfo(
-        id=row.id, status=row.status, trigger=row.trigger, practitioner_id=row.practitioner_id
+        id=row.id,
+        status=row.status,
+        trigger=row.trigger,
+        practitioner_id=row.practitioner_id,
+        practitioner_just_linked=just_linked,
     )
 
 
@@ -184,7 +189,10 @@ class SqlChatStore:
 
         ``handoffs_one_live_per_user`` (0001) allows one open/assigned row per patient.
         ``ON CONFLICT DO NOTHING`` on that index means two simultaneous requests end
-        with one handoff, and the loser simply reads it.
+        with one handoff, and the loser simply reads it. A live row that is still
+        ``open`` is then pointed at the patient's current practitioner
+        (:func:`route_open_handoff`), so a handoff opened before anyone was linked is
+        assigned as soon as someone is.
 
         Args:
             user_id: Patient.
@@ -215,10 +223,15 @@ class SqlChatStore:
             .returning(Handoff.id)
         )
         created_id = self._session.execute(stmt).scalar_one_or_none()
-        live = self.live_handoff(user_id)
-        if live is None:  # pragma: no cover - the insert or the conflicting row exists
+        row = self._session.scalar(
+            select(Handoff)
+            .where(Handoff.user_id == user_id, _live_filter())  # type: ignore[arg-type]
+            .with_for_update()
+        )
+        if row is None:  # pragma: no cover - the insert or the conflicting row exists
             raise RuntimeError("no live handoff after insert")
-        return live, created_id is not None
+        just_linked = created_id is None and route_open_handoff(self._session, row)
+        return _handoff_info(row, just_linked=just_linked), created_id is not None
 
     # --- readings -------------------------------------------------------------------
 
@@ -406,6 +419,84 @@ def assigned_practitioner_id(session: Session, patient_id: uuid.UUID) -> uuid.UU
     )
 
 
+def route_open_handoff(session: Session, handoff: Handoff) -> bool:
+    """Point an ``open`` handoff at the patient's current practitioner.
+
+    A claimed (``assigned``) handoff keeps its practitioner. Called on every "talk to a
+    doctor" and red flag, so the handoff follows the *current* assignment rather than
+    whatever was true when it was opened.
+
+    Args:
+        session: Open session (caller commits).
+        handoff: Live handoff row (locked by the caller).
+
+    Returns:
+        ``True`` if the handoff had no practitioner and now has one.
+    """
+    if handoff.status != "open":
+        return False
+    current = assigned_practitioner_id(session, handoff.user_id)
+    if current == handoff.practitioner_id:
+        return False
+    was_unrouted = handoff.practitioner_id is None
+    handoff.practitioner_id = current
+    session.flush()
+    return was_unrouted and current is not None
+
+
+def assign_patients(
+    session: Session, practitioner_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
+) -> int:
+    """Assign patients to a practitioner and route their unassigned open handoffs.
+
+    The one place assignments are made (``seed_demo --practitioner-email`` and any
+    future assignment screen), so a handoff opened while the patient had no
+    practitioner is never left unassigned. Idempotent.
+
+    Args:
+        session: Open session (caller commits).
+        practitioner_id: Practitioner.
+        patient_ids: Patients.
+
+    Returns:
+        How many open handoffs were routed to the practitioner now.
+    """
+    if not patient_ids:
+        return 0
+    session.execute(
+        pg_insert(PatientAssignment)
+        .values([{"practitioner_id": practitioner_id, "patient_id": p} for p in patient_ids])
+        .on_conflict_do_nothing()
+    )
+    routed = session.execute(
+        update(Handoff)
+        .where(
+            Handoff.user_id.in_(patient_ids),
+            Handoff.status == "open",
+            Handoff.practitioner_id.is_(None),
+        )
+        .values(practitioner_id=practitioner_id)
+        .returning(Handoff.id)
+    ).all()
+    session.flush()
+    return len(routed)
+
+
+def practitioner_name(session: Session, practitioner_id: uuid.UUID | None) -> str | None:
+    """Return a practitioner's display name.
+
+    Args:
+        session: Open session.
+        practitioner_id: ``practitioners.id``, or ``None``.
+
+    Returns:
+        ``full_name``, or ``None``.
+    """
+    if practitioner_id is None:
+        return None
+    return session.scalar(select(Practitioner.full_name).where(Practitioner.id == practitioner_id))
+
+
 def is_assigned(session: Session, practitioner_id: uuid.UUID, patient_id: uuid.UUID) -> bool:
     """Tell whether a practitioner may see a patient (``patient_assignments``).
 
@@ -479,6 +570,24 @@ def practitioner_contact(session: Session, practitioner_id: uuid.UUID) -> Contac
 # ---------------------------------------------------------------------------
 # Turns (append-only audit, R5)
 # ---------------------------------------------------------------------------
+
+
+def db_now(session: Session) -> datetime:
+    """Return the database's current time (``clock_timestamp()``).
+
+    Turns default to the database clock; rows that set ``created_at`` explicitly use
+    this, so they sort correctly against the rest of the conversation.
+
+    Args:
+        session: Open session.
+
+    Returns:
+        Timezone-aware current time.
+    """
+    value = session.scalar(select(func.clock_timestamp()))
+    if not isinstance(value, datetime):  # pragma: no cover - always a timestamptz
+        raise TypeError("clock_timestamp() did not return a timestamp")
+    return value
 
 
 def turn_by_message_id(
@@ -627,8 +736,10 @@ class HandoffSummary(BaseModel):
         status: Status.
         trigger: Why it was opened.
         reason: Fixed reason text.
+        practitioner_id: Practitioner it is routed to (the claimer once assigned).
+        practitioner_name: That practitioner's name.
         opened_at: Opened.
-        assigned_at: First practitioner reply.
+        assigned_at: Claimed (Claim button or first reply).
         resolved_at: Resolved.
         last_message_at: Latest turn in the handoff.
     """
@@ -639,6 +750,8 @@ class HandoffSummary(BaseModel):
     status: HandoffStatus
     trigger: HandoffTrigger
     reason: str | None
+    practitioner_id: uuid.UUID | None = None
+    practitioner_name: str | None = None
     opened_at: AwareDatetime
     assigned_at: AwareDatetime | None
     resolved_at: AwareDatetime | None
@@ -666,8 +779,9 @@ def practitioner_handoffs(session: Session, practitioner_id: uuid.UUID) -> list[
         .group_by(ConversationTurn.handoff_id)
         .subquery()
     )
+    routed_to = aliased(Practitioner)
     base = (
-        select(Handoff, Profile.full_name, last_turn.c.last_at)
+        select(Handoff, Profile.full_name, last_turn.c.last_at, routed_to.full_name)
         .join(
             PatientAssignment,
             and_(
@@ -677,6 +791,7 @@ def practitioner_handoffs(session: Session, practitioner_id: uuid.UUID) -> list[
         )
         .outerjoin(Profile, Profile.user_id == Handoff.user_id)
         .outerjoin(last_turn, last_turn.c.handoff_id == Handoff.id)
+        .outerjoin(routed_to, routed_to.id == Handoff.practitioner_id)
     )
     live = session.execute(
         base.where(Handoff.status.in_(LIVE_STATUSES)).order_by(Handoff.opened_at.desc())
@@ -694,12 +809,14 @@ def practitioner_handoffs(session: Session, practitioner_id: uuid.UUID) -> list[
             status=h.status,
             trigger=h.trigger,
             reason=h.reason,
+            practitioner_id=h.practitioner_id,
+            practitioner_name=routed_name,
             opened_at=h.opened_at,
             assigned_at=h.assigned_at,
             resolved_at=h.resolved_at,
             last_message_at=last_at,
         )
-        for h, name, last_at in [*live, *resolved]
+        for h, name, last_at, routed_name in [*live, *resolved]
     ]
 
 
@@ -733,20 +850,51 @@ def handoff_for_practitioner(
 
 def claim_handoff(
     session: Session, handoff: Handoff, practitioner_id: uuid.UUID, at: datetime
-) -> None:
-    """Move an open handoff to ``assigned`` to this practitioner (first reply).
+) -> bool:
+    """Move an open handoff to ``assigned`` to this practitioner (Claim or first reply).
+
+    From then on the patient's messages are relayed to them (route d).
 
     Args:
         session: Open session (caller commits).
         handoff: Live handoff (already access-checked).
-        practitioner_id: Practitioner replying.
+        practitioner_id: Practitioner claiming it.
         at: Time.
+
+    Returns:
+        ``True`` if this call claimed it; ``False`` if it was already assigned.
     """
-    if handoff.status == "open":
-        handoff.status = "assigned"
-        handoff.practitioner_id = practitioner_id
-        handoff.assigned_at = at
-        session.flush()
+    if handoff.status != "open":
+        return False
+    handoff.status = "assigned"
+    handoff.practitioner_id = practitioner_id
+    handoff.assigned_at = at
+    session.flush()
+    return True
+
+
+def has_replied(session: Session, handoff_id: uuid.UUID, practitioner_id: uuid.UUID) -> bool:
+    """Tell whether a practitioner already wrote in this handoff.
+
+    Args:
+        session: Open session.
+        handoff_id: Handoff.
+        practitioner_id: Practitioner.
+
+    Returns:
+        ``True`` if an outbound turn by them exists in the handoff.
+    """
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(ConversationTurn)
+            .where(
+                ConversationTurn.handoff_id == handoff_id,
+                ConversationTurn.author_practitioner_id == practitioner_id,
+            )
+        )
+        or 0
+    ) > 0
 
 
 def resolve_handoff(

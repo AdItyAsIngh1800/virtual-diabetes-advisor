@@ -20,7 +20,11 @@ from sqlalchemy.orm import Session
 from app.core.config import load_settings
 from app.db.chat_repository import (
     SqlChatStore,
+    assign_patients,
+    claim_handoff,
+    db_now,
     handoff_for_practitioner,
+    has_replied,
     practitioner_handoffs,
     resolve_handoff,
     save_turn,
@@ -253,7 +257,7 @@ def _auth_login(session: Session) -> tuple[uuid.UUID, str]:
 def test_link_practitioner_moves_a_login_off_a_demo_patient(
     factory: Callable[[], Session],
 ) -> None:
-    from scripts.seed_demo import assign_patients, link_practitioner  # noqa: PLC0415
+    from scripts.seed_demo import link_practitioner  # noqa: PLC0415
 
     with factory() as session:
         login, email = _auth_login(session)
@@ -291,3 +295,84 @@ def test_link_practitioner_refuses_a_real_patient_login(factory: Callable[[], Se
         session.flush()
         with pytest.raises(SeedError, match="real patient"):
             link_practitioner(session, email)
+
+
+# --- handoff assignment, claim and the resolve script ----------------------------------------
+
+
+def _unassigned_handoff(session: Session) -> tuple[uuid.UUID, uuid.UUID]:
+    """A patient with no practitioner who asked for one (the phone-test situation)."""
+    patient = _patient(session)
+    handoff, _ = SqlChatStore(session, load_settings()).open_handoff(
+        patient, trigger="practitioner_request", reason="r", advisory_id=None
+    )
+    assert handoff.practitioner_id is None
+    return patient, handoff.id
+
+
+def test_unassigned_handoff_is_assigned_when_a_practitioner_is_linked(
+    factory: Callable[[], Session],
+) -> None:
+    with factory() as session:
+        patient, handoff_id = _unassigned_handoff(session)
+        doctor = _practitioner(session)
+        assert assign_patients(session, doctor, [patient]) == 1
+        row = session.get(Handoff, handoff_id)
+        assert row is not None
+        session.refresh(row)
+        assert (row.status, row.practitioner_id) == ("open", doctor)
+        assert assign_patients(session, doctor, [patient]) == 0  # idempotent
+        (summary,) = practitioner_handoffs(session, doctor)
+        assert (summary.practitioner_id, summary.practitioner_name) == (doctor, "Dr Test")
+
+
+def test_talk_to_a_doctor_routes_the_open_handoff_to_the_current_practitioner(
+    factory: Callable[[], Session],
+) -> None:
+    with factory() as session:
+        patient, handoff_id = _unassigned_handoff(session)
+        doctor = _practitioner(session)
+        # Linked behind assign_patients' back (e.g. a manual insert): the next request
+        # still finds the current practitioner.
+        session.add(PatientAssignment(practitioner_id=doctor, patient_id=patient))
+        session.flush()
+        again, created = SqlChatStore(session, load_settings()).open_handoff(
+            patient, trigger="practitioner_request", reason="r", advisory_id=None
+        )
+        assert not created and again.id == handoff_id
+        assert again.practitioner_id == doctor and again.practitioner_just_linked
+
+
+def test_claim_assigns_once_and_has_replied_tracks_the_author(
+    factory: Callable[[], Session],
+) -> None:
+    with factory() as session:
+        doctor = _practitioner(session)
+        patient = _patient(session, practitioner_id=doctor)
+        handoff, _ = SqlChatStore(session, load_settings()).open_handoff(
+            patient, trigger="practitioner_request", reason="r", advisory_id=None
+        )
+        row = session.get(Handoff, handoff.id)
+        assert row is not None
+        now = db_now(session)
+        assert now.tzinfo is not None
+        assert claim_handoff(session, row, doctor, now)
+        assert not claim_handoff(session, row, doctor, now)  # already assigned
+        assert (row.status, row.practitioner_id, row.assigned_at) == ("assigned", doctor, now)
+        assert not has_replied(session, row.id, doctor)
+        save_turn(
+            session,
+            user_id=patient,
+            direction="outbound",
+            raw_text=None,
+            transcript=None,
+            intent=None,
+            response_text="Hello",
+            model="practitioner",
+            model_version=None,
+            latency_ms=None,
+            escalated=False,
+            handoff_id=row.id,
+            author_practitioner_id=doctor,
+        )
+        assert has_replied(session, row.id, doctor)

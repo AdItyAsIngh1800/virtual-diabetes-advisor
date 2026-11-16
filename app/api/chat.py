@@ -8,13 +8,17 @@ Patient (signed-in, linked login):
   and ``advisory_id`` (the advisory page's "Talk to a doctor" button). Audio is
   transcribed with faster-whisper; the reply comes back as text, plus a short-lived
   signed mp3 URL when the patient spoke.
-* ``GET /api/chat/messages`` - the patient's recent conversation and live handoff.
+* ``GET /api/chat/messages`` - the patient's recent conversation and live handoff;
+  replies to voice messages carry a fresh signed mp3 URL, so Play survives a reload.
 
 Practitioner (signed-in, linked to a ``practitioners`` row; assigned patients only):
 
 * ``GET /api/practitioner/handoffs`` - live handoffs, then recently resolved.
 * ``GET /api/practitioner/handoffs/{id}`` - one handoff and the patient's conversation.
-* ``POST /api/practitioner/handoffs/{id}/messages`` - reply (``open -> assigned``).
+* ``POST /api/practitioner/handoffs/{id}/claim`` - claim it (``open -> assigned``): from
+  then on the patient's messages are relayed to this practitioner.
+* ``POST /api/practitioner/handoffs/{id}/messages`` - reply (claims it if still open; the
+  first reply also posts "<name> has joined the chat" to the patient).
 * ``POST /api/practitioner/handoffs/{id}/resolve`` - close it (``-> resolved``).
 
 ``GET /api/me`` tells the web app which page a login belongs on.
@@ -29,7 +33,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Final, Literal
 
@@ -56,11 +60,15 @@ from app.db.chat_repository import (
     LIVE_STATUSES,
     HandoffSummary,
     SqlChatStore,
+    assigned_practitioner_id,
     claim_handoff,
+    db_now,
     find_practitioner_by_auth_user,
     handoff_for_practitioner,
+    has_replied,
     practitioner_contact,
     practitioner_handoffs,
+    practitioner_name,
     recent_turns,
     resolve_handoff,
     save_turn,
@@ -117,6 +125,8 @@ _AUDIO_TYPES: Final = frozenset(
         "video/webm",  # some Android builds label audio-only webm as video
     }
 )
+# conversation_turns.model of a notice the system posts in the chat ("... has joined").
+SYSTEM_MODEL: Final = "system"
 NOT_PRACTITIONER: Final = (
     "this login is not linked to a practitioner "
     "(run: uv run python -m scripts.seed_demo --practitioner-email <email>)"
@@ -263,13 +273,16 @@ class HandoffOut(BaseModel):
         id: Handoff id.
         status: ``open``, ``assigned`` or ``resolved``.
         trigger: Why it was opened.
-        has_practitioner: A practitioner is assigned to the patient.
+        has_practitioner: A practitioner is linked to the patient *now* (current
+            assignment, not the handoff's state when it was opened).
+        practitioner_name: Who joined the chat (``assigned`` handoffs only).
     """
 
     id: uuid.UUID
     status: HandoffStatus
     trigger: HandoffTrigger
     has_practitioner: bool
+    practitioner_name: str | None = None
 
 
 class ChatMessageOut(BaseModel):
@@ -280,14 +293,18 @@ class ChatMessageOut(BaseModel):
         role: Who wrote it.
         text: Message text.
         spoken: The patient sent it as voice (text is the transcript).
+        voice_reply: An advisor reply to a voice message: the page shows Play.
+        audio_url: Signed mp3 of that reply (``None``: play with the browser voice).
         created_at: When.
         handoff_id: Handoff it belongs to.
     """
 
     id: str
-    role: Literal["patient", "assistant", "practitioner"]
+    role: Literal["patient", "assistant", "practitioner", "system"]
     text: str
     spoken: bool = False
+    voice_reply: bool = False
+    audio_url: str | None = None
     created_at: AwareDatetime
     handoff_id: uuid.UUID | None = None
 
@@ -359,15 +376,31 @@ class ResolveIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _messages(turns: list[ConversationTurn]) -> list[ChatMessageOut]:
+def reply_audio_path(user_id: uuid.UUID, turn_id: uuid.UUID) -> str:
+    """Object path of the spoken reply to a voice message.
+
+    Args:
+        user_id: Patient (folder).
+        turn_id: Turn (file name).
+
+    Returns:
+        ``"chat/<user_id>/<turn_id>.mp3"``.
+    """
+    return f"chat/{user_id}/{turn_id}.mp3"
+
+
+def _messages(
+    turns: list[ConversationTurn], audio_urls: dict[str, str] | None = None
+) -> list[ChatMessageOut]:
     """Turn audited rows into chat bubbles.
 
     Args:
         turns: Turns, oldest first.
+        audio_urls: Signed URLs by :func:`reply_audio_path` (patient view only).
 
     Returns:
         Bubbles: inbound rows give the patient message and the bot reply; outbound
-        rows give the practitioner's reply.
+        rows give the practitioner's reply, or a system notice ("... has joined").
     """
     out: list[ChatMessageOut] = []
     for t in turns:
@@ -375,8 +408,8 @@ def _messages(turns: list[ConversationTurn]) -> list[ChatMessageOut]:
             if t.response_text:
                 out.append(
                     ChatMessageOut(
-                        id=f"{t.id}:p",
-                        role="practitioner",
+                        id=f"{t.id}:{'s' if t.model == SYSTEM_MODEL else 'p'}",
+                        role="system" if t.model == SYSTEM_MODEL else "practitioner",
                         text=t.response_text,
                         created_at=t.created_at,
                         handoff_id=t.handoff_id,
@@ -396,11 +429,16 @@ def _messages(turns: list[ConversationTurn]) -> list[ChatMessageOut]:
                 )
             )
         if t.response_text:
+            voice = t.transcript is not None
             out.append(
                 ChatMessageOut(
                     id=f"{t.id}:a",
                     role="assistant",
                     text=t.response_text,
+                    voice_reply=voice,
+                    audio_url=(
+                        (audio_urls or {}).get(reply_audio_path(t.user_id, t.id)) if voice else None
+                    ),
                     created_at=t.created_at,
                     handoff_id=t.handoff_id,
                 )
@@ -408,10 +446,38 @@ def _messages(turns: list[ConversationTurn]) -> list[ChatMessageOut]:
     return out
 
 
-def _handoff_out(row: Handoff | None) -> HandoffOut | None:
+def _reply_audio_urls(
+    turns: list[ConversationTurn], audio_store: AudioStore, ttl: int
+) -> dict[str, str]:
+    """Sign the spoken replies among ``turns`` in one Storage call.
+
+    Args:
+        turns: The patient's turns.
+        audio_store: Private storage.
+        ttl: URL lifetime.
+
+    Returns:
+        URLs by path; empty if signing fails (the page then uses the browser voice).
+    """
+    paths = [
+        reply_audio_path(t.user_id, t.id)
+        for t in turns
+        if t.direction == "inbound" and t.transcript is not None and t.response_text
+    ]
+    if not paths:
+        return {}
+    try:
+        return audio_store.signed_urls(paths, ttl)
+    except AudioStorageError as exc:
+        logger.warning("spoken replies not signed: %s", exc)
+        return {}
+
+
+def _handoff_out(session: Session, row: Handoff | None) -> HandoffOut | None:
     """Patient view of a handoff row.
 
     Args:
+        session: Open session.
         row: The row, or ``None``.
 
     Returns:
@@ -423,7 +489,13 @@ def _handoff_out(row: Handoff | None) -> HandoffOut | None:
         id=row.id,
         status=row.status,
         trigger=row.trigger,
-        has_practitioner=row.practitioner_id is not None,
+        has_practitioner=(
+            row.practitioner_id is not None
+            or assigned_practitioner_id(session, row.user_id) is not None
+        ),
+        practitioner_name=(
+            practitioner_name(session, row.practitioner_id) if row.status == "assigned" else None
+        ),
     )
 
 
@@ -533,7 +605,7 @@ def _spoken_reply_url(
     """
     # The "Source: ..." line is for reading, not for listening.
     spoken = text.split("\n\nSource:", 1)[0]
-    path = f"chat/{user_id}/{turn_id}.mp3"
+    path = reply_audio_path(user_id, turn_id)
     try:
         audio_store.upload(path, synthesizer.synthesize(spoken, "en"))
         return audio_store.signed_url(path, ttl)
@@ -584,10 +656,19 @@ def _notify_after_turn(
         kind = "red_flag"
     elif outcome.red_flag_level == "urgent":
         kind = "urgent_reading"
-    elif outcome.handoff_created:
+    elif (
+        outcome.handoff_created
+        or handoff.practitioner_just_linked
+        or outcome.intent == "practitioner_request"
+    ):
         kind = "new"
-    else:
+    elif outcome.relayed:
         kind = "message"
+    else:
+        # The chat answered this itself (handoff not claimed yet): refresh the
+        # practitioner's page, but no push for every message.
+        notifier.practitioner_refresh(contact, handoff_id=handoff.id)
+        return
     notifier.practitioner_alert(contact, handoff_id=handoff.id, kind=kind, urgent=outcome.urgent)
 
 
@@ -685,7 +766,7 @@ def post_chat(  # noqa: PLR0917 - FastAPI injects each dependency as a parameter
                     reply=earlier.response_text or "",
                     intent=earlier.intent,
                     escalated=earlier.escalated,
-                    handoff=_handoff_out(_live_handoff_row(session, patient.id)),
+                    handoff=_handoff_out(session, _live_handoff_row(session, patient.id)),
                     duplicate=True,
                 )
 
@@ -745,8 +826,8 @@ def post_chat(  # noqa: PLR0917 - FastAPI injects each dependency as a parameter
             message_id=message_id,
         )
         live = _live_handoff_row(session, patient.id)
+        handoff = _handoff_out(session, live)
         session.commit()
-        handoff = _handoff_out(live)
 
     if outcome.notify_practitioner:
         background.add_task(_notify_after_turn, outcome, session_factory, notifier)
@@ -780,12 +861,16 @@ def post_chat(  # noqa: PLR0917 - FastAPI injects each dependency as a parameter
 def get_messages(
     auth_user: Annotated[AuthUser, Depends(current_auth_user)],
     session_factory: Annotated[sessionmaker[Session], Depends(get_session_factory)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    audio_store: Annotated[AudioStore, Depends(get_audio_store)],
 ) -> ConversationOut:
     """Return the signed-in patient's recent conversation.
 
     Args:
         auth_user: Verified login.
         session_factory: Database sessions.
+        settings: Settings (URL lifetime).
+        audio_store: Private audio storage (spoken replies).
 
     Returns:
         Messages (own turns only) and the live handoff.
@@ -796,10 +881,9 @@ def get_messages(
     with session_factory() as session:
         patient = _require_patient(session, auth_user)
         turns = recent_turns(session, patient.id)
-        return ConversationOut(
-            messages=_messages(turns),
-            handoff=_handoff_out(_live_handoff_row(session, patient.id)),
-        )
+        handoff = _handoff_out(session, _live_handoff_row(session, patient.id))
+    urls = _reply_audio_urls(turns, audio_store, settings.advisory_audio_url_ttl_seconds)
+    return ConversationOut(messages=_messages(turns, urls), handoff=handoff)
 
 
 # ---------------------------------------------------------------------------
@@ -908,7 +992,6 @@ def reply_to_handoff(  # noqa: PLR0917 - FastAPI dependency injection
         HTTPException: 403 without a practitioner login, 404 if not theirs, 409 if the
             handoff is resolved.
     """
-    now = datetime.now(UTC)
     with session_factory() as session:
         practitioner = _require_practitioner(session, auth_user)
         handoff = handoff_for_practitioner(session, handoff_id, practitioner.id)
@@ -916,7 +999,28 @@ def reply_to_handoff(  # noqa: PLR0917 - FastAPI dependency injection
             raise HTTPException(status.HTTP_404_NOT_FOUND, "handoff not found")
         if handoff.status == "resolved":
             raise HTTPException(status.HTTP_409_CONFLICT, "this handoff is already resolved")
+        _refuse_if_claimed_by_someone_else(handoff, practitioner.id)
+        # The database clock, like every other turn's created_at, so the notice and the
+        # reply sort correctly against the patient's messages.
+        now = db_now(session)
+        first_reply = not has_replied(session, handoff.id, practitioner.id)
         claim_handoff(session, handoff, practitioner.id, now)
+        if first_reply:
+            save_turn(
+                session,
+                user_id=handoff.user_id,
+                direction="outbound",
+                raw_text=None,
+                transcript=None,
+                intent=None,
+                response_text=f"{practitioner.full_name} has joined the chat",
+                model=SYSTEM_MODEL,
+                model_version=None,
+                latency_ms=None,
+                escalated=False,
+                handoff_id=handoff.id,
+                created_at=now,
+            )
         turn = save_turn(
             session,
             user_id=handoff.user_id,
@@ -931,6 +1035,8 @@ def reply_to_handoff(  # noqa: PLR0917 - FastAPI dependency injection
             escalated=False,
             handoff_id=handoff.id,
             author_practitioner_id=practitioner.id,
+            # Just after the notice (same transaction, so now() would tie).
+            created_at=now + timedelta(microseconds=1),
         )
         patient = user_contact(session, handoff.user_id)
         session.commit()
@@ -944,6 +1050,66 @@ def reply_to_handoff(  # noqa: PLR0917 - FastAPI dependency injection
         created_at=turn.created_at,
         handoff_id=handoff_id,
     )
+
+
+def _refuse_if_claimed_by_someone_else(handoff: Handoff, practitioner_id: uuid.UUID) -> None:
+    """Keep a claimed handoff with the practitioner who claimed it.
+
+    Args:
+        handoff: Live handoff.
+        practitioner_id: Practitioner acting.
+
+    Raises:
+        HTTPException: 409 if another practitioner claimed it.
+    """
+    if handoff.status == "assigned" and handoff.practitioner_id != practitioner_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "another practitioner has already claimed this handoff"
+        )
+
+
+@router.post("/api/practitioner/handoffs/{handoff_id}/claim")
+def claim(
+    handoff_id: uuid.UUID,
+    background: BackgroundTasks,
+    auth_user: Annotated[AuthUser, Depends(current_auth_user)],
+    session_factory: Annotated[sessionmaker[Session], Depends(get_session_factory)],
+    notifier: Annotated[HandoffNotifier, Depends(get_notifier)],
+) -> HandoffSummary:
+    """Claim a handoff (``open -> assigned``): the patient's messages now come to you.
+
+    Idempotent for the practitioner who already claimed it.
+
+    Args:
+        handoff_id: Handoff.
+        background: Post-commit Realtime ping to the patient (status changes).
+        auth_user: Verified login.
+        session_factory: Database sessions.
+        notifier: Realtime.
+
+    Returns:
+        The updated handoff.
+
+    Raises:
+        HTTPException: 403 without a practitioner login, 404 if not theirs, 409 if
+            resolved or claimed by another practitioner.
+    """
+    with session_factory() as session:
+        practitioner = _require_practitioner(session, auth_user)
+        handoff = handoff_for_practitioner(session, handoff_id, practitioner.id)
+        if handoff is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "handoff not found")
+        if handoff.status == "resolved":
+            raise HTTPException(status.HTTP_409_CONFLICT, "this handoff is already resolved")
+        _refuse_if_claimed_by_someone_else(handoff, practitioner.id)
+        claimed = claim_handoff(session, handoff, practitioner.id, db_now(session))
+        patient = user_contact(session, handoff.user_id)
+        session.commit()
+        summary = _summary(session, practitioner.id, handoff_id)
+    if claimed and patient is not None:
+        background.add_task(notifier.patient_ping, patient, handoff_id=handoff_id)
+    logger.info("practitioner %s claimed handoff %s", practitioner.id, handoff_id)
+    return summary
 
 
 @router.post("/api/practitioner/handoffs/{handoff_id}/resolve")

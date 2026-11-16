@@ -89,6 +89,22 @@ def test_ping_is_realtime_only() -> None:
     assert len(rt.messages) == 1 and channel.sent == []
 
 
+def test_practitioner_refresh_is_realtime_only() -> None:
+    # Turns the chat answered itself before the handoff was claimed: no push each time.
+    channel, rt = FakeChannel(), FakeBroadcaster()
+    doctor = contact()
+    HandoffNotifier(channel, rt).practitioner_refresh(doctor, handoff_id=HANDOFF)
+    assert doctor.auth_user_id is not None
+    assert rt.messages == [
+        (
+            handoff_topic(doctor.auth_user_id),
+            "handoff",
+            {"handoff_id": str(HANDOFF), "kind": "activity"},
+        )
+    ]
+    assert channel.sent == []
+
+
 @pytest.mark.parametrize(
     "error", [RecipientBlockedError("demo"), NotificationDeliveryError("push down")]
 )

@@ -89,6 +89,10 @@ class FakeAudioStore:
             f"https://abc.supabase.co/storage/v1/object/sign/advisory-audio/{path}?t={expires_in_s}"
         )
 
+    def signed_urls(self, paths: Any, expires_in_s: int) -> dict[str, str]:
+        # Like Storage's batch sign: objects that were never uploaded are left out.
+        return {p: self.signed_url(p, expires_in_s) for p in paths if p in self.uploads}
+
 
 class FakeNotifier:
     def __init__(self) -> None:
@@ -98,6 +102,9 @@ class FakeNotifier:
         self, practitioner: Contact, *, handoff_id: uuid.UUID, kind: str, urgent: bool
     ) -> None:
         self.events.append((f"practitioner:{kind}:{urgent}", handoff_id))
+
+    def practitioner_refresh(self, practitioner: Contact, *, handoff_id: uuid.UUID) -> None:
+        self.events.append(("practitioner:refresh", handoff_id))
 
     def patient_reply(self, patient: Contact, *, handoff_id: uuid.UUID) -> None:
         self.events.append(("patient:reply", handoff_id))
@@ -137,11 +144,11 @@ class World:
         return next((t for t in self.turns if t.message_id == message_id), None)
 
     def save_turn(self, _s: object, **fields: Any) -> ConversationTurn:
-        fields.pop("created_at", None)
+        created_at = fields.pop("created_at", None) or NOW
         turn = ConversationTurn(
             id=uuid.uuid4(),
             channel="web",
-            created_at=NOW,
+            created_at=created_at,
             **{**fields, "kb_ids_used": fields.get("kb_ids_used") or []},
         )
         self.turns.append(turn)
@@ -189,6 +196,8 @@ class World:
                 status=h.status,
                 trigger=h.trigger,
                 reason=None,
+                practitioner_id=h.practitioner_id,
+                practitioner_name=self.practitioner_name(None, h.practitioner_id),
                 opened_at=NOW,
                 assigned_at=h.assigned_at,
                 resolved_at=h.resolved_at,
@@ -199,11 +208,31 @@ class World:
 
     def claim_handoff(
         self, _s: object, handoff: Handoff, practitioner_id: uuid.UUID, at: datetime
-    ) -> None:
-        if handoff.status == "open":
-            handoff.status = "assigned"
-            handoff.assigned_at = at
+    ) -> bool:
+        if handoff.status != "open":
+            return False
+        handoff.status = "assigned"
+        handoff.practitioner_id = practitioner_id
+        handoff.assigned_at = at
         self.claimed.append(handoff.id)
+        # The engine's view follows the row (relay starts once assigned).
+        self.store.live = HandoffInfo(handoff.id, "assigned", handoff.trigger, practitioner_id)
+        return True
+
+    def db_now(self, _s: object) -> datetime:
+        return NOW
+
+    def has_replied(self, _s: object, handoff_id: uuid.UUID, practitioner_id: uuid.UUID) -> bool:
+        return any(
+            t.handoff_id == handoff_id and t.author_practitioner_id == practitioner_id
+            for t in self.turns
+        )
+
+    def assigned_practitioner_id(self, _s: object, user_id: uuid.UUID) -> uuid.UUID | None:
+        return self.store.practitioner_id
+
+    def practitioner_name(self, _s: object, practitioner_id: uuid.UUID | None) -> str | None:
+        return self.doctor.full_name if practitioner_id == self.doctor.id else None
 
     def resolve_handoff(
         self,
@@ -236,6 +265,10 @@ def world(monkeypatch: pytest.MonkeyPatch) -> World:
         "practitioner_handoffs",
         "claim_handoff",
         "resolve_handoff",
+        "db_now",
+        "has_replied",
+        "assigned_practitioner_id",
+        "practitioner_name",
     ):
         monkeypatch.setattr(chat, name, getattr(w, name))
     monkeypatch.setattr(chat, "_live_handoff_row", w.live_row)
@@ -431,9 +464,16 @@ def test_messages_show_patient_bot_and_practitioner_bubbles(harness: Harness, wo
     )
     harness.login["who"] = PATIENT_LOGIN  # type: ignore[attr-defined]
     data = harness.client.get("/api/chat/messages").json()
-    assert [m["role"] for m in data["messages"]] == ["patient", "assistant", "practitioner"]
-    assert data["messages"][2]["text"] == "Hello, how are you?"
+    assert [m["role"] for m in data["messages"]] == [
+        "patient",
+        "assistant",
+        "system",
+        "practitioner",
+    ]
+    assert data["messages"][2]["text"] == "Dr Demo has joined the chat"
+    assert data["messages"][3]["text"] == "Hello, how are you?"
     assert data["handoff"]["status"] == "assigned"
+    assert data["handoff"]["practitioner_name"] == "Dr Demo"
 
 
 def test_me_tells_patient_from_practitioner(harness: Harness, world: World) -> None:
@@ -519,3 +559,110 @@ def test_resolve_then_no_more_replies(harness: Harness, world: World) -> None:
         f"/api/practitioner/handoffs/{handoff_id}/messages", json={"text": "hi"}
     )
     assert again.status_code == 409
+
+
+# --- claim, joined notice, relay rule, voice replies --------------------------------------
+
+
+def test_voice_reply_audio_url_comes_back_with_the_message_list(
+    harness: Harness, world: World
+) -> None:
+    # Play must survive a reload (e.g. opening an advisory push and coming back).
+    voice = harness.client.post(
+        "/api/chat", files={"audio": ("voice.webm", b"\x1aE\xdf\xa3fake", "audio/webm")}
+    ).json()
+    harness.client.post("/api/chat", data={"text": "what is the 15-15 rule"})
+    messages = harness.client.get("/api/chat/messages").json()["messages"]
+    by_id = {m["id"]: m for m in messages}
+    spoken_reply = by_id[f"{voice['turn_id']}:a"]
+    assert spoken_reply["voice_reply"] is True
+    assert spoken_reply["audio_url"] == harness.audio_store.signed_url(
+        f"chat/{world.patient.id}/{voice['turn_id']}.mp3",
+        SETTINGS.advisory_audio_url_ttl_seconds,
+    )
+    typed_reply = next(m for m in messages if m["role"] == "assistant" and m is not spoken_reply)
+    assert typed_reply["voice_reply"] is False and typed_reply["audio_url"] is None
+
+
+def test_voice_reply_without_stored_audio_still_offers_play(harness: Harness, world: World) -> None:
+    voice = harness.client.post(
+        "/api/chat", files={"audio": ("voice.webm", b"\x1aE\xdf\xa3fake", "audio/webm")}
+    ).json()
+    harness.audio_store.uploads.clear()  # e.g. TTS failed: the page uses the browser voice
+    messages = harness.client.get("/api/chat/messages").json()["messages"]
+    reply = next(m for m in messages if m["id"] == f"{voice['turn_id']}:a")
+    assert reply["voice_reply"] is True and reply["audio_url"] is None
+
+
+def test_no_relay_before_claim_the_practitioner_just_sees_the_turn(
+    harness: Harness, world: World
+) -> None:
+    handoff_id = _open_handoff(harness, world)
+    harness.login["who"] = PATIENT_LOGIN  # type: ignore[attr-defined]
+    body = harness.client.post("/api/chat", data={"text": "what is the 15-15 rule"}).json()
+    assert not body["reply"].startswith("Sent to your practitioner")
+    assert "Source: Treating low glucose" in body["reply"]
+    assert world.turns[-1].handoff_id == handoff_id  # shown in the practitioner's thread
+    assert harness.notifier.events[-1] == ("practitioner:refresh", handoff_id)  # no push
+
+
+def test_claim_assigns_pings_the_patient_and_starts_the_relay(
+    harness: Harness, world: World
+) -> None:
+    handoff_id = _open_handoff(harness, world)
+    response = harness.client.post(f"/api/practitioner/handoffs/{handoff_id}/claim")
+    assert response.status_code == 200
+    assert response.json()["status"] == "assigned"
+    assert response.json()["practitioner_name"] == "Dr Demo"
+    assert ("patient:ping", handoff_id) in harness.notifier.events
+    # Claiming again is harmless for the same practitioner.
+    assert harness.client.post(f"/api/practitioner/handoffs/{handoff_id}/claim").status_code == 200
+    harness.login["who"] = PATIENT_LOGIN  # type: ignore[attr-defined]
+    banner = harness.client.get("/api/chat/messages").json()["handoff"]
+    assert (banner["status"], banner["practitioner_name"]) == ("assigned", "Dr Demo")
+    relayed = harness.client.post("/api/chat", data={"text": "ok I will"}).json()
+    assert relayed["reply"].startswith("Sent to your practitioner")
+    assert harness.notifier.events[-1][0] == "practitioner:message:False"
+
+
+def test_claim_by_another_practitioner_is_a_409(harness: Harness, world: World) -> None:
+    handoff_id = _open_handoff(harness, world)
+    row = world.handoff_rows[handoff_id]
+    row.status = "assigned"
+    row.practitioner_id = uuid.uuid4()  # someone else claimed it
+    claim = harness.client.post(f"/api/practitioner/handoffs/{handoff_id}/claim")
+    assert claim.status_code == 409
+    reply = harness.client.post(
+        f"/api/practitioner/handoffs/{handoff_id}/messages", json={"text": "hi"}
+    )
+    assert reply.status_code == 409
+
+
+def test_claim_of_a_resolved_handoff_is_a_409(harness: Harness, world: World) -> None:
+    handoff_id = _open_handoff(harness, world)
+    harness.client.post(f"/api/practitioner/handoffs/{handoff_id}/resolve", json={})
+    assert harness.client.post(f"/api/practitioner/handoffs/{handoff_id}/claim").status_code == 409
+
+
+def test_joined_notice_only_on_the_first_practitioner_reply(harness: Harness, world: World) -> None:
+    handoff_id = _open_handoff(harness, world)
+    url = f"/api/practitioner/handoffs/{handoff_id}/messages"
+    harness.client.post(url, json={"text": "Hello"})
+    harness.client.post(url, json={"text": "Please recheck"})
+    notices = [t for t in world.turns if t.model == "system"]
+    assert [t.response_text for t in notices] == ["Dr Demo has joined the chat"]
+    (notice,) = notices
+    first_reply = next(t for t in world.turns if t.response_text == "Hello")
+    assert notice.direction == "outbound" and notice.author_practitioner_id is None
+    assert notice.created_at < first_reply.created_at  # the notice comes first
+
+
+def test_patient_banner_uses_the_current_assignment(harness: Harness, world: World) -> None:
+    world.store.practitioner_id = None
+    harness.client.post("/api/chat", data={"text": "talk to a doctor"})
+    assert harness.client.get("/api/chat/messages").json()["handoff"]["has_practitioner"] is False
+    world.store.practitioner_id = world.doctor.id  # linked afterwards
+    body = harness.client.post("/api/chat", data={"text": "talk to a doctor"}).json()
+    assert "A practitioner has been notified" in body["reply"]
+    assert body["handoff"]["has_practitioner"] is True
+    assert harness.notifier.events[-1][0] == "practitioner:new:False"

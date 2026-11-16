@@ -105,6 +105,23 @@ class HandoffNotifier:
             ),
         )
 
+    def practitioner_refresh(self, practitioner: Contact, *, handoff_id: uuid.UUID) -> None:
+        """Refresh the practitioner's open page about new activity; no push.
+
+        Used for turns the chat answered itself while the handoff is still open
+        (not yet claimed): the practitioner sees them without a push for each one.
+
+        Args:
+            practitioner: Practitioner's contact.
+            handoff_id: Handoff.
+        """
+        if practitioner.auth_user_id is not None:
+            self._broadcast(
+                handoff_topic(practitioner.auth_user_id),
+                HANDOFF_EVENT,
+                {"handoff_id": str(handoff_id), "kind": "activity"},
+            )
+
     def patient_reply(self, patient: Contact, *, handoff_id: uuid.UUID) -> None:
         """Tell the patient their practitioner replied.
 

@@ -10,11 +10,18 @@ const TRIGGERS = { red_flag: "Red flag", practitioner_request: "Asked for help",
 const WHO = { patient: "Patient", assistant: "Advisor (automatic)", practitioner: "You" };
 
 let selected = null;
+let myName = null;
+const STATUS = { open: "Waiting to be claimed", assigned: "Claimed", resolved: "Resolved" };
 let channel = null;
 let pollTimer = null;
 
 function bubble(message) {
   const el = document.createElement("div");
+  if (message.role === "system") {
+    el.className = "notice";
+    el.textContent = `${message.text} · ${clock(message.created_at)}`;
+    return el;
+  }
   el.className = `bubble ${message.role}`;
   const who = document.createElement("span");
   who.className = "who";
@@ -48,7 +55,7 @@ function renderList(handoffs) {
     trig.textContent = TRIGGERS[h.trigger] || h.trigger;
     const st = document.createElement("span");
     st.className = "tag";
-    st.textContent = h.status;
+    st.textContent = STATUS[h.status] || h.status;
     const when = document.createElement("span");
     when.className = "muted";
     when.textContent = ` ${clock(h.last_message_at || h.opened_at)}`;
@@ -77,9 +84,16 @@ async function select(id) {
   $("thread-title").textContent = label(h);
   $("thread-meta").textContent = `${TRIGGERS[h.trigger] || h.trigger} · ${h.status} · opened ${new Date(h.opened_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}${h.reason ? ` · ${h.reason}` : ""}`;
   const box = $("messages");
-  box.replaceChildren(...detail.messages.map(bubble));
+  box.replaceChildren(...window.DA.renderWithDays(detail.messages, bubble));
   box.scrollTop = box.scrollHeight;
   const resolved = h.status === "resolved";
+  const mine = h.practitioner_name && h.practitioner_name === myName;
+  $("claim").hidden = h.status !== "open";
+  $("claim-status").textContent = h.status === "open"
+    ? "Not claimed yet: the Advisor is still answering. Claim it (or reply) to take over the chat."
+    : h.status === "assigned"
+      ? `Claimed by ${mine ? "you" : h.practitioner_name || "a practitioner"}: the patient's messages come to ${mine ? "you" : "them"}.`
+      : "Resolved.";
   $("reply-form").hidden = resolved;
   $("resolved-note").hidden = !resolved;
   await loadListOnly();
@@ -115,6 +129,13 @@ async function sendReply() {
   }
 }
 
+async function claimSelected() {
+  if (!selected) return;
+  await window.DA.api(`/api/practitioner/handoffs/${selected}/claim`, "POST");
+  say("Handoff claimed: the patient's messages now come to you.");
+  await select(selected);
+}
+
 async function resolveSelected() {
   if (!selected) return;
   const note = window.prompt("Resolution note (optional):", "");
@@ -140,6 +161,7 @@ async function render() {
     location.replace("/app/");
     return;
   }
+  myName = me.name;
   $("inbox").hidden = false;
   channel = await window.DA.listen(`handoffs:${session.user.id}`, "handoff", () => { refresh().catch(() => {}); });
   await loadList();
@@ -161,6 +183,7 @@ async function init() {
   $("refresh").addEventListener("click", guarded(refresh));
   $("reply-form").addEventListener("submit", guarded(sendReply));
   $("resolve").addEventListener("click", guarded(resolveSelected));
+  $("claim").addEventListener("click", guarded(claimSelected));
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && !$("inbox").hidden) refresh().catch(() => {});
   });

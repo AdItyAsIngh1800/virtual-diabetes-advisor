@@ -50,6 +50,11 @@
     .bubble .who { display: block; font-size: .75rem; font-weight: 700; opacity: .8; }
     .bubble .meta { display: block; font-size: .72rem; opacity: .75; margin-top: .2rem; }
     .actions { display: flex; flex-wrap: wrap; align-items: center; }
+    /* Day separator ("Today", "Yesterday", "16 Nov") and system notices ("... has joined"). */
+    .day { align-self: center; font-size: .75rem; font-weight: 600; color: var(--muted); padding: .15rem .6rem; border-radius: 999px; border: 1px solid var(--line); margin: .25rem 0; }
+    .notice { align-self: center; font-size: .8rem; font-style: italic; color: var(--muted); text-align: center; }
+    #claim-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: 10px; background: var(--pt); margin-bottom: .5rem; }
+    #claim-bar p { margin: 0; flex: 1 1 14rem; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -89,6 +94,10 @@
     <div class="panel" id="thread" hidden>
       <h2 id="thread-title"></h2>
       <p id="thread-meta" class="muted"></p>
+      <div id="claim-bar" role="status">
+        <p id="claim-status"></p>
+        <button type="button" id="claim" hidden>Claim</button>
+      </div>
       <div id="messages" aria-live="polite" aria-label="Conversation"></div>
       <form id="reply-form">
         <label for="reply">Reply to the patient</label>

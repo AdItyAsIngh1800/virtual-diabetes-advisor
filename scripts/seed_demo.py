@@ -53,7 +53,6 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, insert, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.clinical_limits import DiabetesStatus
@@ -61,11 +60,11 @@ from app.core.config import get_settings
 from app.core.exceptions import DiabetesAdvisorError
 from app.core.logging import configure_logging
 from app.db.auth_users import find_auth_user_id_by_email
+from app.db.chat_repository import assign_patients
 from app.db.models import (
     Advisory,
     ConversationTurn,
     Language,
-    PatientAssignment,
     Practitioner,
     Profile,
     Reading,
@@ -527,6 +526,8 @@ class SeedReport(BaseModel):
             are left exactly as they were.
         practitioner_id: Demo practitioner linked by ``--practitioner-email``.
         assigned_patients: Seeded patients assigned to that practitioner.
+        routed_handoffs: Open handoffs (opened before anyone was linked) now routed
+            to that practitioner.
         kb: Knowledge-base seeding result (``None`` when no approver exists).
     """
 
@@ -538,6 +539,7 @@ class SeedReport(BaseModel):
     unmatched_user_ids: list[uuid.UUID] = Field(default_factory=list)
     practitioner_id: uuid.UUID | None = None
     assigned_patients: int = 0
+    routed_handoffs: int = 0
     kb: KbSeedReport | None = None
 
 
@@ -806,9 +808,11 @@ def seed_demo(
         session.execute(insert(Reading), reading_rows)
 
     practitioner_id: uuid.UUID | None = None
+    routed_handoffs = 0
     if practitioner_email is not None:
         practitioner_id = link_practitioner(session, practitioner_email)
-        assign_patients(session, practitioner_id, [p.user_id for p in seeded])
+        # Routes any handoff a seeded patient opened before a practitioner was linked.
+        routed_handoffs = assign_patients(session, practitioner_id, [p.user_id for p in seeded])
     approver = practitioner_id or session.scalar(
         select(Practitioner.id).where(Practitioner.is_active).order_by(Practitioner.created_at)
     )
@@ -826,6 +830,7 @@ def seed_demo(
         unmatched_user_ids=unmatched,
         practitioner_id=practitioner_id,
         assigned_patients=len(seeded) if practitioner_id is not None else 0,
+        routed_handoffs=routed_handoffs,
         kb=kb_report,
     )
 
@@ -882,25 +887,6 @@ def link_practitioner(session: Session, email: str) -> uuid.UUID:
     user.is_active = True
     session.flush()
     return practitioner.id
-
-
-def assign_patients(
-    session: Session, practitioner_id: uuid.UUID, patient_ids: Sequence[uuid.UUID]
-) -> None:
-    """Assign patients to a practitioner (``patient_assignments``); idempotent.
-
-    Args:
-        session: Open session (caller commits).
-        practitioner_id: Practitioner.
-        patient_ids: Patients.
-    """
-    if not patient_ids:
-        return
-    session.execute(
-        pg_insert(PatientAssignment)
-        .values([{"practitioner_id": practitioner_id, "patient_id": p} for p in patient_ids])
-        .on_conflict_do_nothing()
-    )
 
 
 def _create_patient(
@@ -997,6 +983,11 @@ def _print_report(report: SeedReport) -> None:
             f"Demo practitioner linked; {report.assigned_patients} patients assigned "
             "(open /app/practitioner with that login)."
         )
+        if report.routed_handoffs:
+            lines.append(
+                f"{report.routed_handoffs} open handoff(s) opened before a practitioner was "
+                "linked are now routed to them."
+            )
     if report.kb is None:
         lines.append("Knowledge base not seeded: pass --practitioner-email to approve it.")
     elif report.kb.inserted or report.kb.retired:

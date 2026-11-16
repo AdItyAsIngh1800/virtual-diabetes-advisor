@@ -105,10 +105,29 @@ class FakeStore:
         advisory_id: uuid.UUID | None,
     ) -> tuple[HandoffInfo, bool]:
         if self.live is not None:
+            # Like SqlChatStore: an open handoff follows the *current* practitioner.
+            if self.live.status == "open" and self.live.practitioner_id != self.practitioner_id:
+                just_linked = self.live.practitioner_id is None
+                self.live = HandoffInfo(
+                    self.live.id,
+                    "open",
+                    self.live.trigger,
+                    self.practitioner_id,
+                    practitioner_just_linked=just_linked and self.practitioner_id is not None,
+                )
+                return self.live, False
+            self.live = HandoffInfo(
+                self.live.id, self.live.status, self.live.trigger, self.live.practitioner_id
+            )
             return self.live, False
         self.opened.append(trigger)
         self.live = HandoffInfo(uuid.uuid4(), "open", trigger, self.practitioner_id)
         return self.live, True
+
+    def claim(self) -> None:
+        """A practitioner claims the live handoff (``open -> assigned``)."""
+        assert self.live is not None
+        self.live = HandoffInfo(self.live.id, "assigned", self.live.trigger, self.practitioner_id)
 
     def record_reading(
         self, user_id: uuid.UUID, reading: ParsedReading, *, message_id: str | None
@@ -527,14 +546,65 @@ def test_practitioner_request_without_assigned_practitioner() -> None:
     assert not out.notify_practitioner
 
 
-def test_messages_are_relayed_while_a_handoff_is_live() -> None:
+def test_no_relay_before_claim_the_chat_keeps_answering() -> None:
     store, spy = FakeStore(), SpyRephraser()
     ask(store, "talk to a doctor")
+    assert store.live is not None and store.live.status == "open"
+    out = ask(store, "what is the 15-15 rule", spy)
+    # Answered from the KB (and rephrased), not relayed.
+    assert spy.calls == ["what is the 15-15 rule"]
+    assert "Source: Treating low glucose (hypoglycaemia): the 15-15 rule" in out.reply_text
+    assert doc("rule-15-15").id in out.kb_ids_used
+    assert out.intent == "question" and not out.relayed
+    # Attached to the open handoff so the practitioner sees it (refresh, no push).
+    assert out.handoff == store.live and out.notify_practitioner
+
+
+def test_relay_after_claim() -> None:
+    store, spy = FakeStore(), SpyRephraser()
+    ask(store, "talk to a doctor")
+    store.claim()
     out = ask(store, "what is the 15-15 rule", spy)
     assert out.reply_text == RELAY_REPLY
-    assert out.model == "handoff_relay" and out.notify_practitioner
+    assert out.model == "handoff_relay" and out.notify_practitioner and out.relayed
     assert out.handoff == store.live
     assert spy.calls == []
+
+
+def test_red_flags_and_readings_are_processed_during_a_claimed_handoff() -> None:
+    store = FakeStore()
+    ask(store, "talk to a doctor")
+    store.claim()
+    flag = ask(store, "I have chest pain")
+    assert flag.intent == "symptom_red_flag" and flag.reply_text.startswith("Call 112 now")
+    assert flag.handoff == store.live and not flag.handoff_created
+    reading = ask(store, "fasting 132")
+    assert reading.intent == "reading_report"
+    assert store.readings[-1] == ParsedReading(value_mg_dl=Decimal(132), context="fasting")
+    assert reading.reading is store.outcome and reading.relayed
+
+
+def test_talk_to_a_doctor_checks_the_current_assignment() -> None:
+    # Opened while nobody was linked...
+    store = FakeStore(practitioner=False)
+    first = ask(store, "talk to a doctor")
+    assert "No practitioner is linked" in first.reply_text and not first.notify_practitioner
+    # ...then a practitioner is linked: the next request routes the same handoff.
+    store.practitioner_id = uuid.uuid4()
+    second = ask(store, "talk to a doctor")
+    assert store.opened == ["practitioner_request"]  # same handoff, not a new one
+    assert second.handoff is not None
+    assert second.handoff.practitioner_id == store.practitioner_id
+    assert second.handoff.practitioner_just_linked and second.notify_practitioner
+    assert "A practitioner has been notified" in second.reply_text
+
+
+def test_talk_to_a_doctor_after_claim_says_the_practitioner_is_here() -> None:
+    store = FakeStore()
+    ask(store, "talk to a doctor")
+    store.claim()
+    out = ask(store, "talk to a doctor")
+    assert "already in this chat" in out.reply_text
 
 
 # --- (e) questions -------------------------------------------------------------------

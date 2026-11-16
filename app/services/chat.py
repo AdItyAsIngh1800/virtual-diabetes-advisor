@@ -21,8 +21,11 @@ b. **Reading report** (:func:`parse_reading`): "fasting 132", "sugar after lunch
    the patient's personal thresholds right away, and an advisory is queued when the
    reading is pre-breach or breach (the dispatcher delivers it).
 c. **Practitioner request** ("talk to a doctor", or the advisory page button): open the
-   patient's one live handoff and notify the assigned practitioner.
-d. While a handoff is live, anything else is **relayed** to the practitioner.
+   patient's one live handoff (or reuse it, pointing it at the patient's *current*
+   practitioner) and notify that practitioner.
+d. Once a practitioner has **claimed** the handoff or replied (``assigned``), anything
+   else is **relayed** to them. While it is only ``open``, the chat keeps answering
+   (route e) and attaches the turns to the handoff for the practitioner to see.
 e. **Question**. Dosing, medicine-change and self-diagnosis questions
    (:func:`is_medical_advice_request`) get a fixed "please ask your practitioner"
    reply with a practitioner-connect offer, before any retrieval. Everything else:
@@ -1084,13 +1087,29 @@ class HandoffInfo:
         id: ``handoffs.id``.
         status: ``open``, ``assigned`` or ``resolved``.
         trigger: Why it was opened.
-        practitioner_id: Assigned practitioner, if the patient has one.
+        practitioner_id: Practitioner it is routed to (the patient's currently linked
+            practitioner while ``open``; the claimer once ``assigned``), if any.
+        practitioner_just_linked: An existing handoff got its practitioner just now
+            (opened before anyone was linked to the patient); notify as if new.
     """
 
     id: uuid.UUID
     status: HandoffStatus
     trigger: HandoffTrigger
     practitioner_id: uuid.UUID | None
+    practitioner_just_linked: bool = False
+
+    @property
+    def relaying(self) -> bool:
+        """Whether patient messages now go to the practitioner instead of the bot.
+
+        Only once a practitioner has claimed the handoff or replied (``assigned``):
+        until then the chat keeps answering and the practitioner sees the turns.
+
+        Returns:
+            ``True`` for an ``assigned`` handoff.
+        """
+        return self.status == "assigned"
 
 
 class ChatStore(KbSource, Protocol):
@@ -1116,6 +1135,10 @@ class ChatStore(KbSource, Protocol):
         advisory_id: uuid.UUID | None,
     ) -> tuple[HandoffInfo, bool]:
         """Open a handoff unless one is live (one live handoff per patient).
+
+        A live handoff that is still ``open`` is pointed at the patient's *current*
+        practitioner first, so one opened before anyone was linked is assigned as
+        soon as someone is (``practitioner_just_linked`` on the result).
 
         Args:
             user_id: Patient.
@@ -1180,7 +1203,9 @@ class ChatOutcome:
         retrieval_confidence: Best similarity (questions only).
         handoff: Live handoff this turn belongs to.
         handoff_created: The handoff was opened by this turn.
-        notify_practitioner: Tell the practitioner (push + Realtime) after commit.
+        notify_practitioner: Tell the practitioner after commit (a push for new
+            handoffs, red flags and relayed messages; otherwise a Realtime refresh).
+        relayed: The message was relayed to a practitioner who joined the chat.
         urgent: The practitioner push is high priority (any red flag).
         red_flag: The red flag, if any.
         red_flag_level: ``emergency`` or ``urgent`` for a red flag.
@@ -1199,6 +1224,7 @@ class ChatOutcome:
     handoff: HandoffInfo | None = None
     handoff_created: bool = False
     notify_practitioner: bool = False
+    relayed: bool = False
     urgent: bool = False
     red_flag: RedFlag | None = None
     red_flag_level: RedFlagLevel | None = None
@@ -1293,8 +1319,8 @@ class ChatEngine:
         if flag is not None:
             return self._red_flag(request, text, flag)
         live = self._store.live_handoff(request.user_id)
-        # (b) Reading reports are stored and judged even while a handoff is live; the
-        # turn is then attached to the handoff so the practitioner sees it.
+        # (b) Reading reports are stored and judged whatever the handoff state; the
+        # turn is attached to a live handoff so the practitioner sees it.
         reading = parse_reading(text) if text else None
         if reading is not None:
             outcome = self._store.record_reading(
@@ -1308,13 +1334,14 @@ class ChatEngine:
                 escalated=outcome.escalated,
                 handoff=live,
                 notify_practitioner=live is not None,
+                relayed=live is not None and live.relaying,
                 reading=outcome,
             )
         # (c) Practitioner connect.
         if request.practitioner_requested or is_practitioner_request(text):
-            return self._practitioner_request(request, live)
-        # (d) Relay while a handoff is live.
-        if live is not None:
+            return self._practitioner_request(request)
+        # (d) Relay only once a practitioner has claimed the handoff or replied.
+        if live is not None and live.relaying:
             return ChatOutcome(
                 intent="other" if _GREETING.match(normalise(text)) else "question",
                 reply_text=RELAY_REPLY,
@@ -1322,9 +1349,15 @@ class ChatEngine:
                 model_version=RULES_MODEL_VERSION,
                 handoff=live,
                 notify_practitioner=True,
+                relayed=True,
             )
-        # (e) Questions answered from the approved KB.
-        return self._question(text)
+        # (e) Questions answered from the approved KB. While a handoff is open (not yet
+        # claimed) the turn is attached to it, so the practitioner sees it on joining.
+        answer = self._question(text)
+        if live is not None:
+            answer.handoff = live
+            answer.notify_practitioner = True
+        return answer
 
     def _red_flag(self, request: ChatRequest, text: str, flag: RedFlag) -> ChatOutcome:
         """Route (a): fixed template for the flag's level + immediate handoff (no LLM).
@@ -1376,40 +1409,43 @@ class ChatEngine:
             reading=reading_outcome,
         )
 
-    def _practitioner_request(self, request: ChatRequest, live: HandoffInfo | None) -> ChatOutcome:
+    def _practitioner_request(self, request: ChatRequest) -> ChatOutcome:
         """Route (c): open (or reuse) the handoff and notify the practitioner.
+
+        Always goes through :meth:`ChatStore.open_handoff`, which checks the patient's
+        *current* practitioner: a handoff opened before anyone was linked is assigned
+        now, not left "no practitioner" forever.
 
         Args:
             request: The message.
-            live: Already-live handoff, if any.
 
         Returns:
             The decided turn.
         """
-        handoff, created = (
-            (live, False)
-            if live is not None
-            else self._store.open_handoff(
-                request.user_id,
-                trigger="practitioner_request",
-                reason="patient asked to talk to a practitioner",
-                advisory_id=request.advisory_id,
-            )
+        handoff, created = self._store.open_handoff(
+            request.user_id,
+            trigger="practitioner_request",
+            reason="patient asked to talk to a practitioner",
+            advisory_id=request.advisory_id,
         )
         if handoff.practitioner_id is None:
             reply = (
                 "No practitioner is linked to your account yet. Your request is saved for "
                 "the care team; please also contact your doctor directly."
             )
-        elif created:
+        elif handoff.relaying:
             reply = (
-                "A practitioner has been notified. They will reply here; anything you "
-                "write now goes to them."
+                "Your practitioner is already in this chat. Anything you write now goes to them."
+            )
+        elif created or handoff.practitioner_just_linked:
+            reply = (
+                "A practitioner has been notified and will join this chat. Until they do, "
+                "I'll keep answering here, and they will see this conversation."
             )
         else:
             reply = (
-                "A practitioner has already been notified and will reply here. Anything "
-                "you write now goes to them."
+                "A practitioner has already been notified and will join this chat. Until "
+                "they do, I'll keep answering here, and they will see this conversation."
             )
         return ChatOutcome(
             intent="practitioner_request",

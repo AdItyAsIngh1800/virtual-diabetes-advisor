@@ -21,7 +21,10 @@ const POLL_MS = 20_000;
 let channels = [];
 let pollTimer = null;
 let handoffLive = false;
-// Spoken replies keyed by bubble id: {url, text} (url null -> browser speech).
+let handoffAssigned = false;
+// Spoken replies keyed by bubble id: {url, text} (url null -> browser speech). Filled
+// from the server (voice_reply/audio_url, so Play survives a reload) and from the
+// reply to a voice message just sent.
 const spoken = new Map();
 const recorder = { media: null, stream: null, chunks: [], started: 0, timer: null, tick: null, cancelled: false };
 
@@ -37,9 +40,29 @@ function showAdvisoryBanner(payload) {
 
 const WHO = { assistant: "Advisor", practitioner: "Practitioner" };
 
+/** Spoken reply for a bubble, if it answers a voice message. */
+function spokenReply(message) {
+  if (message.role !== "assistant") return null;
+  const known = spoken.get(message.id);
+  if (message.voice_reply) {
+    // A fresh signed URL from the server replaces an expired or missing one.
+    const audio = known || { url: null, text: message.text };
+    if (message.audio_url) audio.url = message.audio_url;
+    spoken.set(message.id, audio);
+    return audio;
+  }
+  return known || null;
+}
+
 /** One chat bubble. Text is set with textContent (never HTML). */
 function bubble(message) {
   const el = document.createElement("div");
+  if (message.role === "system") {
+    el.className = "notice";
+    el.dataset.id = message.id;
+    el.textContent = `${message.text} · ${clock(message.created_at)}`;
+    return el;
+  }
   el.className = `bubble ${message.role}`;
   el.dataset.id = message.id;
   if (WHO[message.role]) {
@@ -53,7 +76,7 @@ function bubble(message) {
   meta.className = "meta";
   meta.textContent = `${message.spoken ? "\u{1F3A4} " : ""}${clock(message.created_at)}`;
   el.append(meta);
-  const audio = spoken.get(message.id);
+  const audio = spokenReply(message);
   if (audio) {
     const play = document.createElement("button");
     play.type = "button";
@@ -68,25 +91,27 @@ function bubble(message) {
 
 function renderHandoff(handoff) {
   handoffLive = Boolean(handoff);
+  handoffAssigned = Boolean(handoff && handoff.status === "assigned");
   const el = $("handoff");
   if (!handoff) {
     el.hidden = true;
     return;
   }
   el.hidden = false;
-  if (!handoff.has_practitioner) {
-    el.textContent = "Your request is saved for the care team. Please also contact your doctor directly.";
-  } else if (handoff.status === "assigned") {
-    el.textContent = "You are talking to a practitioner. Your messages go to them.";
+  if (handoff.status === "assigned") {
+    const who = handoff.practitioner_name || "Your practitioner";
+    el.textContent = `${who} is in this chat. Your messages go to them.`;
+  } else if (!handoff.has_practitioner) {
+    el.textContent = "Your request is saved for the care team. No practitioner is linked yet, so please also contact your doctor directly.";
   } else {
-    el.textContent = "A practitioner has been notified. Your messages go to them.";
+    el.textContent = "Waiting for a practitioner to join. Until then the Advisor keeps answering, and they will see this chat.";
   }
 }
 
 function renderMessages(messages) {
   const box = $("messages");
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-  box.replaceChildren(...messages.map(bubble));
+  box.replaceChildren(...window.DA.renderWithDays(messages, bubble));
   if (!messages.length) {
     const hint = document.createElement("p");
     hint.className = "muted";
@@ -138,8 +163,13 @@ async function playReply(audio) {
   player.src = audio.url;
   try {
     await player.play();
-  } catch {
-    audio.url = null; // expired signed URL or blocked: use the browser voice
+  } catch (err) {
+    if (err && err.name === "NotAllowedError") {
+      // Autoplay blocked (iPhone after an await): keep the mp3 for the Play button.
+      say("Tap ▶ Play to hear the reply.");
+      return;
+    }
+    audio.url = null; // expired signed URL or a media error: use the browser voice
     speakWithBrowser(text);
   }
 }
@@ -159,7 +189,7 @@ function showPending(text) {
   mine.textContent = text;
   const typing = document.createElement("div");
   typing.className = "typing";
-  typing.textContent = "Advisor is replying…";
+  typing.textContent = handoffAssigned ? "Sending to your practitioner…" : "Advisor is replying…";
   box.append(mine, typing);
   box.scrollTop = box.scrollHeight;
 }
