@@ -15,6 +15,7 @@ import pytest
 from app.core.config import Settings
 from app.db.models import HandoffTrigger
 from app.services.chat import (
+    ADVICE_GUARD_REPLY,
     EMERGENCY_NUMBER,
     GREETING_REPLY,
     HYPERGLYCAEMIC_CRISIS_SIGNS,
@@ -33,6 +34,7 @@ from app.services.chat import (
     Rephrased,
     canonical_text,
     detect_red_flag,
+    is_medical_advice_request,
     is_practitioner_request,
     numbers_supported,
     parse_reading,
@@ -580,8 +582,6 @@ def test_15_15_answer_cites_ada() -> None:
         "what is the capital of France",
         "who won the cricket match",
         "tell me a joke",
-        "how much insulin should I take",
-        "is metformin safe",
     ],
 )
 def test_low_similarity_says_i_dont_know_and_offers_a_practitioner(question: str) -> None:
@@ -592,6 +592,59 @@ def test_low_similarity_says_i_dont_know_and_offers_a_practitioner(question: str
     assert out.kb_ids_used == []
     assert out.retrieval_confidence is not None and out.retrieval_confidence < MIN_SIMILARITY
     assert spy.calls == []  # nothing to rephrase
+
+
+GUARDED = [
+    "how much insulin should I take",
+    "is metformin safe",
+    "can I stop taking metformin",
+    "should I increase my insulin",
+    "should i double my dose if i miss one",
+    "can i reduce my glimepiride if my sugar is normal",
+    "I take 500 mg metformin, is that ok",
+    "do I have type 1 or type 2",
+    "do i have type 1 or type 2 diabetes",
+    "am I diabetic",
+    "am i pre-diabetic",
+    "is my diabetes type 1",
+    "can you diagnose my kidney problem",
+]
+
+
+@pytest.mark.parametrize("question", GUARDED)
+def test_dosing_and_self_diagnosis_get_the_fixed_practitioner_reply(question: str) -> None:
+    store, spy = FakeStore(), SpyRephraser()
+    out = ask(store, question, spy)
+    assert is_medical_advice_request(question)
+    assert out.reply_text == ADVICE_GUARD_REPLY
+    assert "ask your practitioner" in out.reply_text
+    assert "talk to a doctor" in out.reply_text.lower()  # the connect offer
+    assert (out.intent, out.model) == ("question", "rules")
+    assert out.kb_ids_used == [] and out.retrieval_confidence is None
+    assert spy.calls == []  # never sent to an LLM
+    assert store.kb_loads == 0  # decided before retrieval
+    assert store.opened == []  # an offer, not a handoff
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "what should i do if my sugar is low",
+        "should i take 15 grams of sugar when i am low",
+        "how much exercise should i do",
+        "can i drink alcohol",
+        "what is prediabetes",
+        "is it safe to drive if my sugar is low",
+        "my doctor said i have borderline diabetes",
+    ],
+)
+def test_ordinary_questions_are_not_guarded(question: str) -> None:
+    assert not is_medical_advice_request(question)
+
+
+def test_guard_does_not_override_a_red_flag() -> None:
+    out = ask(FakeStore(), "I took too much insulin and I feel very drowsy")
+    assert out.intent == "symptom_red_flag"
 
 
 def test_greeting_gets_help_text() -> None:

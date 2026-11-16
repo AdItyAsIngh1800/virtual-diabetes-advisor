@@ -23,7 +23,10 @@ b. **Reading report** (:func:`parse_reading`): "fasting 132", "sugar after lunch
 c. **Practitioner request** ("talk to a doctor", or the advisory page button): open the
    patient's one live handoff and notify the assigned practitioner.
 d. While a handoff is live, anything else is **relayed** to the practitioner.
-e. **Question**: TF-IDF retrieval over approved ``kb_entries`` (:class:`KbIndexCache`).
+e. **Question**. Dosing, medicine-change and self-diagnosis questions
+   (:func:`is_medical_advice_request`) get a fixed "please ask your practitioner"
+   reply with a practitioner-connect offer, before any retrieval. Everything else:
+   TF-IDF retrieval over approved ``kb_entries`` (:class:`KbIndexCache`).
    Below ``CHAT_KB_MIN_SIMILARITY`` the chat says it does not know and offers
    practitioner connect; otherwise it answers with the best entry and cites its title.
    With an Anthropic key, :class:`ClaudeRephraser` may rephrase the answer using only
@@ -677,6 +680,57 @@ def is_practitioner_request(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Dosing and self-diagnosis guard (before retrieval)
+# ---------------------------------------------------------------------------
+
+# Medicine words for the dosing guard: the named medicines plus generic words. The
+# approved KB holds no medicine advice, so any dosing or medicine-choice question goes
+# to a person.
+_MEDICINE: Final = (
+    rf"(?:{_MEDICINE_NAMES}|medicines?|medications?|meds|tablets?|pills?|drugs?|doses?)"
+)
+_DOSING: Final = re.compile(
+    r"\b(?:dose|doses|dosage|dosing)\b"
+    rf"|\bhow (?:much|many)\b(?:\s+\S+){{0,3}}?\s+{_MEDICINE}\b"
+    rf"|\bunits? of {_MEDICINE}\b"
+    r"|\b(?:increase|decrease|reduce|lower|raise|stop|skip|double|halve|change|adjust|cut"
+    rf"|quit|come off|start|switch)\w*\b(?:\s+\S+){{0,4}}?\s+{_MEDICINE}\b"
+    rf"|\b(?:more|less|extra|another)\s+{_MEDICINE}\b"
+    # Amounts of medicine ("500 mg", "10 units", "2 tablets"), not "15 grams of sugar".
+    r"|\b\d+\s*(?:mg|units?|iu|tablets?|pills?)\b|\bhow many units\b"
+    rf"|\b{_MEDICINE}\b.*\b(?:safe|better|best|side effects?|instead)\b"
+    rf"|\b(?:safe|better|best|which)\b(?:\s+\S+){{0,4}}?\s+{_MEDICINE}\b"
+    rf"|\bcan i (?:take|have|use)\b.*\b{_MEDICINE}\b"
+)
+_SELF_DIAGNOSIS: Final = re.compile(
+    r"\b(?:do|does|did) (?:i|he|she|my \w+) (?:have|has|got) "
+    r"(?:type [12]|type (?:one|two)|diabetes|prediabetes|pre-diabetes|sugar|kidney|"
+    r"neuropathy|retinopathy|ketoacidosis|dka)"
+    r"|\bam i (?:a )?(?:pre-?)?diabetic\b|\bam i (?:type [12]|type (?:one|two))\b"
+    r"|\b(?:is|was) (?:it|this|my diabetes|my sugar) (?:type [12]|type (?:one|two))\b"
+    r"|\bwhat type of diabetes (?:do|does|have) (?:i|he|she)\b"
+    r"|\bdiagnos\w*\b"
+)
+
+
+def is_medical_advice_request(text: str) -> bool:
+    """Spot dosing and self-diagnosis questions, which only a practitioner may answer.
+
+    Checked before retrieval (route e): such questions never get KB text, however
+    similar they look to an entry ("do I have type 1 or type 2" vs "What prediabetes
+    means").
+
+    Args:
+        text: Raw message.
+
+    Returns:
+        ``True`` for a dosing, medicine-change or self-diagnosis question.
+    """
+    norm = normalise(text)
+    return _DOSING.search(norm) is not None or _SELF_DIAGNOSIS.search(norm) is not None
+
+
+# ---------------------------------------------------------------------------
 # Knowledge base retrieval (TF-IDF)
 # ---------------------------------------------------------------------------
 
@@ -1162,6 +1216,12 @@ GREETING_REPLY: Final = (
     'ask a question about diabetes, or type "talk to a doctor".'
 )
 RELAY_REPLY: Final = "Sent to your practitioner. They will reply here."
+ADVICE_GUARD_REPLY: Final = (
+    "Questions about medicine doses, changing or stopping a medicine, or what condition "
+    "you have need your practitioner, who knows your history. Please ask your "
+    'practitioner. Would you like to talk to one now? Tap "Talk to a doctor" or type '
+    '"talk to a doctor".'
+)
 
 
 class ChatEngine:
@@ -1371,6 +1431,15 @@ class ChatEngine:
         Returns:
             The decided turn.
         """
+        if is_medical_advice_request(text):
+            # Fixed reply, no retrieval and no LLM: dosing and diagnosis are never
+            # answered from the KB, however close an entry looks.
+            return ChatOutcome(
+                intent="question",
+                reply_text=ADVICE_GUARD_REPLY,
+                model=RULES_MODEL,
+                model_version=RULES_MODEL_VERSION,
+            )
         index, version = self._kb_cache.get(self._store)
         hits = index.search(text)
         best = hits[0].score if hits else 0.0
