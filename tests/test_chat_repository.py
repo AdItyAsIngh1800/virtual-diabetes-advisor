@@ -35,7 +35,7 @@ from app.db.models import (
     Reading,
     User,
 )
-from app.db.session import sqlalchemy_url
+from app.db.session import CONNECT_ARGS, sqlalchemy_url
 from app.services.chat import ParsedReading
 from scripts.kb_seed import KB_SEED, SEED_PREFIX, seed_kb
 
@@ -47,7 +47,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def conn() -> Iterator[Connection]:
     url = sqlalchemy_url(load_settings().database_url.get_secret_value())
-    engine = create_engine(url, connect_args={"prepare_threshold": None})
+    engine = create_engine(url, connect_args=dict(CONNECT_ARGS))
     with engine.connect() as connection:
         outer = connection.begin()
         try:

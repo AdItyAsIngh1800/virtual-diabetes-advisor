@@ -15,19 +15,29 @@ Scheduled and manual runs cannot overlap: the second gets ``BatchAlreadyRunningE
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC
 
+import psycopg
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 
 from app.api import admin, advisories, chat, patient_app, push
 from app.core.config import Settings, get_settings
-from app.core.exceptions import BatchAlreadyRunningError
+from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.core.logging import configure_logging
-from app.db.session import get_session_factory
+from app.db.session import (
+    DatabaseStatus,
+    build_database_health,
+    database_port,
+    describe_connection_error,
+    get_session_factory,
+)
 from app.jobs.batch_update import load_risk_scorer, run_batch_update
 from app.jobs.dispatch_advisories import scheduled_dispatch
 
@@ -87,6 +97,20 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
     return scheduler
 
 
+def database_status_at_startup(settings: Settings) -> DatabaseStatus:
+    """Check once at startup that the database answers (bounded by the connect timeout).
+
+    Args:
+        settings: Supplies ``DATABASE_URL``.
+
+    Returns:
+        The status. An unreachable database is logged as an error, never raised: the
+        server still starts (the pages load and explain the problem) instead of
+        hanging or crash-looping.
+    """
+    return build_database_health(settings).status()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Configure logging and run the batch scheduler for the app's lifetime.
@@ -99,6 +123,16 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """
     settings = get_settings()
     configure_logging(settings.log_level)
+    # In a worker thread: the probe may wait up to DB_CONNECT_TIMEOUT_S.
+    db = await asyncio.to_thread(database_status_at_startup, settings)
+    if db.reachable:
+        logger.info("database reachable")
+    else:
+        logger.error(
+            "%s - the server is up, but API calls that need the database will answer "
+            "503 until it can be reached (try another network)",
+            db.detail,
+        )
     scheduler: BackgroundScheduler | None = None
     if settings.batch_scheduler_enabled:
         scheduler = build_scheduler(settings)
@@ -117,6 +151,29 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
             scheduler.shutdown(wait=False)
 
 
+async def database_unavailable(request: Request, exc: Exception) -> JSONResponse:
+    """Answer 503 with a clear reason when a request cannot reach the database.
+
+    SQLAlchemy raises ``OperationalError`` once the connect timeout expires; without
+    this handler that would be a bare 500.
+
+    Args:
+        request: The failed request.
+        exc: The database error.
+
+    Returns:
+        ``503 {"detail": "database unreachable (port 5432 blocked?)"}`` (or the
+        credentials hint when the server rejected the login).
+    """
+    try:
+        port = database_port(get_settings().database_url.get_secret_value())
+    except (ConfigurationError, ValueError):
+        port = 5432
+    detail = describe_connection_error(exc, port)
+    logger.error("%s %s: %s", request.method, request.url.path, detail)
+    return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": detail})
+
+
 def create_app() -> FastAPI:
     """Build the FastAPI application.
 
@@ -125,6 +182,8 @@ def create_app() -> FastAPI:
         routes mounted.
     """
     app = FastAPI(title="Virtual Diabetes Advisor", version="0.1.0", lifespan=lifespan)
+    app.add_exception_handler(OperationalError, database_unavailable)
+    app.add_exception_handler(psycopg.OperationalError, database_unavailable)
     app.include_router(admin.router)
     app.include_router(push.router)
     app.include_router(advisories.router)

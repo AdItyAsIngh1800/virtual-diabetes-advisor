@@ -31,7 +31,7 @@ from app.db.advisory_repository import (
     mark_opened,
 )
 from app.db.models import Advisory, Profile, Reading, User
-from app.db.session import sqlalchemy_url
+from app.db.session import CONNECT_ARGS, sqlalchemy_url
 from app.jobs import dispatch_advisories as job
 from app.jobs.dispatch_advisories import (
     DispatchDeps,
@@ -564,7 +564,7 @@ def test_realtime_publisher_raises_on_failure() -> None:
 @pytest.fixture
 def conn() -> Iterator[Connection]:
     url = sqlalchemy_url(load_settings().database_url.get_secret_value())
-    engine = create_engine(url, connect_args={"prepare_threshold": None})
+    engine = create_engine(url, connect_args=dict(CONNECT_ARGS))
     with engine.connect() as connection:
         outer = connection.begin()
         try:

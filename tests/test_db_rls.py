@@ -20,6 +20,7 @@ import pytest
 from psycopg import errors, sql
 
 from app.core.config import load_settings
+from app.db.session import DB_CONNECT_TIMEOUT_S
 from app.ml.schema import age_to_bucket
 
 pytestmark = pytest.mark.skipif(
@@ -47,7 +48,9 @@ class World:
 @pytest.fixture
 def conn() -> Iterator[psycopg.Connection[Any]]:
     dsn = load_settings().database_url.get_secret_value()
-    with psycopg.connect(dsn, autocommit=False, prepare_threshold=None) as connection:
+    with psycopg.connect(
+        dsn, autocommit=False, prepare_threshold=None, connect_timeout=DB_CONNECT_TIMEOUT_S
+    ) as connection:
         try:
             yield connection
         finally:

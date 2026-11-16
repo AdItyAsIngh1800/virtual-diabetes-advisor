@@ -144,7 +144,10 @@ async function init() {
 
   const res = await fetch("/api/app-config");
   if (!res.ok) {
-    throw new Error("Server is missing SUPABASE_ANON_KEY; see the setup steps.");
+    // The 503 detail says why: missing SUPABASE_ANON_KEY or database unreachable.
+    let detail = `Server error (HTTP ${res.status})`;
+    try { detail = (await res.json()).detail || detail; } catch { /* not JSON */ }
+    throw new Error(detail);
   }
   const config = await res.json();
   const sb = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);

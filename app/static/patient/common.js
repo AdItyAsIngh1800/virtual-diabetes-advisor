@@ -38,7 +38,9 @@ window.DA = (() => {
         .catch((err) => say(`Service worker failed: ${err.message}`, true));
     }
     const res = await fetch("/api/app-config");
-    if (!res.ok) throw new Error("Server is missing SUPABASE_ANON_KEY; see the setup steps.");
+    // 503 carries the reason: missing SUPABASE_ANON_KEY, or
+    // "database unreachable (port 5432 blocked?)".
+    if (!res.ok) throw await failure(res);
     config = await res.json();
     sb = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
     return { sb, config };

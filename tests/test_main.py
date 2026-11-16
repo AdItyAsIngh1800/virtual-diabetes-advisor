@@ -53,6 +53,16 @@ def make_settings(**overrides: Any) -> Settings:
     return Settings(_env_file=None, **{**REQUIRED, **overrides})
 
 
+@pytest.fixture(autouse=True)
+def _no_real_database_check_at_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lifespan tests start the app; keep its startup database check offline."""
+    from app.db.session import DatabaseStatus  # noqa: PLC0415
+
+    monkeypatch.setattr(
+        main, "database_status_at_startup", lambda _s: DatabaseStatus(reachable=True)
+    )
+
+
 @pytest.fixture
 def client_with(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     """Return a factory: client_with(settings) -> TestClient (lifespan not started)."""

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ConfigurationError
+from app.db.session import DatabaseHealth, get_database_health
 
 STATIC_DIR: Final = Path(__file__).resolve().parents[1] / "static" / "patient"
 APP_PATH: Final = "/app"
@@ -44,18 +45,30 @@ class AppConfigOut(BaseModel):
 
 
 @router.get("/api/app-config")
-def app_config(settings: Annotated[Settings, Depends(get_settings)]) -> AppConfigOut:
+def app_config(
+    settings: Annotated[Settings, Depends(get_settings)],
+    db_health: Annotated[DatabaseHealth, Depends(get_database_health)],
+) -> AppConfigOut:
     """Return the public configuration for the patient web app.
+
+    It is the first call both pages make, so it also checks (cached, bounded by the
+    connect timeout) that the database is reachable: the page then shows the reason
+    instead of every later call hanging.
 
     Args:
         settings: Application settings.
+        db_health: Cached database reachability check.
 
     Returns:
         Supabase URL, publishable key and VAPID public key.
 
     Raises:
-        HTTPException: 503 if ``SUPABASE_ANON_KEY`` is not set.
+        HTTPException: 503 if ``SUPABASE_ANON_KEY`` is not set, or if the database is
+            unreachable (detail "database unreachable (port 5432 blocked?)").
     """
+    db = db_health.status()
+    if not db.reachable:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, db.detail)
     try:
         anon_key = settings.require_supabase_anon_key()
     except ConfigurationError as exc:

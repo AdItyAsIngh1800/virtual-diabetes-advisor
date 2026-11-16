@@ -34,7 +34,7 @@ from app.db.push_repository import (
     revoke_subscription,
     upsert_subscription,
 )
-from app.db.session import get_session_factory, sqlalchemy_url
+from app.db.session import CONNECT_ARGS, get_session_factory, sqlalchemy_url
 from app.services.supabase_auth import AuthUser
 from scripts.gen_vapid_keys import generate_vapid_keys
 
@@ -275,7 +275,7 @@ def test_patient_app_icons(client: TestClient) -> None:
 @pytest.fixture
 def conn() -> Iterator[Connection]:
     url = sqlalchemy_url(load_settings().database_url.get_secret_value())
-    engine = create_engine(url, connect_args={"prepare_threshold": None})
+    engine = create_engine(url, connect_args=dict(CONNECT_ARGS))
     with engine.connect() as connection:
         outer = connection.begin()
         try:

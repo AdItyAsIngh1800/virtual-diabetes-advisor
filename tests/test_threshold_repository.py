@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import load_settings
 from app.db.models import Reading, User
+from app.db.session import CONNECT_ARGS
 from app.db.threshold_repository import SqlThresholdRepository, current_thresholds_query
 from app.ml.predict import RiskAssessment
 from app.services.thresholds import (
@@ -58,7 +59,9 @@ def test_current_values_are_read_from_the_view() -> None:
 def session() -> Iterator[Session]:
     url = load_settings().database_url.get_secret_value()
     # The URL is a plain postgresql:// DSN; SQLAlchemy needs the psycopg 3 driver named.
-    engine = create_engine(url.replace("postgresql://", "postgresql+psycopg://", 1))
+    engine = create_engine(
+        url.replace("postgresql://", "postgresql+psycopg://", 1), connect_args=dict(CONNECT_ARGS)
+    )
     with Session(engine) as db:
         try:
             yield db
