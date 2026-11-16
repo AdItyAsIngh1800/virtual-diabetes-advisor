@@ -3,11 +3,18 @@
 Every message (typed, or transcribed from voice) goes through :meth:`ChatEngine.handle`,
 which tries these routes **in order** and stops at the first that applies:
 
-a. **Red flag** (:func:`detect_red_flag`): chest pain, trouble breathing, confusion,
-   fainting/unconsciousness, seizure, self-harm words, or a glucose value below 54 or
-   above 250 mg/dL. Reply with a **fixed** emergency template and open (or reuse) a
-   handoff so the practitioner is told at once. Never sent to an LLM: no model is even
-   constructed on this path.
+a. **Red flag** (:func:`detect_red_flag`), two levels (:data:`RED_FLAG_LEVELS`):
+
+   * ``emergency``: chest pain, trouble breathing, confusion, fainting or
+     unconsciousness, seizure, self-harm words, or a reading above 250 mg/dL together
+     with vomiting, confusion or fast breathing. The **fixed** reply opens with the
+     emergency number (112).
+   * ``urgent``: a reading below 54 or above 250 mg/dL on its own. The **fixed** reply
+     opens with what to do now (ADA hypoglycaemia treatment, or ketones and the care
+     team) and gives 112 only for when that is not possible or it gets worse.
+
+   Both open (or reuse) a handoff so the practitioner is told at once. Never sent to an
+   LLM: no model is even constructed on this path.
 b. **Reading report** (:func:`parse_reading`): "fasting 132", "sugar after lunch 190".
    The value and context are stored as a reading (source ``web``), classified against
    the patient's personal thresholds right away, and an advisory is queued when the
@@ -34,10 +41,11 @@ import re
 import threading
 import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from types import MappingProxyType
 from typing import Final, Literal, Protocol
 
 import numpy as np
@@ -53,8 +61,30 @@ from app.services.thresholds import BandState
 logger = logging.getLogger(__name__)
 
 RedFlag = Literal[
-    "self_harm", "breathing", "chest_pain", "consciousness", "confusion", "very_low", "very_high"
+    "self_harm",
+    "high_with_symptoms",
+    "breathing",
+    "chest_pain",
+    "consciousness",
+    "confusion",
+    "very_low",
+    "very_high",
 ]
+RedFlagLevel = Literal["emergency", "urgent"]
+# emergency: reply leads with 112. urgent: reply leads with what to do now; 112 only if
+# that is not possible or it gets worse. Both hand off to the practitioner at once.
+RED_FLAG_LEVELS: Final[Mapping[RedFlag, RedFlagLevel]] = MappingProxyType(
+    {
+        "self_harm": "emergency",
+        "high_with_symptoms": "emergency",
+        "breathing": "emergency",
+        "chest_pain": "emergency",
+        "consciousness": "emergency",
+        "confusion": "emergency",
+        "very_low": "urgent",
+        "very_high": "urgent",
+    }
+)
 # Audit labels (conversation_turns.model) for the non-LLM routes.
 RULES_MODEL: Final = "rules"
 RULES_MODEL_VERSION: Final = "chat-rules-1"
@@ -206,39 +236,94 @@ def glucose_value(text: str) -> Decimal | None:
     return None
 
 
+# Signs that turn a very high reading into an emergency. ADA-6 (Standards of Care in
+# Diabetes-2026, Section 6, hyperglycaemic crises): DKA and HHS present with nausea and
+# vomiting, altered mental status, and rapid (Kussmaul) breathing.
+_HYPERGLYCAEMIA_EMERGENCY_SIGNS: Final = re.compile(
+    r"\b(vomit\w*|throw(?:ing|n)? up|threw up|being sick|confus\w*|disoriented|"
+    r"(?:fast|rapid|heavy|deep) breath\w*|breath\w* (?:fast|rapid\w*|heav\w*|hard))\b"
+)
+_HYPO_LEVEL_2: Final = Decimal(str(HYPO_LEVEL_2_MG_DL))
+_HYPER_LEVEL_2: Final = Decimal(str(LEVEL_2_HYPERGLYCAEMIA_MG_DL))
+
+
+def _high_reading_with_emergency_signs(norm: str) -> Decimal | None:
+    """Return the reading if it is above 250 mg/dL and emergency signs are mentioned.
+
+    With a symptom in the message, a lone number counts as the reading even without a
+    glucose word ("260 and vomiting"): the patient is describing their state.
+
+    Args:
+        norm: Normalised message.
+
+    Returns:
+        The value, or ``None``.
+    """
+    if not _HYPERGLYCAEMIA_EMERGENCY_SIGNS.search(norm) or "mmol" in norm:
+        return None
+    numbers = _numbers(norm)
+    if len(numbers) != 1:
+        return None
+    value, _ = numbers[0]
+    return value if value > _HYPER_LEVEL_2 else None
+
+
 def detect_red_flag(text: str) -> RedFlag | None:
-    """Spot messages that must get the emergency template (route a).
+    """Spot messages that need the fixed red-flag reply and a handoff (route a).
 
     Args:
         text: Raw message (typed or transcribed).
 
     Returns:
-        The first matching red flag, or ``None``.
+        The red flag (see :data:`RED_FLAG_LEVELS` for its level), or ``None``.
     """
     norm = normalise(text)
-    for flag, pattern in _RED_FLAG_PATTERNS:
+    # Self-harm first (its reply gives the helpline), then a high reading with
+    # crisis signs, so "320 and confused" gets the hyperglycaemia emergency reply.
+    if _RED_FLAG_PATTERNS[0][1].search(norm):
+        return "self_harm"
+    if _high_reading_with_emergency_signs(norm) is not None:
+        return "high_with_symptoms"
+    for flag, pattern in _RED_FLAG_PATTERNS[1:]:
         if pattern.search(norm):
             return flag
     value = glucose_value(norm)
     if value is not None:
         # ADA-6 Table 6.4 / IHSG: < 54 mg/dL is Level 2 (clinically significant)
         # hypoglycaemia; every such reading escalates (clinical_limits).
-        if value < Decimal(str(HYPO_LEVEL_2_MG_DL)):
+        if value < _HYPO_LEVEL_2:
             return "very_low"
         # ADA-6 Table 6.2 / TIR: > 250 mg/dL is Level 2 hyperglycaemia ("very high").
-        if value > Decimal(str(LEVEL_2_HYPERGLYCAEMIA_MG_DL)):
+        if value > _HYPER_LEVEL_2:
             return "very_high"
     return None
+
+
+def red_flag_value(text: str) -> Decimal | None:
+    """The glucose value a red-flag message reports, if any.
+
+    Args:
+        text: Raw message.
+
+    Returns:
+        The value in mg/dL, or ``None``.
+    """
+    norm = normalise(text)
+    return glucose_value(norm) or _high_reading_with_emergency_signs(norm)
 
 
 def emergency_reply(
     flag: RedFlag, *, value_mg_dl: Decimal | None, practitioner_notified: bool
 ) -> str:
-    """Fixed emergency template for a red flag (never LLM text).
+    """Fixed red-flag reply (never LLM text).
+
+    ``emergency`` replies open with the emergency number; ``urgent`` replies (very low
+    or very high reading alone) open with what to do now and give the emergency number
+    only for when that is not possible or the patient gets worse.
 
     Args:
         flag: The red flag.
-        value_mg_dl: Reported glucose, for the very_low/very_high templates.
+        value_mg_dl: Reported glucose, for the reading templates.
         practitioner_notified: Whether a practitioner was assigned and notified.
 
     Returns:
@@ -259,27 +344,46 @@ def emergency_reply(
             f"call {MENTAL_HEALTH_HELPLINE}, free, any time of day or night. "
             f"If you can, stay with someone you trust. {team}"
         )
+    if flag == "high_with_symptoms":
+        # EMERGENCY. ADA-6 (SoC 2026, Section 6, hyperglycaemic crises): very high
+        # glucose with vomiting, altered mental status or rapid breathing can be DKA or
+        # HHS, which needs emergency treatment.
+        return (
+            f"Call {EMERGENCY_NUMBER} now or go to the nearest hospital. A glucose of "
+            f"{value} with vomiting, confusion or fast breathing can be a diabetes "
+            "emergency such as ketoacidosis. Do not wait for a reply in this chat. If "
+            f"someone is with you, ask them to help. {team}"
+        )
     if flag == "very_low":
-        # ADA-6 hypoglycaemia treatment: glucose (any carbohydrate containing glucose)
-        # is the preferred treatment for a conscious person with hypoglycaemia.
+        # URGENT. ADA-6 (SoC 2026, Section 6, hypoglycaemia treatment): glucose
+        # (15-20 g) is the preferred treatment for a conscious person; recheck after
+        # 15 minutes and repeat if still low; once normal, eat a meal or snack.
+        # Level 2 (< 54 mg/dL) is clinically significant: it escalates, but a person
+        # who can swallow treats it first.
         return (
             f"Your glucose of {value} is very low. If you are awake and able to swallow, "
-            "have something sugary now, such as fruit juice or a regular (not diet) soft "
-            "drink, and check again in 15 minutes. If you feel confused, drowsy or faint, "
-            f"or cannot swallow, call {EMERGENCY_NUMBER} now. Do not drive. {team}"
+            "treat it now with 15 to 20 grams of fast-acting sugar, such as half a cup "
+            "of fruit juice or regular (not diet) soft drink. Check again in 15 minutes "
+            "and repeat if it is still low, then eat a meal or snack. Do not drive. Call "
+            f"{EMERGENCY_NUMBER} if you cannot treat it, it does not come up, or you feel "
+            f"confused or drowsy. {team}"
         )
     if flag == "very_high":
+        # URGENT. ADA-6 (SoC 2026, Table 6.2 / Section 6): > 250 mg/dL is Level 2
+        # hyperglycaemia; ketone testing screens for DKA, and vomiting, confusion or
+        # rapid breathing are signs of a hyperglycaemic crisis needing emergency care.
         return (
-            f"Your glucose of {value} is very high. If you are vomiting, breathing fast, "
-            f"very drowsy or confused, call {EMERGENCY_NUMBER} now or go to the nearest "
-            "hospital. Otherwise contact your doctor today and check your glucose again "
-            f"soon. {team}"
+            f"Your glucose of {value} is very high. If you can, check your ketones with "
+            "a urine or blood ketone strip. Contact your care team today and check your "
+            "glucose again soon. Get emergency care (call "
+            f"{EMERGENCY_NUMBER}) if you start vomiting, feel confused or are breathing "
+            f"fast. {team}"
         )
+    # EMERGENCY symptoms: chest pain, breathing, consciousness, confusion.
     return (
-        "This could be an emergency. If you have chest pain, trouble breathing, "
-        f"confusion, or have fainted, call {EMERGENCY_NUMBER} now or go to the nearest "
-        "hospital. Do not wait for a reply in this chat. If someone is with you, ask them "
-        f"to help. {team}"
+        f"Call {EMERGENCY_NUMBER} now or go to the nearest hospital: this could be an "
+        "emergency. Do not wait for a reply in this chat. If someone is with you, ask "
+        f"them to help. {team}"
     )
 
 
@@ -331,14 +435,25 @@ def parse_reading(text: str) -> ParsedReading | None:
     value = glucose_value(norm)
     if value is None:
         return None
-    context: ReadingContext = "random"
+    return ParsedReading(value_mg_dl=value, context=reading_context(norm))
+
+
+def reading_context(norm: str) -> ReadingContext:
+    """Which limits a reported value is judged against.
+
+    Args:
+        norm: Normalised message.
+
+    Returns:
+        ``post_meal``, ``fasting`` or ``random`` (no timing given).
+    """
     # Post-meal before fasting: "before lunch ... 2 hours after" style mixes are rare,
     # and "after" is the more specific marker.
     if _POST_MEAL.search(norm):
-        context = "post_meal"
-    elif _FASTING.search(norm):
-        context = "fasting"
-    return ParsedReading(value_mg_dl=value, context=context)
+        return "post_meal"
+    if _FASTING.search(norm):
+        return "fasting"
+    return "random"
 
 
 @dataclass(frozen=True)
@@ -881,8 +996,9 @@ class ChatOutcome:
         handoff: Live handoff this turn belongs to.
         handoff_created: The handoff was opened by this turn.
         notify_practitioner: Tell the practitioner (push + Realtime) after commit.
-        urgent: The notification is urgent (red flag).
+        urgent: The practitioner push is high priority (any red flag).
         red_flag: The red flag, if any.
+        red_flag_level: ``emergency`` or ``urgent`` for a red flag.
         reading: Reading outcome, if a reading was stored.
         latency_ms: Time spent deciding.
     """
@@ -900,6 +1016,7 @@ class ChatOutcome:
     notify_practitioner: bool = False
     urgent: bool = False
     red_flag: RedFlag | None = None
+    red_flag_level: RedFlagLevel | None = None
     reading: ReadingOutcome | None = None
     latency_ms: int = 0
 
@@ -1019,7 +1136,7 @@ class ChatEngine:
         return self._question(text)
 
     def _red_flag(self, request: ChatRequest, text: str, flag: RedFlag) -> ChatOutcome:
-        """Route (a): fixed template + immediate handoff (no LLM).
+        """Route (a): fixed template for the flag's level + immediate handoff (no LLM).
 
         Args:
             request: The message.
@@ -1030,7 +1147,12 @@ class ChatEngine:
             The decided turn.
         """
         reading_outcome: ReadingOutcome | None = None
+        level = RED_FLAG_LEVELS[flag]
+        value = red_flag_value(text)
         reading = parse_reading(text)
+        if reading is None and flag == "high_with_symptoms" and value is not None:
+            # "260 and vomiting": no glucose word, but the number is the reading.
+            reading = ParsedReading(value_mg_dl=value, context=reading_context(normalise(text)))
         if reading is not None:
             # "fasting 45" is both a red flag and a reading: keep the data point so the
             # threshold engine and the care team see it.
@@ -1040,14 +1162,14 @@ class ChatEngine:
         handoff, created = self._store.open_handoff(
             request.user_id,
             trigger="red_flag",
-            reason=f"red flag in chat: {flag.replace('_', ' ')}",
+            reason=f"{level} red flag in chat: {flag.replace('_', ' ')}",
             advisory_id=request.advisory_id,
         )
         return ChatOutcome(
             intent="symptom_red_flag",
             reply_text=emergency_reply(
                 flag,
-                value_mg_dl=glucose_value(text),
+                value_mg_dl=value,
                 practitioner_notified=handoff.practitioner_id is not None,
             ),
             model=RULES_MODEL,
@@ -1056,8 +1178,10 @@ class ChatEngine:
             handoff=handoff,
             handoff_created=created,
             notify_practitioner=True,
+            # Both levels need the practitioner now, so the push is high priority.
             urgent=True,
             red_flag=flag,
+            red_flag_level=level,
             reading=reading_outcome,
         )
 

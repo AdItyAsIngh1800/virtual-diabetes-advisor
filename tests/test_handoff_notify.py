@@ -126,3 +126,14 @@ def test_broadcast_posts_a_private_message() -> None:
             }
         ]
     }
+
+
+def test_urgent_reading_alert_is_high_priority_with_its_own_title() -> None:
+    channel = FakeChannel()
+    HandoffNotifier(channel, FakeBroadcaster()).practitioner_alert(
+        contact(), handoff_id=HANDOFF, kind="urgent_reading", urgent=True
+    )
+    ((_, note),) = channel.sent
+    assert note.urgency == "high"
+    assert note.title == "Urgent: very high or low reading"
+    assert not any(ch.isdigit() for ch in note.title + note.body)

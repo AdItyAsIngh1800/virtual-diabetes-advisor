@@ -580,8 +580,10 @@ def _notify_after_turn(
         contact = practitioner_contact(session, handoff.practitioner_id)
     if contact is None:
         return
-    if outcome.red_flag is not None:
+    if outcome.red_flag_level == "emergency":
         kind = "red_flag"
+    elif outcome.red_flag_level == "urgent":
+        kind = "urgent_reading"
     elif outcome.handoff_created:
         kind = "new"
     else:

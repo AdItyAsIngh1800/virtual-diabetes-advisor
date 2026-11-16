@@ -18,6 +18,7 @@ from app.services.chat import (
     EMERGENCY_NUMBER,
     GREETING_REPLY,
     MENTAL_HEALTH_HELPLINE,
+    RED_FLAG_LEVELS,
     RELAY_REPLY,
     UNKNOWN_REPLY,
     ChatEngine,
@@ -142,32 +143,46 @@ def ask(store: FakeStore, text: str, rephraser: SpyRephraser | None = None, **kw
 # --- (a) red flags -----------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("message", "flag"),
-    [
-        ("I have chest pain", "chest_pain"),
-        ("my chest feels tight", "chest_pain"),
-        ("I can't breathe", "breathing"),
-        ("I can" + chr(0x2019) + "t breathe properly", "breathing"),  # curly apostrophe
-        ("short of breath since morning", "breathing"),
-        ("feeling very confused", "confusion"),
-        ("my father fainted", "consciousness"),
-        ("she passed out after lunch", "consciousness"),
-        ("he is unconscious", "consciousness"),
-        ("I want to kill myself", "self_harm"),
-        ("thinking about suicide", "self_harm"),
-        ("fasting 45", "very_low"),
-        ("sugar 48 after lunch", "very_low"),
-        ("my glucose is 320", "very_high"),
-        ("380", "very_high"),
-    ],
-)
-def test_red_flags_get_the_emergency_template_and_never_the_llm(message: str, flag: str) -> None:
+def first_sentence(text: str) -> str:
+    return text.split(". ", 1)[0]
+
+
+EMERGENCY_CASES = [
+    ("I have chest pain", "chest_pain"),
+    ("my chest feels tight", "chest_pain"),
+    ("I can't breathe", "breathing"),
+    ("I can" + chr(0x2019) + "t breathe properly", "breathing"),  # curly apostrophe
+    ("short of breath since morning", "breathing"),
+    ("feeling very confused", "confusion"),
+    ("my father fainted", "consciousness"),
+    ("she passed out after lunch", "consciousness"),
+    ("he is unconscious", "consciousness"),
+    ("he had a seizure", "consciousness"),
+    ("I want to kill myself", "self_harm"),
+    ("thinking about suicide", "self_harm"),
+    ("260 and vomiting", "high_with_symptoms"),
+    ("sugar 300, breathing fast", "high_with_symptoms"),
+    ("my glucose is 320 and I feel confused", "high_with_symptoms"),
+    ("threw up twice, reading 410", "high_with_symptoms"),
+]
+URGENT_CASES = [
+    ("fasting 45", "very_low"),
+    ("sugar 48 after lunch", "very_low"),
+    ("260", "very_high"),
+    ("my glucose is 320", "very_high"),
+    ("380", "very_high"),
+]
+
+
+@pytest.mark.parametrize(("message", "flag"), EMERGENCY_CASES + URGENT_CASES)
+def test_red_flags_hand_off_at_once_and_never_reach_the_llm(message: str, flag: str) -> None:
     store, spy = FakeStore(), SpyRephraser()
     out = ask(store, message, spy)
     assert detect_red_flag(message) == flag
     assert out.intent == "symptom_red_flag"
     assert out.red_flag == flag
+    assert out.red_flag_level == RED_FLAG_LEVELS[flag]
+    # Both levels: immediate handoff, high-priority practitioner push, fixed text.
     assert out.escalated and out.urgent and out.notify_practitioner
     assert out.model == "rules"
     assert spy.calls == []  # never sent to an LLM
@@ -175,6 +190,60 @@ def test_red_flags_get_the_emergency_template_and_never_the_llm(message: str, fl
     assert out.handoff is not None and out.handoff_created
     assert EMERGENCY_NUMBER in out.reply_text
     assert "has been notified" in out.reply_text
+
+
+@pytest.mark.parametrize(("message", "flag"), [c for c in EMERGENCY_CASES if c[1] != "self_harm"])
+def test_emergency_replies_lead_with_112(message: str, flag: str) -> None:
+    out = ask(FakeStore(), message)
+    assert out.red_flag_level == "emergency"
+    assert first_sentence(out.reply_text).startswith(f"Call {EMERGENCY_NUMBER} now")
+
+
+@pytest.mark.parametrize(("message", "flag"), URGENT_CASES)
+def test_urgent_replies_keep_112_out_of_the_first_line(message: str, flag: str) -> None:
+    out = ask(FakeStore(), message)
+    assert out.red_flag_level == "urgent"
+    assert EMERGENCY_NUMBER not in first_sentence(out.reply_text)
+    assert EMERGENCY_NUMBER in out.reply_text  # still there, for when it gets worse
+
+
+def test_260_alone_is_urgent_but_260_and_vomiting_is_emergency() -> None:
+    assert detect_red_flag("260") == "very_high"
+    assert RED_FLAG_LEVELS["very_high"] == "urgent"
+    assert detect_red_flag("260 and vomiting") == "high_with_symptoms"
+    assert RED_FLAG_LEVELS["high_with_symptoms"] == "emergency"
+
+
+def test_very_high_alone_gives_ketone_and_care_team_guidance() -> None:
+    reply = ask(FakeStore(), "260").reply_text
+    assert reply.startswith("Your glucose of 260 mg/dL is very high.")
+    assert "ketones" in reply
+    assert "care team today" in reply
+    assert "vomiting, feel confused or are breathing fast" in reply
+
+
+def test_very_low_gives_ada_treatment_then_when_to_call_112() -> None:
+    reply = ask(FakeStore(), "fasting 45").reply_text
+    assert reply.startswith("Your glucose of 45 mg/dL is very low.")
+    assert "15 to 20 grams" in reply and "15 minutes" in reply
+    assert f"Call {EMERGENCY_NUMBER} if you cannot treat it" in reply
+    assert "confused" in reply
+
+
+def test_high_with_symptoms_is_stored_as_a_reading() -> None:
+    store = FakeStore()
+    out = ask(store, "260 and vomiting")
+    assert store.readings == [ParsedReading(value_mg_dl=Decimal(260), context="random")]
+    assert out.reading is store.outcome
+    assert "260 mg/dL" in out.reply_text and "ketoacidosis" in out.reply_text
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["vomiting since this morning", "180 and vomiting", "I vomited 2 times"],
+)
+def test_vomiting_without_a_very_high_reading_is_not_a_red_flag(message: str) -> None:
+    assert detect_red_flag(message) is None
 
 
 def test_self_harm_template_gives_the_helpline() -> None:
@@ -193,6 +262,7 @@ def test_red_flag_reading_is_still_stored() -> None:
     assert store.readings == [ParsedReading(value_mg_dl=Decimal(45), context="fasting")]
     assert out.reading is store.outcome
     assert "45 mg/dL is very low" in out.reply_text
+    assert out.red_flag_level == "urgent"
 
 
 def test_red_flag_inside_a_live_handoff_reuses_it() -> None:

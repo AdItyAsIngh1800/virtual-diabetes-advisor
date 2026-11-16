@@ -73,7 +73,7 @@ class HandoffNotifier:
         Args:
             practitioner: Practitioner's contact.
             handoff_id: Handoff.
-            kind: ``new``, ``red_flag`` or ``message``.
+            kind: ``new``, ``red_flag`` (emergency), ``urgent_reading`` or ``message``.
             urgent: Urgent push (red flags).
         """
         if practitioner.auth_user_id is not None:
@@ -83,7 +83,14 @@ class HandoffNotifier:
                 {"handoff_id": str(handoff_id), "kind": kind},
             )
         title, body = {
-            "red_flag": ("Urgent: patient needs help", "A patient reported a red flag. Open now."),
+            "red_flag": (
+                "Emergency: patient needs help",
+                "A patient reported a red flag. Open now.",
+            ),
+            "urgent_reading": (
+                "Urgent: very high or low reading",
+                "A patient reported a reading that needs you today. Open now.",
+            ),
             "new": ("New patient request", "A patient asked to talk to you."),
         }.get(kind, ("New patient message", "A patient sent a new message."))
         self._push(

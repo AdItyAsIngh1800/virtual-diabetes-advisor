@@ -37,6 +37,8 @@ SETTINGS = Settings(
     supabase_url="https://abc.supabase.co",
     supabase_service_role_key="srk",
     database_url="postgresql://u:p@localhost:5432/db",
+    # Explicit, so an exported ANTHROPIC_API_KEY cannot turn the LLM on in these tests.
+    anthropic_api_key=None,
 )
 PATIENT_LOGIN = AuthUser(id=uuid.uuid4(), email="patient@example.com")
 DOCTOR_LOGIN = AuthUser(id=uuid.uuid4(), email="doctor@example.com")
@@ -375,6 +377,17 @@ def test_red_flag_escalates_and_alerts_the_practitioner(harness: Harness, world:
         ("practitioner:red_flag:True", uuid.UUID(body["handoff"]["id"]))
     ]
     assert world.turns[0].escalated is True and world.turns[0].model == "rules"
+
+
+def test_urgent_reading_alerts_the_practitioner_with_its_own_kind(
+    harness: Harness, world: World
+) -> None:
+    body = harness.client.post("/api/chat", data={"text": "260"}).json()
+    assert body["intent"] == "symptom_red_flag" and body["escalated"] is True
+    assert harness.notifier.events == [
+        ("practitioner:urgent_reading:True", uuid.UUID(body["handoff"]["id"]))
+    ]
+    assert world.turns[0].model == "rules"
 
 
 def test_talk_to_a_doctor_button(harness: Harness, world: World) -> None:
