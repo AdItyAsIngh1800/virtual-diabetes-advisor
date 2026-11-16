@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import load_settings
 from app.db.chat_repository import (
+    TEST_RESOLUTION_NOTE,
     SqlChatStore,
     assign_patients,
     claim_handoff,
@@ -31,6 +32,7 @@ from app.db.chat_repository import (
 )
 from app.db.models import (
     Advisory,
+    ConversationTurn,
     Handoff,
     KbEntry,
     PatientAssignment,
@@ -376,3 +378,50 @@ def test_claim_assigns_once_and_has_replied_tracks_the_author(
             author_practitioner_id=doctor,
         )
         assert has_replied(session, row.id, doctor)
+
+
+def test_resolve_handoffs_dry_run_changes_nothing_then_resolves(
+    factory: Callable[[], Session],
+) -> None:
+    from scripts.resolve_handoffs import resolve_for_email  # noqa: PLC0415
+
+    with factory() as session:
+        login, email = _auth_login(session)
+        patient = User(id=uuid.uuid4(), role="patient", auth_user_id=login)
+        session.add(patient)
+        session.flush()
+        handoff, _ = SqlChatStore(session, load_settings()).open_handoff(
+            patient.id, trigger="practitioner_request", reason="r", advisory_id=None
+        )
+        turn = save_turn(
+            session,
+            user_id=patient.id,
+            direction="inbound",
+            raw_text="hello",
+            transcript=None,
+            intent="other",
+            response_text="Hi",
+            model="rules",
+            model_version="chat-rules-1",
+            latency_ms=1,
+            escalated=False,
+            handoff_id=handoff.id,
+        )
+        turn_id = turn.id  # commit expires the instance; keep the id
+        session.commit()
+
+    assert resolve_for_email(factory, email, dry_run=True) == [handoff.id]
+    with factory() as session:
+        row = session.get(Handoff, handoff.id)
+        assert row is not None and row.status == "open" and row.resolution_note is None
+
+    assert resolve_for_email(factory, email) == [handoff.id]
+    with factory() as session:
+        row = session.get(Handoff, handoff.id)
+        assert row is not None
+        assert (row.status, row.resolution_note) == ("resolved", TEST_RESOLUTION_NOTE)
+        assert row.resolved_at is not None
+        # The turn is untouched (append-only audit) and still points at the handoff.
+        kept = session.get(ConversationTurn, turn_id)
+        assert kept is not None and (kept.handoff_id, kept.raw_text) == (handoff.id, "hello")
+    assert resolve_for_email(factory, email) == []  # nothing left to resolve

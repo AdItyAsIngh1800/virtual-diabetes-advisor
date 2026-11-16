@@ -924,3 +924,41 @@ def resolve_handoff(
         .values(status="resolved", resolved_at=at, resolution_note=note)
     )
     session.refresh(handoff)
+
+
+# Note written on handoffs closed by scripts/resolve_handoffs.py.
+TEST_RESOLUTION_NOTE: Final = "resolved by scripts/resolve_handoffs.py (stale test handoff)"
+
+
+def resolve_stale_handoffs(
+    session: Session,
+    patient_id: uuid.UUID,
+    *,
+    at: datetime,
+    note: str = TEST_RESOLUTION_NOTE,
+    include_assigned: bool = False,
+) -> list[uuid.UUID]:
+    """Resolve a patient's stale live handoffs (testing aid; turns are never touched).
+
+    Only the ``handoffs`` row changes (status, ``resolved_at``, ``resolution_note``);
+    the append-only ``conversation_turns`` stay exactly as they were.
+
+    Args:
+        session: Open session (caller commits).
+        patient_id: Patient.
+        at: ``resolved_at``.
+        note: ``resolution_note``.
+        include_assigned: Also resolve handoffs a practitioner has claimed.
+
+    Returns:
+        Ids of the handoffs resolved.
+    """
+    statuses: tuple[HandoffStatus, ...] = LIVE_STATUSES if include_assigned else ("open",)
+    rows = session.execute(
+        update(Handoff)
+        .where(Handoff.user_id == patient_id, Handoff.status.in_(statuses))
+        .values(status="resolved", resolved_at=at, resolution_note=note)
+        .returning(Handoff.id)
+    ).all()
+    session.flush()
+    return [r[0] for r in rows]
