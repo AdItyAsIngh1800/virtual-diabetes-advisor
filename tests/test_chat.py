@@ -165,6 +165,24 @@ EMERGENCY_CASES = [
     ("sugar 300, breathing fast", "high_with_symptoms"),
     ("my glucose is 320 and I feel confused", "high_with_symptoms"),
     ("threw up twice, reading 410", "high_with_symptoms"),
+    ("sugar 290 and very drowsy", "high_with_symptoms"),
+    ("glucose 310 with stomach pain", "high_with_symptoms"),
+    # Found in testing (Nov 2026): self-harm phrasings that were missed.
+    ("i feel like killing myself", "self_harm"),
+    ("thinking of ending my life", "self_harm"),
+    ("no reason to live", "self_harm"),
+    ("i don't want to live", "self_harm"),
+    ("end it all", "self_harm"),
+    ("I just want to end it all", "self_harm"),
+    ("everyone would be better off dead without me", "self_harm"),
+    ("I have been hurting myself", "self_harm"),
+    ("nothing left to live for", "self_harm"),
+    # Found in testing: emergency symptoms that were missed.
+    ("breathing problem", "breathing"),
+    ("I have a problem breathing", "breathing"),
+    ("heart pain", "chest_pain"),
+    ("pain in my chest", "chest_pain"),
+    ("feeling very drowsy", "confusion"),  # drowsiness counts as confusion
 ]
 URGENT_CASES = [
     ("fasting 45", "very_low"),
@@ -172,6 +190,9 @@ URGENT_CASES = [
     ("260", "very_high"),
     ("my glucose is 320", "very_high"),
     ("380", "very_high"),
+    # "random" marks a reading report (found in testing).
+    ("random 300", "very_high"),
+    ("300 random", "very_high"),
 ]
 
 
@@ -261,9 +282,21 @@ def test_vomiting_without_a_very_high_reading_is_not_a_red_flag(message: str) ->
     assert detect_red_flag(message) is None
 
 
-def test_self_harm_template_gives_the_helpline() -> None:
-    out = ask(FakeStore(), "I don't want to live anymore")
+@pytest.mark.parametrize(
+    "message",
+    [
+        "I don't want to live anymore",
+        "i feel like killing myself",
+        "thinking of ending my life",
+        "no reason to live",
+        "end it all",
+    ],
+)
+def test_self_harm_template_gives_the_helpline(message: str) -> None:
+    out = ask(FakeStore(), message)
+    assert out.red_flag == "self_harm"
     assert MENTAL_HEALTH_HELPLINE in out.reply_text
+    assert "Tele-MANAS on 14416" in out.reply_text
 
 
 def test_red_flag_without_practitioner_says_to_call_directly() -> None:
@@ -296,6 +329,11 @@ def test_red_flag_inside_a_live_handoff_reuses_it() -> None:
         "fasting 132",
         "I passed my driving test",
         "breathing exercises help",
+        # Everyday phrases the broader self-harm list must not catch.
+        "my feet are killing me",
+        "can I take it all at once",
+        "I cut myself while chopping vegetables",
+        "random 180",
     ],
 )
 def test_ordinary_messages_are_not_red_flags(message: str) -> None:
@@ -321,6 +359,11 @@ def test_ordinary_messages_are_not_red_flags(message: str) -> None:
         ("My fasting sugar is 132.", "132", "fasting"),
         ("140.", "140", "random"),
         ("Sugar after lunch, 190!", "190", "post_meal"),
+        # "random" is a reading keyword (found in testing).
+        ("random 300", "300", "random"),
+        ("random 180", "180", "random"),
+        ("300 random", "300", "random"),
+        ("RBS 210", "210", "random"),
     ],
 )
 def test_parse_reading(message: str, value: str, context: str) -> None:
@@ -343,6 +386,22 @@ def test_parse_reading(message: str, value: str, context: str) -> None:
 )
 def test_not_a_reading_report(message: str) -> None:
     assert parse_reading(message) is None
+
+
+def test_random_300_is_stored_and_flagged_very_high() -> None:
+    store = FakeStore()
+    out = ask(store, "random 300")
+    assert store.readings == [ParsedReading(value_mg_dl=Decimal(300), context="random")]
+    assert out.reading is store.outcome
+    assert out.red_flag == "very_high" and out.red_flag_level == "urgent"
+    assert out.reply_text.startswith("Your glucose of 300 mg/dL is very high.")
+
+
+def test_random_180_is_stored_as_a_random_reading() -> None:
+    store = FakeStore()
+    out = ask(store, "random 180")
+    assert out.intent == "reading_report"
+    assert store.readings == [ParsedReading(value_mg_dl=Decimal(180), context="random")]
 
 
 def test_fasting_and_after_food_contexts_differ() -> None:

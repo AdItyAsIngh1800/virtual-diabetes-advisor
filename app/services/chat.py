@@ -5,10 +5,11 @@ which tries these routes **in order** and stops at the first that applies:
 
 a. **Red flag** (:func:`detect_red_flag`), two levels (:data:`RED_FLAG_LEVELS`):
 
-   * ``emergency``: chest pain, trouble breathing, confusion, fainting or
-     unconsciousness, seizure, self-harm words, or a reading above 250 mg/dL together
-     with vomiting, confusion or fast breathing. The **fixed** reply opens with the
-     emergency number (112).
+   * ``emergency``: chest (or "heart") pain, trouble breathing, confusion or
+     drowsiness, fainting or unconsciousness, seizure, self-harm words (reply gives
+     Tele-MANAS 14416), or a reading above 250 mg/dL together with hyperglycaemic-crisis
+     signs (vomiting, nausea, stomach pain, fast breathing, drowsiness, confusion). The
+     **fixed** reply opens with the emergency number (112).
    * ``urgent``: a reading below 54 or above 250 mg/dL on its own. The **fixed** reply
      opens with what to do now (ADA Rec 6.15 hypoglycaemia treatment, or ketones and the
      care team) and gives 112 only for when that is not possible or it gets worse.
@@ -143,25 +144,43 @@ def normalise(text: str) -> str:
 _RED_FLAG_PATTERNS: Final[tuple[tuple[RedFlag, re.Pattern[str]], ...]] = (
     (
         "self_harm",
+        # Broad on purpose: a false positive costs one helpline message, a miss can
+        # cost a life. Covers the phrasings found in testing ("i feel like killing
+        # myself", "thinking of ending my life", "no reason to live", "end it all").
         re.compile(
-            r"\b(suicid\w*|kill (?:my ?self|me)|end (?:my|it) (?:life|all)|self[- ]?harm"
-            r"|hurt(?:ing)? my ?self|want to die|don'?t want to (?:live|be alive)"
-            r"|better off dead|overdose)\b"
+            # Not "killing me" ("my feet are killing me"), "take it all" (medicines)
+            # or "cut myself" (kitchen accidents): too often meant literally.
+            r"\b(suicid\w*"
+            r"|kill (?:my ?self|me)|killing my ?self"
+            r"|(?:end|ending) (?:my (?:own )?life|it all)"
+            r"|(?:take|taking) my (?:own )?life"
+            r"|self[- ]?harm\w*"
+            r"|(?:hurt|harm)(?:ing)? my ?self"
+            r"|(?:want|wanna) (?:to )?die"
+            r"|(?:don'?t|do not) (?:want|wish) to (?:live|be alive|be here|wake up)"
+            r"|no (?:reason|point|will) (?:to live|in living)"
+            r"|(?:nothing|no one|nobody) (?:left )?to live for"
+            r"|better off dead|wish (?:i|i'?d) (?:was|were|had) (?:dead|died|never been born)"
+            r"|overdos\w*)\b"
         ),
     ),
     (
         "breathing",
         re.compile(
-            r"\b(can'?t|cannot|can not|unable to|hard to|struggling to|trouble|difficulty)"
+            r"\b(can'?t|cannot|can not|unable to|hard to|struggling to|trouble|difficulty"
+            r"|problem|problems|difficult)"
             r" (?:breath\w*)|short(?:ness)? of breath|breathless|not breathing\b"
+            # "breathing problem", "breathing is difficult", "breathing trouble".
+            r"|\bbreath(?:ing)? (?:is |is very |very )?(?:problem|issue|trouble|difficult\w*|hard)"
         ),
     ),
     (
         "chest_pain",
         # A few words may sit between ("chest feels tight", "chest is very heavy").
+        # Many patients say "heart pain" for chest pain; treat it the same.
         re.compile(
-            r"\bchest\b(?:\s+\S+){0,3}?\s+(?:pain\w*|tight\w*|pressure|hurt\w*|heav\w*|"
-            r"discomfort|ache\w*)\b|heart attack"
+            r"\b(?:chest|heart)\b(?:\s+\S+){0,3}?\s+(?:pain\w*|tight\w*|pressure|hurt\w*|heav\w*|"
+            r"discomfort|ache\w*)\b|heart attack|pain in (?:my |the )?(?:chest|heart)"
         ),
     ),
     (
@@ -171,7 +190,9 @@ _RED_FLAG_PATTERNS: Final[tuple[tuple[RedFlag, re.Pattern[str]], ...]] = (
             r"|collaps\w*|seizure|fitting|convuls\w*|won'?t wake up|not waking up)\b"
         ),
     ),
-    ("confusion", re.compile(r"\b(confus\w*|disoriented|can'?t think straight)\b")),
+    # Drowsiness counts as altered mental status (ADA-6: a sign of severe hypoglycaemia
+    # and of hyperglycaemic crisis), so it gets the same emergency reply as confusion.
+    ("confusion", re.compile(r"\b(confus\w*|disoriented|can'?t think straight|drows\w*)\b")),
 )
 
 # A trailing full stop is punctuation, not a decimal point: Whisper transcripts end
@@ -184,7 +205,9 @@ _NOT_GLUCOSE_UNIT: Final = re.compile(
 )
 # Words that make a number a glucose report.
 _GLUCOSE_CUE: Final = re.compile(
-    r"\b(sugar|glucose|bg|bgl|blood|reading|level|mg|mgdl|mg/dl|fasting|fbs|ppbs|rbs|pp|"
+    # "random" is how Indian labs and patients label a non-fasting check ("random 300",
+    # "RBS 180"), so it marks a report just like "fasting".
+    r"\b(sugar|glucose|bg|bgl|blood|reading|level|mg|mgdl|mg/dl|fasting|fbs|ppbs|rbs|pp|random|"
     r"after (?:food|meal|eating|lunch|dinner|breakfast)|post[- ]?meal|before|empty stomach|"
     r"meter|checked|tested|measured|morning)\b"
 )
