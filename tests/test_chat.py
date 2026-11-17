@@ -20,6 +20,7 @@ from app.services.chat import (
     GREETING_REPLY,
     HYPERGLYCAEMIC_CRISIS_SIGNS,
     MENTAL_HEALTH_HELPLINE,
+    MMOL_REPLY,
     RED_FLAG_LEVELS,
     RELAY_REPLY,
     UNKNOWN_REPLY,
@@ -208,6 +209,23 @@ EMERGENCY_CASES = [
     ("I feel very drowsy", "confusion"),
     ("she is drowsy and confused", "confusion"),
     ("my father is very drowsy since morning", "confusion"),
+    # Insulin or sulfonylurea overdose (ADA Level 3 hypoglycaemia risk).
+    ("I took too much insulin", "overdose"),
+    ("I took extra insulin by mistake", "overdose"),
+    ("took a double dose of insulin", "overdose"),
+    ("I gave myself double the dose of my insulin", "overdose"),
+    ("I think I took too many glimepiride tablets", "overdose"),
+    ("I injected too many units", "overdose"),
+    ("insulin overdose", "self_harm"),
+    ("overdoze", "self_harm"),
+    ("over dose", "self_harm"),
+    # Romanised Hindi.
+    ("seene mein dard hai", "chest_pain"),
+    ("chhati me dard", "chest_pain"),
+    ("saans nahi aa rahi", "breathing"),
+    ("saans lene mein takleef", "breathing"),
+    ("papa behosh ho gaye", "consciousness"),
+    ("chakkar aa raha hai", "consciousness"),
 ]
 URGENT_CASES = [
     ("fasting 45", "very_low"),
@@ -375,10 +393,38 @@ def test_red_flag_inside_a_live_handoff_reuses_it() -> None:
         "can I take it all at once",
         "I cut myself while chopping vegetables",
         "random 180",
+        # Dosing questions go to the guard, not the emergency reply.
+        "how much insulin should I take",
+        "can I take extra insulin",
+        "I need more insulin",
+        "chakkar lagana hai",
+        "saans ki ginti",
     ],
 )
 def test_ordinary_messages_are_not_red_flags(message: str) -> None:
     assert detect_red_flag(message) is None
+
+
+@pytest.mark.parametrize("message", ["how much insulin should I take", "can I take extra insulin"])
+def test_dosing_questions_still_hit_the_guard_not_the_emergency_reply(message: str) -> None:
+    out = ask(FakeStore(), message)
+    assert out.intent == "question" and out.reply_text == ADVICE_GUARD_REPLY
+    assert out.red_flag is None
+
+
+def test_overdose_reply_gives_112_and_carbohydrate_but_no_medicine_advice() -> None:
+    reply = ask(FakeStore(), "I took too much insulin").reply_text
+    assert reply.startswith(f"Call {EMERGENCY_NUMBER} now")
+    assert "15 grams" in reply and "do not take any more medicine" in reply
+
+
+@pytest.mark.parametrize("message", ["fasting 7.8 mmol", "my sugar is 126 mmol/l", "5.5mmol"])
+def test_mmol_readings_are_not_saved_and_the_patient_is_asked_to_resend(message: str) -> None:
+    store = FakeStore()
+    out = ask(store, message)
+    assert store.readings == []
+    assert out.reply_text == MMOL_REPLY and "mg/dL" in out.reply_text
+    assert out.intent == "reading_report" and out.reading is None
 
 
 # --- (b) reading reports -------------------------------------------------------------

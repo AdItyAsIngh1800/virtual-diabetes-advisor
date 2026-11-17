@@ -76,6 +76,7 @@ logger = logging.getLogger(__name__)
 
 RedFlag = Literal[
     "self_harm",
+    "overdose",
     "high_with_symptoms",
     "breathing",
     "chest_pain",
@@ -90,6 +91,7 @@ RedFlagLevel = Literal["emergency", "urgent"]
 RED_FLAG_LEVELS: Final[Mapping[RedFlag, RedFlagLevel]] = MappingProxyType(
     {
         "self_harm": "emergency",
+        "overdose": "emergency",
         "high_with_symptoms": "emergency",
         "breathing": "emergency",
         "chest_pain": "emergency",
@@ -158,6 +160,14 @@ def normalise(text: str) -> str:
     return " ".join(straight.lower().split())
 
 
+# Diabetes medicines common in India. A number next to one is a dose, not a reading
+# ("metformin 500 mg", "500 mg metformin").
+_MEDICINE_NAMES: Final = (
+    r"(?:insulin|metformin|glimepiride|gliclazide|glipizide|glibenclamide|sitagliptin"
+    r"|vildagliptin|teneligliptin|linagliptin|empagliflozin|dapagliflozin|canagliflozin"
+    r"|pioglitazone|acarbose|voglibose|semaglutide|ozempic|rybelsus|liraglutide|dulaglutide"
+    r"|tirzepatide)"
+)
 # Ordered: self-harm first so its template (helpline) wins over generic symptoms.
 _RED_FLAG_PATTERNS: Final[tuple[tuple[RedFlag, re.Pattern[str]], ...]] = (
     (
@@ -179,7 +189,22 @@ _RED_FLAG_PATTERNS: Final[tuple[tuple[RedFlag, re.Pattern[str]], ...]] = (
             r"|no (?:reason|point|will) (?:to live|in living)"
             r"|(?:nothing|no one|nobody) (?:left )?to live for"
             r"|better off dead|wish (?:i|i'?d) (?:was|were|had) (?:dead|died|never been born)"
-            r"|overdos\w*)\b"
+            r"|over ?do(?:s|z)\w*)\b"
+        ),
+    ),
+    (
+        "overdose",
+        # Too much insulin or a sulfonylurea (glimepiride, gliclazide, glipizide,
+        # glibenclamide) can cause severe (ADA Level 3) hypoglycaemia: a low with altered
+        # mental or physical state that needs help from another person (ADA Standards of
+        # Care 2026, Section 6). Past tense only ("I took ..."): "how much insulin should
+        # I take" is a dosing question for the guard, not an emergency.
+        re.compile(
+            rf"\btoo (?:much|many)\b(?:\s+\S+){{0,2}}?"
+            rf"\s+(?:{_MEDICINE_NAMES}|units|tablets?|pills?)\b"
+            r"|\b(?:took|taken|injected|had|gave myself)\s+(?:an? )?(?:extra|double|twice|2x)\b"
+            rf"(?:\s+\S+){{0,3}}?\s+(?:{_MEDICINE_NAMES}|dose|doses|units|tablets?|pills?)\b"
+            rf"|\bdouble (?:the )?dose of (?:my )?{_MEDICINE_NAMES}\b"
         ),
     ),
     (
@@ -190,6 +215,9 @@ _RED_FLAG_PATTERNS: Final[tuple[tuple[RedFlag, re.Pattern[str]], ...]] = (
             r" (?:breath\w*)|short(?:ness)? of breath|breathless|not breathing\b"
             # "breathing problem", "breathing is difficult", "breathing trouble".
             r"|\bbreath(?:ing)? (?:is |is very |very )?(?:problem|issue|trouble|difficult\w*|hard)"
+            # Romanised Hindi: "saans nahi aa rahi", "saans lene mein takleef".
+            r"|\bsaans (?:nahi|nahin|nhi) (?:aa|aati|aata|le)\w*"
+            r"|\bsaans lene (?:mein|me|main) (?:dikkat|takleef|taklif)"
         ),
     ),
     (
@@ -199,13 +227,18 @@ _RED_FLAG_PATTERNS: Final[tuple[tuple[RedFlag, re.Pattern[str]], ...]] = (
         re.compile(
             r"\b(?:chest|heart)\b(?:\s+\S+){0,3}?\s+(?:pain\w*|tight\w*|pressure|hurt\w*|heav\w*|"
             r"discomfort|ache\w*)\b|heart attack|pain in (?:my |the )?(?:chest|heart)"
+            # Romanised Hindi: "seene mein dard", "chhati mein dard".
+            r"|\b(?:seene|seena|chhati|chaati) (?:mein|me|main|ka) (?:dard|bhaari|bhari)"
         ),
     ),
     (
         "consciousness",
         re.compile(
             r"\b(faint(?:ed|ing)?|pass(?:ed|ing)? out|black(?:ed)? out|unconscious|unresponsive"
-            r"|collaps\w*|seizure|fitting|convuls\w*|won'?t wake up|not waking up)\b"
+            r"|collaps\w*|seizure|fitting|convuls\w*|won'?t wake up|not waking up"
+            # Romanised Hindi: "behosh" (unconscious), "chakkar aa raha" (dizzy, about to
+            # faint; a common first sign of a low).
+            r"|behosh\w*|chakkar aa(?: raha| rahi| rahe)?)\b"
         ),
     ),
     # Drowsiness is handled by _describes_drowsiness (current state only).
@@ -244,14 +277,6 @@ _NUMBER: Final = re.compile(r"(?<![\d.])(\d{2,3}(?:\.\d)?)(?!\d|\.\d)")
 _NOT_GLUCOSE_UNIT: Final = re.compile(
     r"^\s*(?:min\w*|hr\w*|hour\w*|sec\w*|day\w*|week\w*|month\w*|year\w*|yrs?|kg|kgs|kilo\w*"
     r"|lb\w*|steps?|cm|km|%|percent|bpm|calorie\w*|kcal|g\b|grams?|ml|units?|mmol\w*)"
-)
-# Diabetes medicines common in India. A number next to one is a dose, not a reading
-# ("metformin 500 mg", "500 mg metformin").
-_MEDICINE_NAMES: Final = (
-    r"(?:insulin|metformin|glimepiride|gliclazide|glipizide|glibenclamide|sitagliptin"
-    r"|vildagliptin|teneligliptin|linagliptin|empagliflozin|dapagliflozin|canagliflozin"
-    r"|pioglitazone|acarbose|voglibose|semaglutide|ozempic|rybelsus|liraglutide|dulaglutide"
-    r"|tirzepatide)"
 )
 # "500 mg metformin" / "500 mg of metformin": mg of a medicine, not mg/dL of glucose.
 _MEDICINE_AMOUNT: Final = re.compile(
@@ -490,6 +515,17 @@ def emergency_reply(
             f"{EMERGENCY_NUMBER}) if you notice signs of a crisis: "
             f"{HYPERGLYCAEMIC_CRISIS_SIGNS}. {team}"
         )
+    if flag == "overdose":
+        # EMERGENCY. Too much insulin or sulfonylurea risks severe (Level 3)
+        # hypoglycaemia (ADA 2026 Section 6). Carbohydrate only for someone awake who can
+        # swallow (Rec 6.15); no advice on the medicine itself.
+        return (
+            f"Call {EMERGENCY_NUMBER} now or go to the nearest hospital: too much insulin or "
+            "diabetes medicine can cause a dangerous low glucose. If you are awake and able "
+            f"to swallow, take {HYPO_TREATMENT_CARB_G} grams of fast-acting carbohydrate "
+            "while you wait for help, and do not take any more medicine. Do not be alone. "
+            f"{team}"
+        )
     # EMERGENCY symptoms: chest pain, breathing, consciousness, confusion.
     return (
         f"Call {EMERGENCY_NUMBER} now or go to the nearest hospital: this could be an "
@@ -524,6 +560,16 @@ _POST_MEAL: Final = re.compile(
 _FASTING: Final = re.compile(
     r"\b(fasting|fasted|fbs|empty stomach|before (?:breakfast|food|eating|meal)|"
     r"on waking|woke up|first thing)\b"
+)
+
+
+# A number straight before "mmol" ("7.8 mmol/L"): a reading in the other unit.
+_MMOL: Final = re.compile(r"\d\s*mmol")
+# Not converted silently: a wrong conversion would judge the reading against the wrong limit.
+MMOL_REPLY: Final = (
+    "This app only understands glucose in mg/dL, so I have not saved that reading. "
+    "Please send it again in mg/dL (for example: fasting 126). If you feel unwell, "
+    "write 'talk to a doctor'."
 )
 
 
@@ -1332,6 +1378,15 @@ class ChatEngine:
         live = self._store.live_handoff(request.user_id)
         # (b) Reading reports are stored and judged whatever the handoff state; the
         # turn is attached to a live handoff so the practitioner sees it.
+        if text and _MMOL.search(normalise(text)):
+            return ChatOutcome(
+                intent="reading_report",
+                reply_text=MMOL_REPLY,
+                model=RULES_MODEL,
+                model_version=RULES_MODEL_VERSION,
+                handoff=live,
+                notify_practitioner=live is not None,
+            )
         reading = parse_reading(text) if text else None
         if reading is not None:
             outcome = self._store.record_reading(
