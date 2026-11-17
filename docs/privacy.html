@@ -43,17 +43,17 @@
 
 <h2>Where it is stored and processed</h2>
 <ul>
-  <li>Data is stored in a Supabase (PostgreSQL) database. Row-level security lets each patient read only their own records; practitioners see only patients assigned to them.</li>
+  <li>Data is stored in a Supabase (PostgreSQL) database. Row-level security lets each patient read only their own records when connecting to the database directly. The app's server connects with a privileged key that bypasses that protection, so it enforces access in its own code: each patient sees only their own records, and practitioners see only the patients assigned to them (an administrator account can see all patients).</li>
   <li>Questions may be processed by an AI model provider to draft answers; only the content needed to answer is sent.</li>
 </ul>
 
 <h2>How long we keep it</h2>
-<p>Data is kept only for the duration of the project and its evaluation, and is deleted when the project ends. Conversation audit records are kept until then so the advisor's answers can be reviewed.</p>
+<p>Data is kept only for the duration of the project and its evaluation, and is deleted when the project ends. Conversation records (your messages, the advisor's replies and practitioners' reviews of them) are kept as an audit log so the advisor's answers can be reviewed. The log is append-only, so these records cannot be deleted before then, even on request.</p>
 
 <h2>Your choices</h2>
 <ul>
   <li>You can turn alerts off at any time with <strong>Turn alerts off</strong> in the app, or by blocking notifications for the site in your browser settings.</li>
-  <li>You can ask for your account and data to be deleted by contacting the project team. We will remove it within 30 days.</li>
+  <li>You can ask for your account and your other data (profile, readings, alerts and notification subscriptions) to be deleted by contacting the project team. We will remove it within 30 days. Conversation records are the exception: they stay in the audit log until the project ends.</li>
 </ul>
 
 <h2>Contact</h2>
