@@ -11,7 +11,8 @@ Pipeline:
     3. Fit three candidates (logistic regression, random forest, gradient boosting)
        and pick the one with the best validation PR-AUC.
     4. Re-fit the winner inside isotonic calibration so its probabilities are real
-       probabilities - the threshold engine consumes them directly.
+       probabilities (used for the risk tier, which is stored for audit and never
+       changes a glucose limit).
     5. Pick the decision threshold on validation by maximising F2 (recall counts double:
        missing a diabetic person costs more than a false alarm).
     6. Report final metrics on the untouched test set, compute permutation importance,
