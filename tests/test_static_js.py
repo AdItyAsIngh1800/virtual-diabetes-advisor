@@ -1013,3 +1013,12 @@ def test_overview_tiles_show_rates_with_counts() -> None:
     empty = next(t for t in tiles if t["key"] == "delivery")
     assert (empty["value"], empty["detail"]) == ("n/a", "0 of 0 sent or opened")
     assert js("DA.batchLine(null)") == "Last batch run: never."
+
+
+@pytest.mark.parametrize("page", ["index.html", "advisory.html", "practitioner.html"])
+def test_supabase_js_is_pinned_with_an_integrity_hash(page: str) -> None:
+    html = (STATIC / page).read_text(encoding="utf-8")
+    (tag,) = re.findall(r"<script[^>]*supabase-js[^>]*>", html)
+    assert re.search(r"supabase-js@\d+\.\d+\.\d+/", tag)
+    assert re.search(r'integrity="sha384-[A-Za-z0-9+/]{64}"', tag)
+    assert 'crossorigin="anonymous"' in tag
