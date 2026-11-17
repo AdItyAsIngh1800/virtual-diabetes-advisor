@@ -328,7 +328,7 @@ def latest_reviews() -> Select[
     )
 
 
-def _first_name(full_name: str | None) -> str | None:
+def first_name(full_name: str | None) -> str | None:
     """Return the first word of a name.
 
     Args:
@@ -465,7 +465,7 @@ def list_reviewable_turns(
             ReviewableTurn(
                 turn_id=turn.id,
                 created_at=turn.created_at,
-                patient_first_name=_first_name(full_name),
+                patient_first_name=first_name(full_name),
                 question=turn.transcript if turn.transcript is not None else turn.raw_text,
                 spoken=turn.transcript is not None,
                 answer=turn.response_text or "",

@@ -30,7 +30,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
-from app.api import admin, advisories, audit, chat, kb_admin, patient_app, push
+from app.api import admin, advisories, audit, chat, dashboard, kb_admin, patient_app, push
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.core.logging import configure_logging
@@ -210,6 +210,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(audit.router)
     app.include_router(kb_admin.router)
+    app.include_router(dashboard.router)
     # Before mount_patient_app: the /app static mount would otherwise swallow
     # /app/advisory/{id}.
     app.include_router(patient_app.router)

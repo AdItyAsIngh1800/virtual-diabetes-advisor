@@ -37,6 +37,7 @@ OPTIONAL_ENV = (
     "KB_UPGRADE_LOOKBACK_DAYS",
     "PRE_BREACH_BAND",
     "ADVISORY_COOLDOWN_HOURS",
+    "DASHBOARD_TIMEZONE",
     "ADMIN_API_KEY",
     "BATCH_INTERVAL_MINUTES",
     "BATCH_SCHEDULER_ENABLED",
@@ -81,6 +82,7 @@ def test_defaults(env: pytest.MonkeyPatch) -> None:
     assert (s.vapid_public_key, s.vapid_private_key, s.vapid_subject) == (None, None, None)
     assert s.supabase_anon_key is None
     assert s.chat_llm_rephrase_enabled is False  # rephrasing is opt-in
+    assert s.dashboard_timezone == "Asia/Kolkata"
 
 
 def test_defaults_can_be_overridden(env: pytest.MonkeyPatch) -> None:

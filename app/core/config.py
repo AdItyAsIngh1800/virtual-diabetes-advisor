@@ -14,6 +14,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, NamedTuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, HttpUrl, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -88,6 +89,8 @@ class Settings(BaseSettings):
         kb_upgrade_lookback_days: Window, in days, over which repeats are counted.
         pre_breach_band: Fraction of a limit that defines the pre-breach band (R3).
         advisory_cooldown_hours: Minimum hours between repeat advisories (R3 de-dup).
+        dashboard_timezone: IANA zone whose midnight starts "today" on the dashboard
+            overview (R6), e.g. ``Asia/Kolkata``.
         admin_api_key: Shared secret for ``POST /admin/batch-run`` (sent in the
             ``X-Admin-Api-Key`` header). Optional: without it the admin endpoint
             refuses every request; read it via :meth:`require_admin_api_key`.
@@ -195,6 +198,9 @@ class Settings(BaseSettings):
     # team to avoid alert fatigue; a *breach* still escalates to the practitioner, and
     # Level 2 hypoglycaemia (< 54 mg/dL) bypasses the cooldown entirely.
     advisory_cooldown_hours: int = Field(default=24, ge=1, le=24 * 7)
+    # R6: "readings today" on the dashboard starts at local midnight in this zone, not
+    # at UTC midnight (05:30 in India). The demo cohort and clinic are in India.
+    dashboard_timezone: str = Field(default="Asia/Kolkata", min_length=1)
 
     # --- Batch job / admin API (R1) ---------------------------------------------
     # Optional so tests, scripts and the batch job start without it; the admin
@@ -206,6 +212,26 @@ class Settings(BaseSettings):
     batch_scheduler_enabled: bool = True
 
     log_level: LogLevel = "INFO"
+
+    @field_validator("dashboard_timezone")
+    @classmethod
+    def _check_dashboard_timezone(cls, value: str) -> str:
+        """Require a zone name the standard library knows.
+
+        Args:
+            value: Raw ``DASHBOARD_TIMEZONE``.
+
+        Returns:
+            The zone name.
+
+        Raises:
+            ValueError: If it is not a known IANA zone.
+        """
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"unknown timezone {value!r}") from exc
+        return value
 
     @field_validator("vapid_public_key")
     @classmethod
