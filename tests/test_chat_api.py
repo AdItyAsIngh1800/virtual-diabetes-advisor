@@ -24,7 +24,7 @@ from app.api import chat
 from app.api.advisories import get_audio_store
 from app.api.auth import current_auth_user
 from app.core.config import Settings, get_settings
-from app.core.exceptions import SpeechError
+from app.core.exceptions import AudioTooLongError, SpeechError
 from app.db.chat_repository import Contact, HandoffSummary
 from app.db.models import ConversationTurn, Handoff, Practitioner, User
 from app.db.session import get_session_factory
@@ -345,6 +345,19 @@ def _spoken_reply(harness: Harness, transcript: str) -> bytes:
     assert response.status_code == 200
     (audio,) = harness.audio_store.uploads.values()
     return audio
+
+
+def test_too_long_recording_gets_a_friendly_422(harness: Harness) -> None:
+    class TooLong:
+        def transcribe(self, audio: bytes, language: str) -> str:
+            raise AudioTooLongError("long")
+
+    harness.client.app.dependency_overrides[chat.get_transcriber] = TooLong  # type: ignore[attr-defined]
+    response = harness.client.post(
+        "/api/chat", files={"audio": ("voice.webm", b"\x1aE\xdf\xa3x", "audio/webm")}
+    )
+    assert response.status_code == 422
+    assert "longer than 60 seconds" in response.json()["detail"]
 
 
 def test_spoken_kb_answer_carries_the_not_reviewed_notice(harness: Harness, world: World) -> None:

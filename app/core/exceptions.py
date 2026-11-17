@@ -129,5 +129,9 @@ class SpeechError(DiabetesAdvisorError):
     """
 
 
+class AudioTooLongError(SpeechError):
+    """Raised when a voice message is longer than ``CHAT_AUDIO_MAX_SECONDS`` (R4 chat)."""
+
+
 class AudioStorageError(DiabetesAdvisorError):
     """Raised when voice audio cannot be uploaded to, or signed from, Supabase Storage."""

@@ -80,6 +80,7 @@ class Settings(BaseSettings):
         chat_kb_min_similarity: Minimum TF-IDF similarity for a KB entry to answer a
             chat question (below it: "I don't know" + practitioner connect).
         chat_audio_max_bytes: Largest accepted voice-message upload.
+        chat_audio_max_seconds: Longest accepted voice message, measured after decoding.
         expose_api_docs: Serve ``/docs``, ``/redoc`` and ``/openapi.json`` (off by
             default: the app is reachable through a public tunnel).
         admin_local_only: Answer 404 to ``/admin/*`` unless the request comes straight
@@ -171,6 +172,9 @@ class Settings(BaseSettings):
     # Voice messages: ~60 s of MediaRecorder opus/aac is 250-500 KB; 2 MB leaves room for
     # browsers that record at higher bitrates while stopping uploads that are minutes long.
     chat_audio_max_bytes: int = Field(default=2 * 1024 * 1024, ge=64 * 1024, le=10 * 1024 * 1024)
+    # The byte limit alone does not bound length: 2 MB of low-bitrate opus decodes to tens
+    # of minutes, which Whisper would then chew on the CPU. A glucose message is seconds.
+    chat_audio_max_seconds: int = Field(default=60, ge=5, le=300)
 
     # --- Answer review (R5) -------------------------------------------------------
     # The "low confidence" review filter lists KB answers whose similarity is below this.

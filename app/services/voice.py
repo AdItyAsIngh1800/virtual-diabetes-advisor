@@ -31,7 +31,7 @@ import numpy.typing as npt
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from app.core.config import Settings
-from app.core.exceptions import AudioStorageError, SpeechError
+from app.core.exceptions import AudioStorageError, AudioTooLongError, SpeechError
 from app.db.models import Language
 
 logger = logging.getLogger(__name__)
@@ -262,15 +262,18 @@ class WhisperTranscriber:
     Args:
         loader: Builds the model; defaults to :func:`load_whisper_model`.
         decoder: Decodes uploads to samples; defaults to :func:`decode_audio`.
+        max_seconds: Longest accepted recording, checked after decoding.
     """
 
     def __init__(
         self,
         loader: WhisperModelLoader = load_whisper_model,
         decoder: AudioDecoder = decode_audio,
+        max_seconds: float = 60.0,
     ) -> None:
         self._loader = loader
         self._decoder = decoder
+        self._max_seconds = max_seconds
         self._model: _WhisperModel | None = None
         self._lock = threading.Lock()
 
@@ -298,6 +301,7 @@ class WhisperTranscriber:
             The transcript, stripped.
 
         Raises:
+            AudioTooLongError: If the decoded audio is longer than ``max_seconds``.
             SpeechError: If the language is unsupported, the audio is empty, or
                 decoding fails.
         """
@@ -305,6 +309,8 @@ class WhisperTranscriber:
         if not audio:
             raise SpeechError("no audio to transcribe")
         samples = self._decoder(audio)
+        if len(samples) > self._max_seconds * WHISPER_SAMPLE_RATE:
+            raise AudioTooLongError(f"recording is longer than {self._max_seconds:g} s")
         model = self._get_model()
         try:
             segments, _ = model.transcribe(samples, language=language)

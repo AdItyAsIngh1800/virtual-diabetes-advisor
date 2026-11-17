@@ -15,7 +15,7 @@ import numpy.typing as npt
 import pytest
 
 from app.core.config import Settings
-from app.core.exceptions import AudioStorageError, SpeechError
+from app.core.exceptions import AudioStorageError, AudioTooLongError, SpeechError
 from app.services.voice import (
     GttsSynthesizer,
     SupabaseAudioStore,
@@ -109,6 +109,20 @@ class FakeWhisper:
         self.calls.append(language)
         assert audio is SAMPLES  # the decoded samples, not the raw upload
         return [Segment(" my sugar is "), Segment("one forty ")], object()
+
+
+def test_whisper_rejects_a_recording_over_the_limit_before_loading_the_model() -> None:
+    loads: list[int] = []
+
+    def loader() -> FakeWhisper:
+        loads.append(1)
+        return FakeWhisper()
+
+    transcriber = WhisperTranscriber(loader, fake_decoder, max_seconds=0.5)  # SAMPLES is 1 s
+    with pytest.raises(AudioTooLongError):
+        transcriber.transcribe(b"x", "en")
+    assert loads == []
+    assert WhisperTranscriber(loader, fake_decoder, max_seconds=1).transcribe(b"x", "en")
 
 
 def test_whisper_loads_lazily_once_and_joins_segments() -> None:

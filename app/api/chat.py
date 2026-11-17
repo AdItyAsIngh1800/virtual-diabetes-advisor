@@ -55,7 +55,12 @@ from app.api.advisories import get_audio_store
 from app.api.auth import current_auth_user
 from app.api.push import NOT_LINKED
 from app.core.config import Settings, get_settings
-from app.core.exceptions import AudioStorageError, ConfigurationError, SpeechError
+from app.core.exceptions import (
+    AudioStorageError,
+    AudioTooLongError,
+    ConfigurationError,
+    SpeechError,
+)
 from app.db.chat_repository import (
     LIVE_STATUSES,
     HandoffSummary,
@@ -163,7 +168,7 @@ def _shared_transcriber() -> WhisperTranscriber:
     Returns:
         The transcriber.
     """
-    return WhisperTranscriber()
+    return WhisperTranscriber(max_seconds=get_settings().chat_audio_max_seconds)
 
 
 def get_transcriber() -> SpeechTranscriber:
@@ -789,6 +794,12 @@ def post_chat(  # noqa: PLR0917 - FastAPI injects each dependency as a parameter
         data = _read_audio(audio, settings.chat_audio_max_bytes)
         try:
             transcript = transcriber.transcribe(data, "en")
+        except AudioTooLongError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"that recording is longer than {settings.chat_audio_max_seconds} seconds; "
+                "please send a shorter one or type",
+            ) from exc
         except SpeechError as exc:
             logger.warning("voice message from user %s not transcribed: %s", patient.id, exc)
             raise HTTPException(
