@@ -28,7 +28,7 @@ from app.core.exceptions import SpeechError
 from app.db.chat_repository import Contact, HandoffSummary
 from app.db.models import ConversationTurn, Handoff, Practitioner, User
 from app.db.session import get_session_factory
-from app.services.chat import HandoffInfo, KbIndexCache, ParsedReading
+from app.services.chat import KB_SPOKEN_NOTICE, HandoffInfo, KbIndexCache, ParsedReading
 from app.services.supabase_auth import AuthUser
 from tests.test_chat import DOCS, FakeStore
 
@@ -335,6 +335,27 @@ def test_chat_works_without_an_anthropic_key(harness: Harness, world: World) -> 
     assert turn.kb_version == 1
     assert turn.latency_ms is not None and turn.latency_ms >= 0
     assert turn.escalated is False
+
+
+def _spoken_reply(harness: Harness, transcript: str) -> bytes:
+    harness.transcriber.text = transcript
+    response = harness.client.post(
+        "/api/chat", files={"audio": ("voice.webm", b"\x1aE\xdf\xa3x", "audio/webm")}
+    )
+    assert response.status_code == 200
+    (audio,) = harness.audio_store.uploads.values()
+    return audio
+
+
+def test_spoken_kb_answer_carries_the_not_reviewed_notice(harness: Harness, world: World) -> None:
+    audio = _spoken_reply(harness, "what is the 15-15 rule")
+    assert KB_SPOKEN_NOTICE.encode() in audio
+    assert b"Source:" not in audio
+
+
+def test_spoken_red_flag_reply_has_no_kb_notice(harness: Harness, world: World) -> None:
+    audio = _spoken_reply(harness, "I have chest pain")
+    assert b"112" in audio and KB_SPOKEN_NOTICE.encode() not in audio
 
 
 def test_voice_message_is_transcribed_and_answered_with_audio(

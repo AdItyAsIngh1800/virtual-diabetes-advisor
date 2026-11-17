@@ -88,7 +88,14 @@ from app.db.models import (
 from app.db.push_repository import SqlSubscriptionStore, find_patient_by_auth_user
 from app.db.session import get_session_factory
 from app.jobs.dispatch_advisories import run_dispatch
-from app.services.chat import ChatEngine, ChatOutcome, ChatRequest, KbIndexCache, Rephraser
+from app.services.chat import (
+    KB_SPOKEN_NOTICE,
+    ChatEngine,
+    ChatOutcome,
+    ChatRequest,
+    KbIndexCache,
+    Rephraser,
+)
 from app.services.chat_llm import build_rephraser
 from app.services.handoff_notify import HandoffNotifier
 from app.services.notifications import DeliveryReport, Notification, Recipient
@@ -606,8 +613,11 @@ def _spoken_reply_url(
     Returns:
         The URL, or ``None`` on failure (the page then uses speechSynthesis).
     """
-    # The "Source: ..." line is for reading, not for listening.
-    spoken = text.split("\n\nSource:", 1)[0]
+    # The "Source: ..." line is for reading, not for listening. Only KB answers have one,
+    # and they must still say aloud that nobody has reviewed them.
+    spoken, source, _ = text.partition("\n\nSource:")
+    if source:
+        spoken = f"{spoken} {KB_SPOKEN_NOTICE}"
     path = reply_audio_path(user_id, turn_id)
     try:
         audio_store.upload(path, synthesizer.synthesize(spoken, "en"))

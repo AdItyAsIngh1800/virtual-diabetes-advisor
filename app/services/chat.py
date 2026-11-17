@@ -129,6 +129,11 @@ KB_REVIEW_NOTICE: Final = (
     "\nStudent prototype: this is general information from a short list of sourced "
     "diabetes basics, not yet reviewed by a practitioner and not personal medical advice."
 )
+# The same notice for the voice reply, which stops before the "Source:" line.
+KB_SPOKEN_NOTICE: Final = (
+    "This is general information, not yet reviewed by a practitioner, "
+    "and not personal medical advice."
+)
 
 
 # ---------------------------------------------------------------------------
