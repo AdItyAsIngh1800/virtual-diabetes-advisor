@@ -3,17 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Practitioner Inbox</title>
+  <title>Practitioner Dashboard</title>
   <meta name="theme-color" content="#0f766e">
   <link rel="manifest" href="/app/manifest.webmanifest">
   <link rel="icon" href="/app/icon-192.png">
   <link rel="apple-touch-icon" href="/app/icon-192.png">
   <style>
     :root { --fg: #10221f; --muted: #52635f; --bg: #f5f8f7; --card: #fff; --accent: #0f766e; --err: #b42318;
-            --pt: #eef3f2; --bot: #f7f7f2; --me: #0f766e; --me-fg: #fff; --urgent: #b42318; --urgent-bg: #fdecea; --line: #d9e2e0; }
+            --pt: #eef3f2; --bot: #f7f7f2; --me: #0f766e; --me-fg: #fff; --urgent: #b42318; --urgent-bg: #fdecea; --line: #d9e2e0;
+            --warn: #7a4a00; --warn-bg: #fff1d1;
+            /* R6 chart: reading contexts (dataviz categorical slots 1-3, validated all-pairs),
+               band = status warning, breach ring = status critical. */
+            --s-fasting: #2a78d6; --s-post: #eb6834; --s-random: #1baf7a; --band: #fab219; --critical: #d03b3b;
+            --grid: #e6ecea; --axis: #52635f; }
     @media (prefers-color-scheme: dark) {
       :root { --fg: #e7efed; --muted: #a3b5b1; --bg: #0d1513; --card: #15211e; --accent: #2bb3a3; --err: #f97066;
-              --pt: #1d2b28; --bot: #1a2220; --me: #1d8c80; --me-fg: #fff; --urgent: #f97066; --urgent-bg: #2d1614; --line: #26332f; }
+              --pt: #1d2b28; --bot: #1a2220; --me: #1d8c80; --me-fg: #fff; --urgent: #f97066; --urgent-bg: #2d1614; --line: #26332f;
+              --warn: #f5c76a; --warn-bg: #33270f;
+              --s-fasting: #3987e5; --s-post: #d95926; --s-random: #199e70; --band: #fab219; --critical: #e66767;
+              --grid: #22302c; --axis: #a3b5b1; }
     }
     * { box-sizing: border-box; }
     body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
@@ -56,9 +64,12 @@
     #claim-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: 10px; background: var(--pt); margin-bottom: .5rem; }
     #claim-bar p { margin: 0; flex: 1 1 14rem; }
     /* Tabs: Handoffs | Review | Knowledge base | Audit (R5). */
-    .tabs { display: flex; gap: .25rem; margin-top: 1rem; border-bottom: 1px solid var(--line); }
+    /* Tabs: Overview | Patients | Alerts (R6) | Handoffs | Review | Knowledge base | Audit (R5).
+       Seven tabs do not fit a phone: the strip scrolls sideways instead of wrapping. */
+    .tabs { display: flex; gap: .25rem; margin-top: 1rem; border-bottom: 1px solid var(--line);
+            overflow-x: auto; scrollbar-width: thin; scroll-snap-type: x proximity; }
     .tabs button { margin: 0; background: transparent; color: var(--muted); border-radius: 8px 8px 0 0;
-                   border-bottom: 3px solid transparent; }
+                   border-bottom: 3px solid transparent; flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
     .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
     .filters { display: flex; flex-wrap: wrap; gap: .4rem; }
     .filters button { margin: 0; min-height: 36px; padding: .3rem .8rem; font-size: .9rem; border-radius: 999px;
@@ -99,13 +110,74 @@
     #model-limitations { margin: .25rem 0; padding-left: 1.2rem; }
     h3.sub { font-size: .95rem; margin: 1rem 0 .25rem; }
     #model-error { color: var(--err); font-weight: 600; }
+
+    /* --- Dashboard (R6) ---------------------------------------------------------- */
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    select { font: inherit; padding: .55rem .6rem; border: 1px solid var(--muted); border-radius: 8px;
+             background: var(--card); color: inherit; min-height: 44px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .tag.warn { color: var(--warn); background: var(--warn-bg); }
+    td .tag { white-space: nowrap; }
+    td .sub { display: block; font-size: .8rem; color: var(--muted); }
+    #patient-table td, #patient-table th { white-space: nowrap; }
+    .num-lg { font-variant-numeric: tabular-nums; }
+    /* KPI tiles: two across on a phone, more on wider screens. */
+    .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .5rem; margin: .75rem 0 0; }
+    .kpi { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .75rem; margin: 0; }
+    .kpi dt { font-size: .85rem; color: var(--muted); }
+    .kpi dd { margin: .1rem 0 0; font-size: 1.6rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+    .kpi .detail { display: block; font-size: .8rem; font-weight: 400; color: var(--muted); }
+    .kpi.urgent { border-color: var(--urgent); box-shadow: inset 4px 0 0 var(--urgent); }
+    .kpi.urgent dd { color: var(--urgent); }
+    .range select { width: auto; }
+    .filters-row { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: end; }
+    .filters-row label { margin: 0 0 .15rem; }
+    /* Sortable table headers are buttons that look like headers. */
+    th button.sort { all: unset; cursor: pointer; font-weight: 700; }
+    th button.sort:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    th[aria-sort="ascending"] button.sort::after { content: " ▲"; font-size: .7em; }
+    th[aria-sort="descending"] button.sort::after { content: " ▼"; font-size: .7em; }
+    tr.pick { cursor: pointer; }
+    tr.pick:hover td, tr.pick:focus-within td { background: var(--pt); }
+    button.link { all: unset; cursor: pointer; color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+    button.link:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    a { color: var(--accent); font-weight: 600; }
+    /* Under 40rem a data table becomes one block per row, each cell with its label. */
+    @media (max-width: 40rem) {
+      table.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      table.stack tr { display: grid; grid-template-columns: 1fr 1fr; gap: .1rem .75rem; padding: .55rem 0; border-bottom: 1px solid var(--line); }
+      table.stack td { display: block; border: 0; padding: .1rem 0; text-align: left; }
+      table.stack td.wide { grid-column: 1 / -1; }
+      table.stack td::before { content: attr(data-label); display: block; font-size: .72rem; color: var(--muted); }
+      table.stack td.wide::before { display: none; }
+    }
+    /* Patient chart (inline SVG). */
+    .legend { list-style: none; margin: .25rem 0 .5rem; padding: 0; display: flex; flex-wrap: wrap; gap: .25rem .9rem; font-size: .85rem; }
+    .legend li { display: inline-flex; align-items: center; gap: .35rem; }
+    .legend svg { flex: none; }
+    .chart { position: relative; }
+    .chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+    .chart text { font: 11px system-ui, sans-serif; fill: var(--axis); }
+    .chart .limit-label { font-weight: 700; fill: var(--fg); paint-order: stroke; stroke: var(--card); stroke-width: 3px; }
+    .tip { position: absolute; pointer-events: none; background: var(--card); color: var(--fg); border: 1px solid var(--line);
+           border-radius: 8px; padding: .35rem .55rem; font-size: .82rem; box-shadow: 0 2px 8px rgb(0 0 0 / .18); white-space: nowrap; }
+    .risk-label { font-weight: 700; margin: 0; }
+    #pd-why th, #pd-why td { white-space: nowrap; }
+    @media (max-width: 40rem) {
+      #pd-why th, #pd-why td { padding: .3rem .35rem; }
+      #pd-why tbody th { white-space: normal; }
+    }
+    #pd-why tr.total th, #pd-why tr.total td { font-weight: 700; border-top: 2px solid var(--fg); }
+    .notes { margin: .5rem 0 0; padding-left: 1.1rem; font-size: .9rem; }
+    .notes li { margin-bottom: .25rem; }
+    @media (prefers-reduced-motion: no-preference) { .tabs { scroll-behavior: smooth; } }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Practitioner inbox</h1>
-  <p class="muted">Patients who asked for help, and the advisor's answers to review. You only see patients assigned to you.</p>
+  <h1>Practitioner dashboard</h1>
+  <p class="muted">Your patients' readings, limits and alerts, the patients who asked for help, and the advisor's answers to review. You only see patients assigned to you. Nothing on these pages changes a reading, a limit or an alert.</p>
 
   <section id="signed-out" hidden>
     <form id="login-form">
@@ -130,10 +202,178 @@
   </section>
 
   <div class="tabs" role="tablist" aria-label="Practitioner views" id="tabs" hidden>
-    <button type="button" role="tab" id="tab-inbox" aria-controls="inbox" aria-selected="true">Handoffs</button>
+    <button type="button" role="tab" id="tab-overview" aria-controls="overview" aria-selected="true">Overview</button>
+    <button type="button" role="tab" id="tab-patients" aria-controls="patients" aria-selected="false" tabindex="-1">Patients</button>
+    <button type="button" role="tab" id="tab-alerts" aria-controls="alerts" aria-selected="false" tabindex="-1">Alerts</button>
+    <button type="button" role="tab" id="tab-inbox" aria-controls="inbox" aria-selected="false" tabindex="-1">Handoffs</button>
     <button type="button" role="tab" id="tab-review" aria-controls="review" aria-selected="false" tabindex="-1">Review</button>
     <button type="button" role="tab" id="tab-kb" aria-controls="kb" aria-selected="false" tabindex="-1">Knowledge base</button>
     <button type="button" role="tab" id="tab-audit" aria-controls="audit" aria-selected="false" tabindex="-1">Audit</button>
+  </div>
+
+  <div id="overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
+    <div class="panel">
+      <h2>Your patients now</h2>
+      <p class="muted">Readings count from midnight today; alerts and readings below 54 mg/dL over the last 24 hours, by when the reading was taken.</p>
+      <dl class="kpis" id="ov-tiles"></dl>
+      <p id="ov-batch"></p>
+    </div>
+    <div class="panel">
+      <h2>Alert delivery, last 24 hours</h2>
+      <p class="muted">"Delivered" is sent or opened, out of every alert except suppressed repeats (not sent on purpose).</p>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Alerts by delivery status</caption>
+          <thead><tr><th scope="col">Status</th><th scope="col" class="num">Alerts</th><th scope="col" class="num">Out of</th><th scope="col" class="num">Share</th></tr></thead>
+          <tbody id="ov-delivery"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="patients" role="tabpanel" aria-labelledby="tab-patients" hidden>
+    <div class="panel" id="patient-list">
+      <h2>Patients</h2>
+      <p class="muted">Shown by first name. Limits are fasting / post-meal / low, in mg/dL. Select a patient for their readings and limits.</p>
+      <form id="patient-filters" class="filters-row">
+        <div><label for="pf-band">Last reading</label>
+          <select id="pf-band">
+            <option value="">Any</option>
+            <option value="breach_high">▲ Above limit</option>
+            <option value="breach_low">▼ Below limit</option>
+            <option value="pre_breach_high">▲ Near high limit</option>
+            <option value="pre_breach_low">▼ Near low limit</option>
+            <option value="normal">In range</option>
+          </select></div>
+        <div><label for="pf-breach">Breach in 7 days</label>
+          <select id="pf-breach"><option value="">Any</option><option value="true">Yes</option><option value="false">No</option></select></div>
+        <div><label for="pf-handoff">Handoff</label>
+          <select id="pf-handoff"><option value="">Any</option><option value="true">Waiting or claimed</option><option value="false">None</option></select></div>
+        <div><label for="pf-sort">Sort by</label>
+          <select id="pf-sort">
+            <option value="state">Most urgent reading</option>
+            <option value="alerts">Most alerts (7 days)</option>
+            <option value="last">Latest reading</option>
+            <option value="value">Reading value</option>
+            <option value="risk">Survey risk tier</option>
+            <option value="name">First name</option>
+            <option value="age">Age band</option>
+          </select></div>
+      </form>
+      <div class="table-wrap">
+        <table id="patient-table" class="stack">
+          <caption class="sr-only">Patients</caption>
+          <thead><tr>
+            <th scope="col" data-sort="name"><button type="button" class="sort">Patient</button></th>
+            <th scope="col" data-sort="age"><button type="button" class="sort">Age</button></th>
+            <th scope="col">Diabetes</th>
+            <th scope="col" data-sort="last"><button type="button" class="sort">Last reading</button></th>
+            <th scope="col" data-sort="state"><button type="button" class="sort">State</button></th>
+            <th scope="col" class="num">Limits</th>
+            <th scope="col" data-sort="alerts" class="num"><button type="button" class="sort">Alerts 7 d</button></th>
+            <th scope="col" data-sort="risk"><button type="button" class="sort">Survey risk</button></th>
+            <th scope="col">Handoff</th>
+          </tr></thead>
+          <tbody id="patient-rows"></tbody>
+        </table>
+      </div>
+      <p id="patients-empty" class="muted" hidden>No patients match these filters.</p>
+      <p class="muted">Survey risk: <span data-risk-label></span>. <button type="button" class="link" data-model-card>See the model card</button></p>
+    </div>
+
+    <div id="patient-detail" hidden>
+      <div class="panel">
+        <button type="button" id="patient-back" class="secondary">Back to patients</button>
+        <h2 id="pd-name" tabindex="-1"></h2>
+        <p id="pd-meta" class="muted"></p>
+        <div class="range">
+          <div><label for="pd-days">Period</label>
+            <select id="pd-days"><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Glucose and personal limits</h2>
+        <ul class="legend" id="pd-legend" aria-label="Chart legend"></ul>
+        <div class="chart" id="pd-chart"></div>
+        <p id="pd-chart-empty" class="muted" hidden>No readings in this period.</p>
+        <details>
+          <summary>Readings as a table</summary>
+          <div class="table-wrap">
+            <table class="stack">
+              <caption class="sr-only">Readings</caption>
+              <thead><tr><th scope="col">Taken</th><th scope="col">Context</th><th scope="col" class="num">mg/dL</th><th scope="col">State</th></tr></thead>
+              <tbody id="pd-readings"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+      <div class="panel">
+        <h2>Why is this the limit?</h2>
+        <p class="muted">Each current limit is a cited base plus small, bounded adjustments, then held inside a fixed range. The risk adjustment is always 0: the survey-based risk score never moves a limit.</p>
+        <div class="table-wrap">
+          <table id="pd-why">
+            <caption class="sr-only">How each current limit is made, in mg/dL</caption>
+            <thead id="pd-why-head"></thead>
+            <tbody id="pd-why-body"></tbody>
+          </table>
+        </div>
+        <ul class="notes" id="pd-why-notes"></ul>
+        <p id="pd-why-empty" class="muted" hidden>No limits computed yet for this patient.</p>
+      </div>
+      <div class="panel">
+        <h2>Risk tier</h2>
+        <p class="risk-label" data-risk-label></p>
+        <p id="pd-risk"></p>
+        <button type="button" class="link" data-model-card>See the model card</button>
+      </div>
+      <div class="panel">
+        <h2>Recent advisories</h2>
+        <div class="table-wrap">
+          <table class="stack">
+            <caption class="sr-only">Last 20 advisories</caption>
+            <thead><tr><th scope="col">Reading taken</th><th scope="col">Limit</th><th scope="col">State</th><th scope="col" class="num">Reading vs limit</th><th scope="col">Escalated</th><th scope="col">Delivery</th></tr></thead>
+            <tbody id="pd-advisories"></tbody>
+          </table>
+        </div>
+        <p id="pd-advisories-empty" class="muted" hidden>No advisories for this patient.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="alerts" role="tabpanel" aria-labelledby="tab-alerts" hidden>
+    <div class="panel">
+      <h2>Alerts</h2>
+      <p class="muted">Advisories raised for your patients, newest reading first. The limit is the one the batch judged the reading against.</p>
+      <form id="alert-filters" class="filters-row">
+        <div><label for="af-state">State</label>
+          <select id="af-state">
+            <option value="">Any</option>
+            <option value="breach_high">▲ Above limit</option>
+            <option value="breach_low">▼ Below limit</option>
+            <option value="pre_breach_high">▲ Near high limit</option>
+            <option value="pre_breach_low">▼ Near low limit</option>
+          </select></div>
+        <div><label for="af-escalated">Escalated</label>
+          <select id="af-escalated"><option value="">Any</option><option value="true">Yes</option><option value="false">No</option></select></div>
+        <div><label for="af-delivery">Delivery</label>
+          <select id="af-delivery">
+            <option value="">Any</option><option value="queued">Queued</option><option value="sent">Sent</option><option value="opened">Opened</option>
+            <option value="failed">Failed</option><option value="expired">Expired</option><option value="suppressed">Suppressed</option>
+          </select></div>
+        <div><label for="af-since">From</label><input id="af-since" type="date"></div>
+        <div><label for="af-until">To (included)</label><input id="af-until" type="date"></div>
+        <button type="submit">Show</button>
+      </form>
+      <div class="table-wrap">
+        <table class="stack">
+          <caption class="sr-only">Alerts</caption>
+          <thead><tr><th scope="col">Reading taken</th><th scope="col">Patient</th><th scope="col">Limit</th><th scope="col">State</th><th scope="col" class="num">Reading vs limit</th><th scope="col">Escalated</th><th scope="col">Delivery</th></tr></thead>
+          <tbody id="alert-rows"></tbody>
+        </table>
+      </div>
+      <p id="alerts-empty" class="muted" hidden>No alerts match these filters.</p>
+      <button type="button" id="alerts-more" class="secondary" hidden>Load more</button>
+    </div>
   </div>
 
   <div class="layout" id="inbox" role="tabpanel" aria-labelledby="tab-inbox" hidden>
@@ -222,7 +462,7 @@
       <h3 class="sub">Knowledge base</h3>
       <p id="audit-kb-status"></p>
     </div>
-    <div class="panel">
+    <div class="panel" id="model-card-panel" tabindex="-1">
       <h2>Risk model card</h2>
       <p class="muted">The diabetes risk model behind each patient's risk tier. Numbers are from the held-out test set.</p>
       <p id="model-error" class="error" role="alert" hidden></p>

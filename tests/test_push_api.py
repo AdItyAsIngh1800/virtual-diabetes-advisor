@@ -249,7 +249,7 @@ def test_unsubscribe_revokes_and_is_idempotent(client: TestClient, repo: FakeRep
         ("/app/", "text/html", "Enable alerts"),
         ("/app/common.js", "javascript", "pushManager.subscribe"),
         ("/app/app.js", "javascript", "MediaRecorder"),
-        ("/app/practitioner", "text/html", "Practitioner inbox"),
+        ("/app/practitioner", "text/html", "Practitioner dashboard"),
         ("/app/practitioner.js", "javascript", "/api/practitioner/handoffs"),
         ("/app/sw.js", "javascript", "notificationclick"),
         ("/app/manifest.webmanifest", "application/manifest+json", '"start_url": "/app/"'),
