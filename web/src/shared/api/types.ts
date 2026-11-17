@@ -889,13 +889,16 @@ export interface paths {
          *         review_filter: Which turns.
          *         limit: Page size.
          *         cursor: ``next_cursor`` from the previous page.
+         *         patient_id: Only this patient's replies (the patient detail's Conversation
+         *             tab).
          *
          *     Returns:
          *         One page, newest first.
          *
          *     Raises:
          *         HTTPException: 401 without a valid login, 403 without a practitioner login,
-         *             422 for an unknown filter or a malformed cursor.
+         *             404 if ``patient_id`` is not a patient this practitioner may see, 422 for
+         *             an unknown filter or a malformed cursor.
          */
         get: operations["list_turns_api_practitioner_turns_get"];
         put?: never;
@@ -1698,7 +1701,8 @@ export interface components {
          *     Attributes:
          *         id: Handoff id.
          *         patient_id: Patient.
-         *         patient_name: ``profiles.full_name`` (assigned patients only).
+         *         patient_name: First name only (first word of ``profiles.full_name``; assigned
+         *             patients only).
          *         status: Status.
          *         trigger: Why it was opened.
          *         reason: Fixed reason text.
@@ -3679,6 +3683,7 @@ export interface operations {
                 filter?: "all" | "unreviewed" | "escalated" | "low_confidence" | "unanswered";
                 limit?: number;
                 cursor?: string | null;
+                patient_id?: string | null;
             };
             header?: {
                 authorization?: string | null;

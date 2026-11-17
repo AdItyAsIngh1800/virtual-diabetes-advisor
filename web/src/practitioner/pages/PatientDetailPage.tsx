@@ -1,24 +1,25 @@
 /**
  * One patient (R6) as its own page with tabs: Readings (chart and table), Limits
  * ("Why is this the limit?" and the survey risk tier, labelled), Alerts and
- * Conversation (this patient's handoff threads). The tab is in the URL and the last
- * one used is remembered.
+ * Conversation (this patient's advisor answers and handoffs together, newest
+ * first). The tab is in the URL and the last one used is remembered.
  */
 import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { RowTh, TableCard, Td, Th } from "@/practitioner/components/DataTable";
 import { GlucoseChart } from "@/practitioner/components/GlucoseChart";
 import { RiskNote } from "@/practitioner/components/RiskNote";
 import { Thread } from "@/practitioner/components/Thread";
-import { useHandoff, useHandoffs, usePatient } from "@/practitioner/data";
-import { HANDOFF_STATUS, alertCells, diabetesLabel, sortHandoffs, whyLimits } from "@/practitioner/lib/dashboard";
+import { useHandoff, useHandoffs, usePatient, usePatientTurns } from "@/practitioner/data";
+import { HANDOFF_STATUS, VERDICTS, alertCells, conversationTimeline, diabetesLabel, reviewTags, sourceLine, whyLimits } from "@/practitioner/lib/dashboard";
 import { Field, PageHeader, selectClass } from "@/shared/components/PageHeader";
 import { Tag } from "@/shared/components/StateTag";
 import { EmptyState, ErrorState, LoadingBlock } from "@/shared/components/states";
 import type { S } from "@/shared/api/client";
 import { Icons } from "@/shared/icons";
-import { mgdl, shortWhen, signed, UUID_RE } from "@/shared/lib/format";
+import { firstName, mgdl, shortWhen, signed, UUID_RE, when } from "@/shared/lib/format";
 import { CONTEXT_LABELS, TRIGGERS, bandLabel, bandTone } from "@/shared/lib/labels";
 import { useStored } from "@/shared/lib/storage";
 import { Button } from "@/shared/ui/button";
@@ -249,37 +250,110 @@ function AlertsTab({ d }: { d: S["PatientDetail"] }) {
 
 function ConversationTab({ d }: { d: S["PatientDetail"] }) {
   const handoffs = useHandoffs();
-  const mine = sortHandoffs((handoffs.data ?? []).filter((h) => h.patient_id === d.user_id));
-  const latest = mine[0] ?? null;
-  const thread = useHandoff(latest?.id ?? null);
+  const turns = usePatientTurns(d.user_id);
   const name = d.first_name || "Patient";
-  if (handoffs.isPending) return <LoadingBlock rows={2} label="Loading the conversation" />;
+  if (handoffs.isPending || turns.isPending) return <LoadingBlock rows={3} label="Loading the conversation" />;
+  if (turns.isError) return <ErrorState message={turns.error.message} onRetry={() => void turns.refetch()} />;
   if (handoffs.isError) return <ErrorState message={handoffs.error.message} onRetry={() => void handoffs.refetch()} />;
-  if (!latest) {
+  const items = conversationTimeline(
+    turns.data.pages.flatMap((p) => p.items),
+    handoffs.data.filter((h) => h.patient_id === d.user_id),
+  );
+  if (items.length === 0) {
     return (
-      <EmptyState icon={Icons.handoff} title={`${name} has not asked to talk to a practitioner.`}>
-        Conversations appear here when the patient asks for a practitioner, sends a red-flag message, or an alert is escalated. The advisor's answers are in Review.
+      <EmptyState icon={Icons.chat} title={`${name} has not used the chat yet.`}>
+        The advisor's answers and any requests to talk to a practitioner appear here, newest first.
       </EmptyState>
     );
   }
   return (
-    <section className="space-y-4">
+    <section aria-labelledby="conv-title" className="space-y-3">
+      <h2 id="conv-title" className="text-lg font-bold">Advisor answers and handoffs, newest first</h2>
+      <ul className="space-y-3">
+        {items.map((item) =>
+          item.kind === "answer" ? (
+            <AnswerItem key={`t-${item.turn.turn_id}`} turn={item.turn} name={name} />
+          ) : (
+            <HandoffItem key={`h-${item.handoff.id}`} handoff={item.handoff} name={name} />
+          ),
+        )}
+      </ul>
+      {turns.hasNextPage && (
+        <Button variant="outline" onClick={() => void turns.fetchNextPage()} disabled={turns.isFetchingNextPage}>
+          {turns.isFetchingNextPage ? "Loading…" : "Load older answers"}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function AnswerItem({ turn, name }: { turn: S["ReviewableTurn"]; name: string }) {
+  const r = turn.current_review;
+  return (
+    <li className="rounded-2xl border bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Tag tone={latest.trigger === "red_flag" ? "urgent" : "neutral"}>{TRIGGERS[latest.trigger] ?? latest.trigger}</Tag>
-        <Tag>{HANDOFF_STATUS[latest.status]}</Tag>
-        <span className="text-sm text-muted-foreground">opened {shortWhen(latest.opened_at)}</span>
-        <Button asChild size="sm" className="ml-auto">
-          <Link to={`/handoffs/${latest.id}`}>
-            <Icons.handoff aria-hidden /> {latest.status === "resolved" ? "Open in Handoffs" : "Reply in Handoffs"}
-          </Link>
+        <Icons.chat className="size-4 text-muted-foreground" aria-hidden />
+        <span className="font-semibold">Advisor answer</span>
+        <span className="text-sm text-muted-foreground">{when(turn.created_at)}</span>
+        {reviewTags(turn).map((t) => (
+          <Tag key={t.text} tone={t.urgent ? "urgent" : "neutral"}>{t.text}</Tag>
+        ))}
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground">{turn.spoken ? `${name} said (voice)` : `${name} asked`}</h3>
+          <p className="mt-1 rounded-xl border bg-background/40 p-3 whitespace-pre-wrap">{turn.question || "(no text: the Talk to a doctor button)"}</p>
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground">Advisor answered</h3>
+          <p className="mt-1 rounded-xl bg-bubble-advisor p-3 whitespace-pre-wrap">{turn.answer}</p>
+        </div>
+      </div>
+      {turn.sources.length > 0 && <p className="mt-2 text-sm text-muted-foreground">Source: {turn.sources.map(sourceLine).join("; ")}</p>}
+      <p className="mt-2 text-sm">
+        {r ? (
+          <>
+            Current verdict: <strong>{VERDICTS[r.verdict]}</strong> by {firstName(r.reviewer_name, "a practitioner")}
+          </>
+        ) : (
+          "Not reviewed yet."
+        )}{" "}
+        <Link to="/review" className="font-medium text-primary underline underline-offset-4">
+          Review answers
+        </Link>
+      </p>
+    </li>
+  );
+}
+
+function HandoffItem({ handoff: h, name }: { handoff: S["HandoffSummary"]; name: string }) {
+  const [open, setOpen] = useState(false);
+  const thread = useHandoff(open ? h.id : null);
+  return (
+    <li className="rounded-2xl border border-l-4 border-l-primary bg-card p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Icons.handoff className="size-4 text-primary" aria-hidden />
+        <span className="font-semibold">Handoff</span>
+        <Tag tone={h.trigger === "red_flag" ? "urgent" : "neutral"}>{TRIGGERS[h.trigger] ?? h.trigger}</Tag>
+        <Tag tone={h.status === "open" ? "warn" : h.status === "assigned" ? "good" : "neutral"}>{HANDOFF_STATUS[h.status]}</Tag>
+        <span className="text-sm text-muted-foreground">opened {shortWhen(h.opened_at)}</span>
+      </div>
+      {h.reason && <p className="mt-2 text-sm text-muted-foreground">{h.reason}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Hide messages" : "Show messages"}
+        </Button>
+        <Button asChild size="sm">
+          <Link to={`/handoffs/${h.id}`}>{h.status === "resolved" ? "Open in Handoffs" : "Reply in Handoffs"}</Link>
         </Button>
       </div>
-      <div className="rounded-2xl border bg-card p-4">
-        {thread.isPending && <LoadingBlock rows={2} label="Loading messages" />}
-        {thread.isError && <ErrorState message={thread.error.message} onRetry={() => void thread.refetch()} />}
-        {thread.data && <Thread messages={thread.data.messages} patientName={name} />}
-      </div>
-      {mine.length > 1 && <p className="text-sm text-muted-foreground">{mine.length - 1} earlier handoff{mine.length > 2 ? "s" : ""} in the Handoffs list.</p>}
-    </section>
+      {open && (
+        <div className="mt-3 rounded-xl border bg-background/40 p-3">
+          {thread.isPending && <LoadingBlock rows={2} label="Loading messages" />}
+          {thread.isError && <ErrorState message={thread.error.message} onRetry={() => void thread.refetch()} />}
+          {thread.data && <Thread messages={thread.data.messages} patientName={name} />}
+        </div>
+      )}
+    </li>
   );
 }

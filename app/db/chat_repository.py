@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.core.clinical_limits import GlucoseLimitKind
 from app.core.config import Settings
+from app.core.names import first_name
 from app.db.batch_repository import SqlBatchRepository
 from app.db.models import (
     ConversationTurn,
@@ -732,7 +733,8 @@ class HandoffSummary(BaseModel):
     Attributes:
         id: Handoff id.
         patient_id: Patient.
-        patient_name: ``profiles.full_name`` (assigned patients only).
+        patient_name: First name only (first word of ``profiles.full_name``; assigned
+            patients only).
         status: Status.
         trigger: Why it was opened.
         reason: Fixed reason text.
@@ -805,7 +807,7 @@ def practitioner_handoffs(session: Session, practitioner_id: uuid.UUID) -> list[
         HandoffSummary(
             id=h.id,
             patient_id=h.user_id,
-            patient_name=name,
+            patient_name=first_name(name),
             status=h.status,
             trigger=h.trigger,
             reason=h.reason,

@@ -138,6 +138,9 @@ def test_practitioner_sees_only_assigned_patients(factory: Callable[[], Session]
         assert handoff_for_practitioner(session, handoff.id, other) is None
         assert [h.id for h in practitioner_handoffs(session, mine)] == [handoff.id]
         assert practitioner_handoffs(session, other) == []
+        # Stored as "Test Patient"; the practitioner only ever gets the first name.
+        (summary,) = practitioner_handoffs(session, mine)
+        assert summary.patient_name == "Test"
 
 
 def test_chat_reading_is_stored_classified_and_queues_an_advisory(

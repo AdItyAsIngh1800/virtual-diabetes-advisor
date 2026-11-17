@@ -29,7 +29,7 @@ from app.core.clinical_limits import DiabetesStatus, GlucoseLimitKind
 from app.core.config import load_settings
 from app.core.exceptions import ThresholdComputationError
 from app.db import dashboard_repository as dash
-from app.db.chat_repository import db_now
+from app.db.chat_repository import db_now, save_turn
 from app.db.models import (
     Advisory,
     AdvisoryState,
@@ -50,6 +50,7 @@ from app.db.models import (
 from app.db.session import get_session_factory, make_engine
 from app.db.threshold_repository import SqlThresholdRepository
 from app.ml.predict import RiskAssessment
+from app.services.chat import TFIDF_MODEL
 from app.services.supabase_auth import AuthUser
 from app.services.thresholds import (
     ReadingPoint,
@@ -759,6 +760,24 @@ def test_api_end_to_end_access_and_privacy(
 
     with factory() as session:
         c = Clinic(session)
+        # An advisor answer to Asha (Review and the Conversation tab name her).
+        save_turn(
+            session,
+            user_id=c.asha,
+            direction="inbound",
+            raw_text="what is a1c",
+            transcript=None,
+            intent="question",
+            response_text="A1C is your 3-month average.",
+            model=TFIDF_MODEL,
+            model_version="v",
+            latency_ms=5,
+            escalated=False,
+            created_at=c.now,
+        )
+        asha_handoff = session.scalar(
+            select(Handoff.id).where(Handoff.user_id == c.asha, Handoff.status == "open")
+        )
         secrets = [
             str(v)
             for v in session.scalars(
@@ -792,12 +811,19 @@ def test_api_end_to_end_access_and_privacy(
     try:
         client = TestClient(app)
         bodies: list[str] = []
+        # Every practitioner GET that can name a patient.
         for url in (
             "/api/dashboard/overview",
             "/api/dashboard/patients?limit=2",
             f"/api/dashboard/patients/{c.asha}?days=30",
             f"/api/dashboard/patients/{c.ben}",
             "/api/dashboard/alerts?limit=5",
+            "/api/practitioner/handoffs",
+            f"/api/practitioner/handoffs/{asha_handoff}",
+            "/api/practitioner/turns?limit=50",
+            f"/api/practitioner/turns?patient_id={c.asha}",
+            "/api/practitioner/kb",
+            "/api/practitioner/audit/summary",
         ):
             response = client.get(url)
             assert response.status_code == 200, (url, response.text)
@@ -809,6 +835,15 @@ def test_api_end_to_end_access_and_privacy(
         assert len(first["items"]) + len(rest["items"]) == 3 and rest["next_cursor"] is None
         assert client.get(f"/api/dashboard/patients/{c.dev}").status_code == 404
         assert client.get(f"/api/dashboard/patients/{uuid.uuid4()}").status_code == 404
+        handoffs = json.loads(bodies[5])
+        assert {h["patient_name"] for h in handoffs} == {"Asha", "Ben"}
+        assert json.loads(bodies[6])["handoff"]["patient_name"] == "Asha"
+        turns = json.loads(bodies[8])["items"]
+        assert turns and {t["patient_first_name"] for t in turns} == {"Asha"}
+        # Another practitioner's patient, or no patient at all: 404, nothing listed.
+        for other in (c.dev, uuid.uuid4()):
+            response = client.get("/api/practitioner/turns", params={"patient_id": str(other)})
+            assert response.status_code == 404
         ben = json.loads(bodies[3])
         assert ben["thresholds"] and all(t["risk_adj_mg_dl"] == 0 for t in ben["thresholds"])
 
@@ -818,7 +853,8 @@ def test_api_end_to_end_access_and_privacy(
         app.dependency_overrides.clear()
 
     everything = "\n".join(bodies)
-    for leak in (*secrets, SECRET_ENDPOINT, "Kumar", "Ortiz", "+91", "@"):
+    # No full name anywhere: only first names ("Asha", "Ben") reach a practitioner.
+    for leak in (*secrets, SECRET_ENDPOINT, "Asha Rao", "Kumar", "Ortiz", "+91", "@"):
         assert leak not in everything, leak
     for key in ("phone", "email", "endpoint", "full_name", "p256dh"):
         assert f'"{key}' not in everything, key

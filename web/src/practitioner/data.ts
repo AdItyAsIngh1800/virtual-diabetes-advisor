@@ -117,6 +117,16 @@ export function useTurns(filter: ReviewFilter) {
   });
 }
 
+/** One patient's advisor answers, newest first (the patient page's Conversation tab). */
+export function usePatientTurns(patientId: string) {
+  return useInfiniteQuery({
+    queryKey: ["turns", "patient", patientId],
+    queryFn: ({ pageParam }) => api<S["TurnPage"]>(reviewQuery("all", pageParam, 25, patientId)),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+  });
+}
+
 export function useReview(turnId: string) {
   return useMutation({
     mutationFn: ({ verdict, note }: { verdict: Verdict; note: string | null }) =>

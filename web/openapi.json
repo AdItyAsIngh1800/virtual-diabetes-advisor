@@ -1137,7 +1137,7 @@
         "type": "object"
       },
       "HandoffSummary": {
-        "description": "One handoff in the practitioner's list.\n\nAttributes:\n    id: Handoff id.\n    patient_id: Patient.\n    patient_name: ``profiles.full_name`` (assigned patients only).\n    status: Status.\n    trigger: Why it was opened.\n    reason: Fixed reason text.\n    practitioner_id: Practitioner it is routed to (the claimer once assigned).\n    practitioner_name: That practitioner's name.\n    opened_at: Opened.\n    assigned_at: Claimed (Claim button or first reply).\n    resolved_at: Resolved.\n    last_message_at: Latest turn in the handoff.",
+        "description": "One handoff in the practitioner's list.\n\nAttributes:\n    id: Handoff id.\n    patient_id: Patient.\n    patient_name: First name only (first word of ``profiles.full_name``; assigned\n        patients only).\n    status: Status.\n    trigger: Why it was opened.\n    reason: Fixed reason text.\n    practitioner_id: Practitioner it is routed to (the claimer once assigned).\n    practitioner_name: That practitioner's name.\n    opened_at: Opened.\n    assigned_at: Claimed (Claim button or first reply).\n    resolved_at: Resolved.\n    last_message_at: Latest turn in the handoff.",
         "properties": {
           "assigned_at": {
             "anyOf": [
@@ -5084,7 +5084,7 @@
     },
     "/api/practitioner/turns": {
       "get": {
-        "description": "List advisor replies to the practitioner's patients for review.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (low-confidence cutoff).\n    review_filter: Which turns.\n    limit: Page size.\n    cursor: ``next_cursor`` from the previous page.\n\nReturns:\n    One page, newest first.\n\nRaises:\n    HTTPException: 401 without a valid login, 403 without a practitioner login,\n        422 for an unknown filter or a malformed cursor.",
+        "description": "List advisor replies to the practitioner's patients for review.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (low-confidence cutoff).\n    review_filter: Which turns.\n    limit: Page size.\n    cursor: ``next_cursor`` from the previous page.\n    patient_id: Only this patient's replies (the patient detail's Conversation\n        tab).\n\nReturns:\n    One page, newest first.\n\nRaises:\n    HTTPException: 401 without a valid login, 403 without a practitioner login,\n        404 if ``patient_id`` is not a patient this practitioner may see, 422 for\n        an unknown filter or a malformed cursor.",
         "operationId": "list_turns_api_practitioner_turns_get",
         "parameters": [
           {
@@ -5131,6 +5131,23 @@
                 }
               ],
               "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "patient_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Patient Id"
             }
           },
           {

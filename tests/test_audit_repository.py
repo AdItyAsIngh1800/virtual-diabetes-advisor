@@ -28,6 +28,7 @@ from app.db.audit_repository import (
     TurnCursor,
     TurnPage,
     add_review,
+    is_visible,
     list_reviewable_turns,
 )
 from app.db.chat_repository import db_now, save_turn
@@ -221,6 +222,32 @@ class Clinic:
 
 def _ids(page: TurnPage) -> list[uuid.UUID]:
     return [item.turn_id for item in page.items]
+
+
+def test_patient_id_limits_the_list_to_one_patient(factory: Callable[[], Session]) -> None:
+    with factory() as session:
+        c = Clinic(session)
+        second = _patient(session, practitioner_id=c.doctor, name="Meena Iyer")
+        theirs = _bot_turn(session, second, c.now + timedelta(seconds=30))
+        everyone = list_reviewable_turns(session, c.doctor, low_confidence_below=CUTOFF)
+        assert theirs in {t.turn_id for t in everyone.items}
+        asha = list_reviewable_turns(
+            session, c.doctor, low_confidence_below=CUTOFF, patient_id=c.patient
+        )
+        assert asha.items and theirs not in {t.turn_id for t in asha.items}
+        assert {t.patient_first_name for t in asha.items} == {"Asha"}
+        meena = list_reviewable_turns(
+            session, c.doctor, low_confidence_below=CUTOFF, patient_id=second
+        )
+        assert [t.turn_id for t in meena.items] == [theirs]
+        # Another practitioner's patient: not visible, and filtered out even if asked.
+        assert is_visible(session, c.doctor, c.patient)
+        assert not is_visible(session, c.doctor, c.other_patient)
+        assert not is_visible(session, c.doctor, uuid.uuid4())
+        hidden = list_reviewable_turns(
+            session, c.doctor, low_confidence_below=CUTOFF, patient_id=c.other_patient
+        )
+        assert hidden.items == []
 
 
 def test_lists_only_advisor_replies_of_my_patients_newest_first(

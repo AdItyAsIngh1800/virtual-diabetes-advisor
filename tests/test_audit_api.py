@@ -73,6 +73,7 @@ class Clinic:
         self.owner = {self.mine: self.doctor.id, self.theirs: self.other.id}
         self.reviews: list[ReviewRecord] = []
         self.list_calls: list[tuple[uuid.UUID, str, int, TurnCursor | None, float]] = []
+        self.patient_filters: list[uuid.UUID | None] = []
         self.session = FakeSession()
 
     def find_practitioner(self, _s: object, auth_id: uuid.UUID) -> Practitioner | None:
@@ -87,10 +88,12 @@ class Clinic:
         cursor: TurnCursor | None = None,
         *,
         low_confidence_below: float,
+        patient_id: uuid.UUID | None = None,
     ) -> TurnPage:
         self.list_calls.append(
             (practitioner_id, review_filter, limit, cursor, low_confidence_below)
         )
+        self.patient_filters.append(patient_id)
         items = [
             ReviewableTurn(
                 turn_id=turn_id,
@@ -112,9 +115,13 @@ class Clinic:
                 review_count=0,
             )
             for turn_id, owner in self.owner.items()
-            if owner == practitioner_id
+            # In this fake a turn's id doubles as its patient's id.
+            if owner == practitioner_id and patient_id in {None, turn_id}
         ]
         return TurnPage(items=items, next_cursor=None)
+
+    def is_visible(self, _s: object, practitioner_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        return self.owner.get(user_id) == practitioner_id
 
     def add_review(
         self,
@@ -150,6 +157,7 @@ def clinic(monkeypatch: pytest.MonkeyPatch) -> Clinic:
     monkeypatch.setattr(chat, "find_practitioner_by_auth_user", c.find_practitioner)
     monkeypatch.setattr(audit, "list_reviewable_turns", c.list_reviewable_turns)
     monkeypatch.setattr(audit, "add_review", c.add_review)
+    monkeypatch.setattr(audit, "is_visible", c.is_visible)
     return c
 
 
@@ -248,6 +256,29 @@ def test_each_practitioner_lists_only_their_patients(harness: Harness, clinic: C
     harness.as_(OTHER_DOCTOR_LOGIN)
     items = harness.client.get("/api/practitioner/turns").json()["items"]
     assert [i["turn_id"] for i in items] == [str(clinic.theirs)]
+
+
+def test_patient_id_narrows_the_list_to_a_visible_patient(harness: Harness, clinic: Clinic) -> None:
+    response = harness.client.get(
+        "/api/practitioner/turns", params={"patient_id": str(clinic.mine)}
+    )
+    assert response.status_code == 200
+    assert [i["turn_id"] for i in response.json()["items"]] == [str(clinic.mine)]
+    assert clinic.patient_filters == [clinic.mine]
+
+
+def test_patient_id_of_another_practitioners_patient_is_404(
+    harness: Harness, clinic: Clinic
+) -> None:
+    for other in (clinic.theirs, uuid.uuid4()):
+        response = harness.client.get("/api/practitioner/turns", params={"patient_id": str(other)})
+        assert response.status_code == 404
+    assert clinic.list_calls == []  # refused before listing anything
+
+
+def test_malformed_patient_id_is_422(harness: Harness) -> None:
+    response = harness.client.get("/api/practitioner/turns", params={"patient_id": "not-a-uuid"})
+    assert response.status_code == 422
 
 
 # --- reviewing -----------------------------------------------------------------------------

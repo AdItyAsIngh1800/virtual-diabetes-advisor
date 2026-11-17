@@ -67,8 +67,9 @@ from app.core.clinical_limits import (
     LimitDirection,
 )
 from app.core.exceptions import ThresholdComputationError
+from app.core.names import first_name
 from app.core.rates import CountRate
-from app.db.audit_repository import first_name, visible_patient_ids
+from app.db.audit_repository import is_visible, visible_patient_ids
 from app.db.batch_repository import BATCH_UPDATE_JOB, SqlBatchRepository
 from app.db.chat_repository import db_now
 from app.db.models import (
@@ -985,21 +986,6 @@ def list_patients(
 # ---------------------------------------------------------------------------
 # Patient detail
 # ---------------------------------------------------------------------------
-
-
-def is_visible(session: Session, practitioner_id: uuid.UUID, user_id: uuid.UUID) -> bool:
-    """Whether a practitioner may see a patient.
-
-    Args:
-        session: Open session.
-        practitioner_id: Viewer.
-        user_id: Patient.
-
-    Returns:
-        ``True`` if the patient is in :func:`visible_patient_ids`.
-    """
-    visible = visible_patient_ids(practitioner_id)
-    return bool(session.scalar(select(literal(user_id).in_(visible))))
 
 
 def _steps(row: ThresholdHistory) -> ThresholdStep:

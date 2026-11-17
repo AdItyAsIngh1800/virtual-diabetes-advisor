@@ -58,6 +58,7 @@ from app.db.audit_repository import (
     TurnPage,
     add_review,
     answer_summary,
+    is_visible,
     list_reviewable_turns,
 )
 from app.db.batch_repository import SqlBatchRepository
@@ -122,6 +123,7 @@ def list_turns(  # noqa: PLR0917 - FastAPI injects each dependency as a paramete
     review_filter: Annotated[ReviewFilter, Query(alias="filter")] = "all",
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     cursor: Annotated[str | None, Query(max_length=_MAX_CURSOR_CHARS)] = None,
+    patient_id: uuid.UUID | None = None,
 ) -> TurnPage:
     """List advisor replies to the practitioner's patients for review.
 
@@ -132,13 +134,16 @@ def list_turns(  # noqa: PLR0917 - FastAPI injects each dependency as a paramete
         review_filter: Which turns.
         limit: Page size.
         cursor: ``next_cursor`` from the previous page.
+        patient_id: Only this patient's replies (the patient detail's Conversation
+            tab).
 
     Returns:
         One page, newest first.
 
     Raises:
         HTTPException: 401 without a valid login, 403 without a practitioner login,
-            422 for an unknown filter or a malformed cursor.
+            404 if ``patient_id`` is not a patient this practitioner may see, 422 for
+            an unknown filter or a malformed cursor.
     """
     try:
         position = TurnCursor.decode(cursor) if cursor else None
@@ -146,6 +151,8 @@ def list_turns(  # noqa: PLR0917 - FastAPI injects each dependency as a paramete
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid cursor") from exc
     with session_factory() as session:
         practitioner = _require_practitioner(session, auth_user)
+        if patient_id is not None and not is_visible(session, practitioner.id, patient_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "patient not found")
         return list_reviewable_turns(
             session,
             practitioner.id,
@@ -153,6 +160,7 @@ def list_turns(  # noqa: PLR0917 - FastAPI injects each dependency as a paramete
             limit,
             position,
             low_confidence_below=settings.review_low_confidence_below,
+            patient_id=patient_id,
         )
 
 

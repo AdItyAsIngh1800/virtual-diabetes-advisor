@@ -6,6 +6,7 @@ import {
   alertsQuery,
   auditQuery,
   claimLine,
+  conversationTimeline,
   handoffName,
   kbApproveProblem,
   kbSortDrafts,
@@ -88,6 +89,7 @@ describe("patient list", () => {
     expect(url).toContain(`until=${encodeURIComponent(new Date("2026-11-11T00:00:00").toISOString())}`);
     expect(auditQuery("", "")).toBe("/api/practitioner/audit/summary");
     expect(reviewQuery("unreviewed")).toBe("/api/practitioner/turns?filter=unreviewed&limit=25");
+    expect(reviewQuery("all", "c2", 10, "p-1")).toBe("/api/practitioner/turns?filter=all&limit=10&cursor=c2&patient_id=p-1");
   });
 });
 
@@ -138,6 +140,18 @@ describe("handoffs", () => {
     expect(claimLine(h("a", "assigned", "2026-11-17T09:00:00Z"), "Meera")).toMatch(/^Claimed by you/);
     expect(claimLine(h("a", "assigned", "2026-11-17T09:00:00Z"), "Ravi")).toMatch(/^Claimed by Meera/);
     expect(claimLine(h("o", "open", "2026-11-17T09:00:00Z"), null)).toMatch(/^Not claimed yet/);
+  });
+});
+
+describe("conversation tab", () => {
+  it("merges answers and handoffs newest first", () => {
+    const turn = (id: string, at: string) => ({ turn_id: id, created_at: at }) as S["ReviewableTurn"];
+    const handoff = (id: string, opened: string, last: string | null) => ({ id, opened_at: opened, last_message_at: last }) as S["HandoffSummary"];
+    const items = conversationTimeline(
+      [turn("t1", "2026-11-17T09:00:00Z"), turn("t2", "2026-11-17T11:00:00Z")],
+      [handoff("h1", "2026-11-17T08:00:00Z", "2026-11-17T10:00:00Z"), handoff("h2", "2026-11-17T12:00:00Z", null)],
+    );
+    expect(items.map((i) => (i.kind === "answer" ? i.turn.turn_id : i.handoff.id))).toEqual(["h2", "t2", "h1", "t1"]);
   });
 });
 

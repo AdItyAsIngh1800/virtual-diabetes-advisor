@@ -35,11 +35,12 @@ from decimal import Decimal
 from typing import Final, Literal, NamedTuple
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
-from sqlalchemy import ColumnElement, Select, and_, exists, func, select, tuple_, union
+from sqlalchemy import ColumnElement, Select, and_, exists, func, literal, select, tuple_, union
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, aliased
 
 from app.core.exceptions import ReviewNoteRequiredError, TurnNotReviewableError
+from app.core.names import first_name
 from app.core.rates import CountRate
 from app.db.chat_repository import db_now
 from app.db.models import (
@@ -259,6 +260,21 @@ def visible_patient_ids(practitioner_id: uuid.UUID) -> Select[uuid.UUID]:
     return select(union(assigned, everyone).subquery().c[0])
 
 
+def is_visible(session: Session, practitioner_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    """Whether a practitioner may see a patient.
+
+    Args:
+        session: Open session.
+        practitioner_id: Viewer.
+        user_id: Patient.
+
+    Returns:
+        ``True`` if the patient is in :func:`visible_patient_ids`.
+    """
+    visible = visible_patient_ids(practitioner_id)
+    return bool(session.scalar(select(literal(user_id).in_(visible))))
+
+
 def advisor_reply() -> ColumnElement[bool]:
     """SQL condition for a turn that carries an advisor reply (see module docstring).
 
@@ -328,19 +344,6 @@ def latest_reviews() -> Select[
     )
 
 
-def first_name(full_name: str | None) -> str | None:
-    """Return the first word of a name.
-
-    Args:
-        full_name: ``profiles.full_name``.
-
-    Returns:
-        The first name, or ``None`` when no name is stored.
-    """
-    parts = (full_name or "").split()
-    return parts[0] if parts else None
-
-
 def _sources(session: Session, ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, KbSource]:
     """Load the KB entries named by a page of turns in one query.
 
@@ -379,6 +382,7 @@ def list_reviewable_turns(
     cursor: TurnCursor | None = None,
     *,
     low_confidence_below: float,
+    patient_id: uuid.UUID | None = None,
 ) -> TurnPage:
     """List advisor replies to the practitioner's patients, newest first.
 
@@ -390,6 +394,8 @@ def list_reviewable_turns(
         cursor: Continue after this position (from the previous page).
         low_confidence_below: Similarity cutoff of the ``low_confidence`` filter
             (``Settings.review_low_confidence_below``).
+        patient_id: Only this patient's replies (the caller has checked
+            :func:`is_visible`; the visibility filter still applies).
 
     Returns:
         One page and the cursor of the next.
@@ -421,6 +427,8 @@ def list_reviewable_turns(
             ConversationTurn.user_id.in_(visible_patient_ids(practitioner_id)),
         )
     )
+    if patient_id is not None:
+        stmt = stmt.where(ConversationTurn.user_id == patient_id)
     if review_filter == "unreviewed":
         stmt = stmt.where(latest.c.review_id.is_(None))
     elif review_filter == "escalated":

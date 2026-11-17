@@ -295,9 +295,26 @@ export const REVIEW_FILTERS = [
 ] as const;
 export type ReviewFilter = (typeof REVIEW_FILTERS)[number][0];
 
-/** URL of one page of the review list. */
-export function reviewQuery(filter: ReviewFilter, cursor: string | null = null, limit = 25): string {
-  return withParams("/api/practitioner/turns", { filter, limit, cursor });
+/** URL of one page of the review list, optionally for one patient. */
+export function reviewQuery(filter: ReviewFilter, cursor: string | null = null, limit = 25, patientId: string | null = null): string {
+  return withParams("/api/practitioner/turns", { filter, limit, cursor, patient_id: patientId });
+}
+
+/** One entry of a patient's Conversation tab: an advisor answer or a handoff. */
+export type TimelineItem =
+  | { kind: "answer"; at: string; turn: S["ReviewableTurn"] }
+  | { kind: "handoff"; at: string; handoff: S["HandoffSummary"] };
+
+/**
+ * A patient's advisor answers and handoffs together, newest first. A handoff sits
+ * at its latest activity (last message, else when it opened).
+ */
+export function conversationTimeline(turns: readonly S["ReviewableTurn"][], handoffs: readonly S["HandoffSummary"][]): TimelineItem[] {
+  const items: TimelineItem[] = [
+    ...turns.map((turn): TimelineItem => ({ kind: "answer", at: turn.created_at, turn })),
+    ...handoffs.map((handoff): TimelineItem => ({ kind: "handoff", at: handoff.last_message_at ?? handoff.opened_at, handoff })),
+  ];
+  return items.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }
 
 /** Tags on a review card, current verdict last. */
