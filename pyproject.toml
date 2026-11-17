@@ -41,6 +41,13 @@ dev = [
     "jupyter>=1.1",
     "pytest-timeout>=2.3",
 ]
+# Imports of notebooks/01_brfss_risk_model.ipynb that the app itself does not need.
+# Install with: uv sync --group notebook
+notebook = [
+    "matplotlib>=3.9",
+    "pillow>=10",  # matplotlib needs it to draw some figures
+    "scipy>=1.13",  # also pulled in by scikit-learn; declared because the notebook imports it
+]
 
 # ---------------------------------------------------------------------------
 # Ruff: enforces docstrings (D), type annotations (ANN) and general quality.
