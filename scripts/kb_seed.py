@@ -1,12 +1,14 @@
 """Seed knowledge base for the help chat: diabetes basics, each with its source (R4/R5).
 
 :func:`seed_kb` writes :data:`KB_SEED` as **approved** ``kb_entries`` rows, recording the
-approving practitioner (``approved_by``) and time. The database refuses an approved row
-without them, so nothing reaches patients unless a named practitioner approved it.
+approving practitioner account (``approved_by``) and time. The database refuses an
+approved row without them, so every served entry names the account that approved it.
 
-The entries were drafted by the project team from the cited sources, in plain language,
-and are approved by the demo practitioner whose login ``seed_demo --practitioner-email``
-links. That person should read them before a real demo.
+The entries were drafted by the project team from the cited sources, in plain language.
+They are recorded as approved by the demo practitioner account whose login
+``seed_demo --practitioner-email`` links, but no practitioner has reviewed them: the
+Audit tab counts them as approved by the seed account. A practitioner should read them
+before a real demo.
 
 **Practitioners own the approved knowledge base.** Once a seed key has an approved row,
 re-seeding never replaces it: a practitioner may have edited or re-approved it on the
@@ -167,10 +169,7 @@ KB_SEED: Final[tuple[KbSeedEntry, ...]] = (
             "pain, trouble breathing, confusion, fainting, or vomiting with very high "
             "readings."
         ),
-        source=(
-            "ADA Standards of Care in Diabetes-2026, Sections 6 and 12; reviewed by the "
-            "approving practitioner"
-        ),
+        source="ADA Standards of Care in Diabetes-2026, Sections 6 and 12",
     ),
     KbSeedEntry(
         key="physical-activity",
@@ -251,7 +250,8 @@ KB_SEED: Final[tuple[KbSeedEntry, ...]] = (
         title="What A1C means",
         body=(
             "A1C is a blood test that shows your average glucose over about the past 3 "
-            "months. For many adults with diabetes the goal is below 7 percent, but your "
+            "months. It is also called HbA1c or glycated haemoglobin: these are the same "
+            "test. For many adults with diabetes the goal is below 7 percent, but your "
             "doctor may set a different goal for you. It is usually checked at least twice "
             "a year when you are meeting your goals, and more often when treatment changes "
             "or you are not."

@@ -35,6 +35,8 @@ what should i do when i have a fever,sick-days,in_scope
 how do i manage my diabetes when i am ill,sick-days,in_scope
 what is a1c,a1c,in_scope
 what should my hba1c be,a1c,in_scope
+is it not hba1c,a1c,in_scope
+what is hba1c,a1c,in_scope
 can i drink alcohol,alcohol,in_scope
 is beer bad for my sugar,alcohol,in_scope
 what is prediabetes,prediabetes,in_scope

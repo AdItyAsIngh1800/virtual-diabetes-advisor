@@ -1,0 +1,66 @@
+# KB retrieval evaluation (16 KB entries)
+
+Chosen threshold: 0.16 (best accuracy on the tuning set; ties: higher don't-know recall, then the middle).
+Held-out at 0.16: accuracy 0.760, answer precision 0.917, answer recall 0.647, dosing answered 0.
+
+## Tuning set (used to choose the threshold)
+
+64 questions (44 in scope, 20 off-topic or dosing); 10 stopped by the dosing/diagnosis guard.
+Top-1 accuracy (in scope, any threshold): 0.955
+
+| Threshold | Accuracy | Answer P | Answer R | Don't-know P | Don't-know R | Dosing answered |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.10 | 0.938 | 0.913 | 0.955 | 1.000 | 0.900 | 0 |
+| 0.11 | 0.938 | 0.913 | 0.955 | 1.000 | 0.900 | 0 |
+| 0.12 | 0.938 | 0.913 | 0.955 | 1.000 | 0.900 | 0 |
+| 0.13 | 0.938 | 0.913 | 0.955 | 1.000 | 0.900 | 0 |
+| 0.14 | 0.922 | 0.911 | 0.932 | 0.947 | 0.900 | 0 |
+| 0.15 | 0.938 | 0.952 | 0.909 | 0.909 | 1.000 | 0 |
+| 0.16 **(chosen)** | 0.938 | 0.952 | 0.909 | 0.909 | 1.000 | 0 |
+| 0.17 | 0.922 | 0.951 | 0.886 | 0.870 | 1.000 | 0 |
+| 0.18 | 0.906 | 0.950 | 0.864 | 0.833 | 1.000 | 0 |
+| 0.19 | 0.906 | 0.974 | 0.864 | 0.800 | 1.000 | 0 |
+| 0.20 | 0.891 | 0.974 | 0.841 | 0.769 | 1.000 | 0 |
+| 0.21 | 0.891 | 1.000 | 0.841 | 0.741 | 1.000 | 0 |
+| 0.22 | 0.844 | 1.000 | 0.773 | 0.667 | 1.000 | 0 |
+| 0.23 | 0.844 | 1.000 | 0.773 | 0.667 | 1.000 | 0 |
+| 0.24 | 0.828 | 1.000 | 0.750 | 0.645 | 1.000 | 0 |
+| 0.25 | 0.797 | 1.000 | 0.705 | 0.606 | 1.000 | 0 |
+
+Errors at 0.16:
+- 'why do i feel shaky and sweaty' (in_scope, expected low-glucose-signs): top driving at 0.210
+- 'what does hypoglycemia feel like' (in_scope, expected low-glucose-signs): top low-glucose-signs at 0.147
+- 'what are my personal limits' (in_scope, expected personal-limits): top pre-breach-alert at 0.186
+- 'when should i call my doctor' (in_scope, expected when-to-see-doctor): top when-to-see-doctor at 0.139
+
+## Held-out set (not used for any choice)
+
+25 questions (17 in scope, 8 off-topic or dosing); 4 stopped by the dosing/diagnosis guard.
+Top-1 accuracy (in scope, any threshold): 0.824
+
+| Threshold | Accuracy | Answer P | Answer R | Don't-know P | Don't-know R | Dosing answered |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.10 | 0.840 | 0.778 | 0.824 | 1.000 | 0.875 | 0 |
+| 0.11 | 0.840 | 0.875 | 0.824 | 0.778 | 0.875 | 0 |
+| 0.12 | 0.840 | 0.875 | 0.824 | 0.778 | 0.875 | 0 |
+| 0.13 | 0.800 | 0.867 | 0.765 | 0.700 | 0.875 | 0 |
+| 0.14 | 0.800 | 0.867 | 0.765 | 0.700 | 0.875 | 0 |
+| 0.15 | 0.760 | 0.857 | 0.706 | 0.636 | 0.875 | 0 |
+| 0.16 **(chosen)** | 0.760 | 0.917 | 0.647 | 0.615 | 1.000 | 0 |
+| 0.17 | 0.680 | 1.000 | 0.529 | 0.500 | 1.000 | 0 |
+| 0.18 | 0.680 | 1.000 | 0.529 | 0.500 | 1.000 | 0 |
+| 0.19 | 0.680 | 1.000 | 0.529 | 0.500 | 1.000 | 0 |
+| 0.20 | 0.640 | 1.000 | 0.471 | 0.471 | 1.000 | 0 |
+| 0.21 | 0.600 | 1.000 | 0.412 | 0.444 | 1.000 | 0 |
+| 0.22 | 0.600 | 1.000 | 0.412 | 0.444 | 1.000 | 0 |
+| 0.23 | 0.560 | 1.000 | 0.353 | 0.421 | 1.000 | 0 |
+| 0.24 | 0.560 | 1.000 | 0.353 | 0.421 | 1.000 | 0 |
+| 0.25 | 0.560 | 1.000 | 0.353 | 0.421 | 1.000 | 0 |
+
+Errors at 0.16:
+- 'what number should my sugar be when i wake up' (in_scope, expected personal-limits): top driving at 0.107
+- 'i am sweating and shaking is my sugar dropping' (in_scope, expected low-glucose-signs): top low-glucose-signs at 0.130
+- 'how many grams of sugar should i take when i am low' (in_scope, expected rule-15-15): top driving at 0.163
+- 'what kind of breakfast is good for diabetes' (in_scope, expected healthy-eating): top checking-glucose at 0.110
+- 'my doctor said i have borderline diabetes what does that mean' (in_scope, expected prediabetes): top prediabetes at 0.144
+- 'what kind of questions can i ask here' (in_scope, expected using-this-chat): top using-this-chat at 0.156

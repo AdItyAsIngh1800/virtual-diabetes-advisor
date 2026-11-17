@@ -246,6 +246,6 @@ def test_main_prints_both_tables(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--csv", str(DEFAULT_CSV), "--holdout", str(HOLDOUT_CSV)]) == 0
     out = capsys.readouterr().out
     assert out.startswith("# KB retrieval evaluation")
-    assert "62 questions (42 in scope, 20 off-topic or dosing)" in out
+    assert "64 questions (44 in scope, 20 off-topic or dosing)" in out
     assert "25 questions (17 in scope, 8 off-topic or dosing)" in out
     assert out.count("| Threshold | Accuracy | Answer P | Answer R |") == 2

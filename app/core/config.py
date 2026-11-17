@@ -154,11 +154,11 @@ class Settings(BaseSettings):
     # --- Help chat (R4) -----------------------------------------------------------
     # Minimum TF-IDF cosine similarity for a KB entry to answer a question. Below it the
     # chat says it does not know and offers practitioner connect. 0.16 is chosen by
-    # scripts/eval_retrieval.py on the tuning set tests/fixtures/kb_eval.csv (62 labelled
-    # questions, Nov 2026): best accuracy (0.935), ties broken by higher don't-know
+    # scripts/eval_retrieval.py on the tuning set tests/fixtures/kb_eval.csv (64 labelled
+    # questions, Nov 2026): best accuracy (0.938), ties broken by higher don't-know
     # recall. Dosing and self-diagnosis questions never reach this threshold: a rule
     # guard answers them first. Held-out set (kb_eval_holdout.csv, not used for the
-    # choice): accuracy 0.800 at 0.16. tests/test_eval_retrieval.py keeps this default
+    # choice): accuracy 0.760 at 0.16. tests/test_eval_retrieval.py keeps this default
     # equal to the script's choice. Raise it to answer less often, lower it to answer more.
     chat_kb_min_similarity: float = Field(default=0.16, gt=0.0, lt=1.0)
     # Voice messages: ~60 s of MediaRecorder opus/aac is 250-500 KB; 2 MB leaves room for
