@@ -64,6 +64,7 @@ from app.core.exceptions import DiabetesAdvisorError
 from app.core.logging import configure_logging
 from app.db.auth_users import find_auth_user_id_by_email
 from app.db.chat_repository import assign_patients
+from app.db.kb_repository import SEED_PRACTITIONER_NAME
 from app.db.models import (
     Advisory,
     ConversationTurn,
@@ -841,7 +842,8 @@ def seed_demo(
     )
 
 
-DEMO_PRACTITIONER_NAME: Final = "Demo Practitioner"
+# The Audit tab (R5) counts KB entries approved under this name as "not yet reviewed".
+DEMO_PRACTITIONER_NAME: Final = SEED_PRACTITIONER_NAME
 
 
 def link_practitioner(session: Session, email: str) -> uuid.UUID:

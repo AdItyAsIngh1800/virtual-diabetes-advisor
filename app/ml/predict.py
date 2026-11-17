@@ -15,7 +15,6 @@ stored for audit and shown as information only; it never changes a glucose limit
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -25,7 +24,13 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import ModelNotTrainedError
-from app.ml.artifacts import DEFAULT_MODEL_DIR, ModelMetadata, TierCutoffs, model_paths
+from app.ml.artifacts import (
+    DEFAULT_MODEL_DIR,
+    ModelMetadata,
+    TierCutoffs,
+    load_metadata,
+    model_paths,
+)
 from app.ml.schema import FEATURES, RiskProfile
 
 RiskTier = Literal["low", "moderate", "high"]
@@ -98,13 +103,14 @@ class RiskModel:
 
         Raises:
             ModelNotTrainedError: If either artifact file is missing.
+            ModelMetadataError: If the metadata file is not valid metadata.
         """
         model_path, meta_path = model_paths(model_dir)
         if not model_path.exists() or not meta_path.exists():
             raise ModelNotTrainedError(
                 f"No model in {model_dir}. Run: uv run python -m app.ml.train"
             )
-        metadata = ModelMetadata.model_validate(json.loads(meta_path.read_text()))
+        metadata = load_metadata(model_dir)
         # Only load artifacts this project wrote itself: joblib files can run code on load.
         estimator = joblib.load(model_path)
         return cls(estimator=estimator, metadata=metadata)

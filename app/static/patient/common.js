@@ -274,10 +274,119 @@ window.DA = (() => {
       .map(([d]) => d);
   }
 
+  // --- Audit tab (R5, practitioner page) -------------------------------------------
+  // The API never sends a rate without its count and denominator ({count, denominator,
+  // rate}); the page never shows one without them either.
+
+  /** A rate as a percentage, or "n/a" when its denominator is 0 (the API sends null). */
+  function pct(rate, digits = 1) {
+    return rate === null || rate === undefined ? "n/a" : `${(rate * 100).toFixed(digits)}%`;
+  }
+
+  /** "12 of 40 (30.0%)": a count always shown with what it is out of. */
+  function countOf(cr) {
+    return `${cr.count} of ${cr.denominator} (${pct(cr.rate)})`;
+  }
+
+  /** Summary table rows: [label, {count, denominator, rate}], in display order. */
+  function auditRows(counts) {
+    const v = counts.verdicts;
+    return [
+      ["Reviewed", counts.reviewed],
+      ["Unreviewed", counts.unreviewed],
+      ["Correct (of reviewed)", v.correct],
+      ["Incorrect (of reviewed)", v.incorrect],
+      ["Unsafe (of reviewed)", v.unsafe],
+      ["Needs KB update (of reviewed)", v.needs_kb_update],
+      ["Escalated to a practitioner", counts.escalated],
+      ['"I don\'t know" (unanswered)', counts.unanswered],
+      ["Blocked by the dosing/diagnosis guard", counts.blocked_by_guard],
+    ];
+  }
+
+  /** Per-KB-version table columns: [header, pick(counts) -> {count, denominator, rate}]. */
+  const AUDIT_KB_COLUMNS = Object.freeze([
+    ["Reviewed", (c) => c.reviewed],
+    ["Correct", (c) => c.verdicts.correct],
+    ["Incorrect", (c) => c.verdicts.incorrect],
+    ["Unsafe", (c) => c.verdicts.unsafe],
+    ["Needs KB update", (c) => c.verdicts.needs_kb_update],
+    ["Escalated", (c) => c.escalated],
+    ["I don't know", (c) => c.unanswered],
+    ["Guard", (c) => c.blocked_by_guard],
+  ]);
+
+  /**
+   * URL of the summary for a date range. Dates are "YYYY-MM-DD" in the viewer's own
+   * timezone and both days are included (until is sent as the next local midnight).
+   */
+  function auditQuery(sinceDay, untilDay) {
+    const params = [];
+    if (sinceDay) params.push(`since=${encodeURIComponent(new Date(`${sinceDay}T00:00:00`).toISOString())}`);
+    if (untilDay) {
+      const end = new Date(`${untilDay}T00:00:00`);
+      end.setDate(end.getDate() + 1);
+      params.push(`until=${encodeURIComponent(end.toISOString())}`);
+    }
+    return `/api/practitioner/audit/summary${params.length ? `?${params.join("&")}` : ""}`;
+  }
+
+  /** "YYYY-MM-DD" of a timestamp in the viewer's timezone (for the date inputs). */
+  function localDay(iso, minusMs = 0) {
+    const d = new Date(new Date(iso).getTime() - minusMs);
+    const two = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+  }
+
+  /** The KB status line: how much of the served KB a practitioner has actually approved. */
+  function kbStatusLine(kb) {
+    const parts = [];
+    if (!kb.approved) {
+      parts.push("No approved entries yet.");
+    } else if (kb.approved_by_seed_account.count) {
+      parts.push(`${kb.approved_by_seed_account.count} of ${kb.approved} approved entries were approved by the seed account, not yet reviewed by a practitioner.`);
+    } else {
+      parts.push(`All ${kb.approved} approved entries were approved by a practitioner other than the seed account.`);
+    }
+    const unsafe = kb.priority_drafts.count ? ` (${kb.priority_drafts.count} from answers marked unsafe)` : "";
+    parts.push(`${kb.drafts} draft${kb.drafts === 1 ? "" : "s"} awaiting approval${unsafe}.`);
+    return parts.join(" ");
+  }
+
+  // Model card metrics in display order: precision, recall and F1 before ROC-AUC, so
+  // ROC-AUC is never read on its own. Mirrors CardMetrics in app/ml/model_card.py.
+  const MODEL_METRICS = Object.freeze([
+    ["precision", "Precision (flagged people who have diabetes)"],
+    ["recall", "Recall (people with diabetes who are flagged)"],
+    ["f1", "F1"],
+    ["roc_auc", "ROC-AUC"],
+    ["pr_auc", "PR-AUC (average precision)"],
+    ["brier", "Brier score (lower is better)"],
+  ]);
+
+  const RETRAIN_DECISIONS = Object.freeze({
+    promoted: "new model promoted", kept: "current model kept", dry_run: "dry run, not promoted",
+  });
+
+  /** "Last retrain: ..." from the newest run (or null), without the date. */
+  function retrainLine(run) {
+    if (!run) return "Last retrain: none yet. Retraining is manual (python -m app.jobs.retrain).";
+    if (run.status === "running") return "Last retrain: still running.";
+    const decision = RETRAIN_DECISIONS[run.decision] || run.decision;
+    const failed = run.status === "failed" ? `, training failed${run.error ? ` (${run.error})` : ""}` : "";
+    const fresh = run.report && run.report.new;
+    const metrics = fresh
+      ? `; candidate ${fresh.version}: precision ${fresh.precision.toFixed(3)}, recall ${fresh.recall.toFixed(3)}`
+      : "";
+    return `Last retrain: ${decision}${failed}${metrics}.`;
+  }
+
   return {
     $, UUID, say, init, session, api, enableAlerts, disableAlerts, listen, guarded, clock, messageId,
     dayLabel, withDays, renderWithDays, VERDICTS, needsNote, reviewQuery, reviewTags,
     kbApproveProblem, kbDraftOrigin, kbDraftTags, kbSortDrafts, KB_PRIORITY_LABEL,
+    pct, countOf, auditRows, AUDIT_KB_COLUMNS, auditQuery, localDay, kbStatusLine, MODEL_METRICS,
+    RETRAIN_DECISIONS, retrainLine,
     get sb() { return sb; },
     get config() { return config; },
   };

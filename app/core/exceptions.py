@@ -19,6 +19,18 @@ class ModelNotTrainedError(DiabetesAdvisorError):
     """Raised when the risk model artifact is missing and inference is requested."""
 
 
+class ModelMetadataError(DiabetesAdvisorError):
+    """Raised when ``risk_model.meta.json`` exists but is not valid metadata (R5).
+
+    The model card answers 500 with a logged error rather than showing numbers it
+    could not validate.
+    """
+
+
+class TrainingDataMissingError(DiabetesAdvisorError):
+    """Raised when a retrain starts without the BRFSS CSVs in the data folder (R5)."""
+
+
 class ConfigurationError(DiabetesAdvisorError):
     """Raised when required settings are missing or invalid.
 

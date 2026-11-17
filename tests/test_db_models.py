@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from sqlalchemy import Enum, event
@@ -197,3 +198,9 @@ def test_replay_sees_0009_changes() -> None:
     assert {"review_hint", "priority"} <= kb
     runs, _ = _replayed_schema("batch_runs")
     assert {"kb_candidates", "kb_drafts_proposed"} <= runs
+
+
+def test_replay_sees_0010_changes() -> None:
+    runs, choices = _replayed_schema("batch_runs")
+    assert {"retrain_decision", "retrain_report"} <= runs
+    assert choices["retrain_decision"] == set(get_args(models.RetrainDecision))

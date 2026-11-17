@@ -1,4 +1,4 @@
-"""Admin routes: run the batch update, the advisory dispatcher and the KB upgrade on demand.
+"""Admin routes: run the batch update, dispatcher, KB upgrade and model retrain on demand.
 
 Every route requires the ``X-Admin-Api-Key`` header to equal ``ADMIN_API_KEY``. The
 check fails closed: with no key configured, every request gets 503.
@@ -10,14 +10,19 @@ import hmac
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from app.core.config import Settings, get_settings
-from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
+from app.core.exceptions import (
+    BatchAlreadyRunningError,
+    ConfigurationError,
+    TrainingDataMissingError,
+)
 from app.db.session import get_session_factory
 from app.jobs.batch_update import BatchRunSummary, load_risk_scorer, run_batch_update
 from app.jobs.dispatch_advisories import DispatchSummary, run_dispatch, scheduled_dispatch
 from app.jobs.kb_upgrade import KbUpgradeSummary, run_kb_upgrade
+from app.jobs.retrain import RetrainSummary, run_retrain
 
 logger = logging.getLogger(__name__)
 
@@ -114,5 +119,38 @@ def trigger_kb_upgrade_run() -> KbUpgradeSummary:
     """
     try:
         return run_kb_upgrade(get_session_factory(), triggered_by="admin_api")
+    except BatchAlreadyRunningError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.post("/retrain-run")
+def trigger_retrain_run(
+    dry_run: bool = False,
+    sample: Annotated[float | None, Query(gt=0, le=1)] = None,
+) -> RetrainSummary:
+    """Retrain the risk model now (R5) and return the promote/keep decision.
+
+    Runs synchronously: a full training takes a few minutes (``sample`` makes it
+    quicker). The candidate replaces the live model only if its test recall and
+    precision hold up; thresholds are never touched. A run whose training failed
+    still returns 200 with ``status`` ``failed`` and decision ``kept``.
+
+    Args:
+        dry_run: Train and report, never promote.
+        sample: Share of rows to train on, e.g. ``0.2``.
+
+    Returns:
+        Status, decision, old and new metrics.
+
+    Raises:
+        HTTPException: 503 if the BRFSS CSVs are missing, 409 if a retrain is
+            already in progress.
+    """
+    try:
+        return run_retrain(
+            get_session_factory(), triggered_by="admin_api", dry_run=dry_run, sample_frac=sample
+        )
+    except TrainingDataMissingError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except BatchAlreadyRunningError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

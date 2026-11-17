@@ -13,3 +13,5 @@ node_modules/
 .env.bak
 .coverage
 logs/
+models/candidates/
+models/backups/

@@ -4,7 +4,9 @@ Day separators in both chat views (patient ``/app`` and practitioner page): "Tod
 "Yesterday", "16 Nov", grouped by *local* calendar day. The practitioner page's Review
 tab (R5): verdict labels, the note rule, list URLs and card tags, kept in step with the
 API. The Knowledge base tab (R5): the approval rule, draft origin lines, field limits
-and the staff-only hint staying off patient pages. Node tests are skipped where Node is
+and the staff-only hint staying off patient pages. The Audit tab (R5): counts always
+shown with their rates, the KB status line, the model card's metric order and the
+limitations shown in full. Node tests are skipped where Node is
 missing; the static checks always run.
 """
 
@@ -21,8 +23,9 @@ from typing import Final, get_args
 import pytest
 
 from app.api.kb_admin import MAX_BODY_CHARS, MAX_CITATION_CHARS, MAX_TITLE_CHARS
-from app.db.audit_repository import NOTE_REQUIRED, ReviewFilter
-from app.db.models import ReviewVerdict
+from app.db.audit_repository import NOTE_REQUIRED, AnswerCounts, ReviewFilter
+from app.db.models import RetrainDecision, ReviewVerdict
+from app.ml.model_card import CardMetrics
 from app.services.kb_upgrade import PRIORITY_LABEL
 
 STATIC: Final = Path(__file__).resolve().parents[1] / "app" / "static" / "patient"
@@ -324,3 +327,156 @@ def test_priority_draft_card_is_highlighted() -> None:
     assert 'entry.priority ? " priority" : ""' in script
     assert "DA.kbSortDrafts(listing.drafts)" in script
     assert "DA.kbDraftTags(entry)" in script
+
+
+# --- Audit tab (R5) ---------------------------------------------------------------------
+
+
+def test_audit_tab_is_wired() -> None:
+    html, script = _page()
+    ids = set(re.findall(r'\bid="([\w-]+)"', html))
+    used = set(re.findall(r'\$\("([\w-]+)"\)', script))
+    tabs = re.findall(r'\["(tab-\w+)", "(\w+)"\]', script)
+    assert ("tab-audit", "audit") in tabs
+    buttons = re.findall(r'role="tab" id="(tab-\w+)" aria-controls="(\w+)"', html)
+    assert sorted(buttons) == sorted(tabs)
+    assert (
+        {
+            "audit-summary-body",
+            "audit-by-kb-body",
+            "audit-kb-status",
+            "audit-since",
+            "audit-until",
+            "model-metrics-body",
+            "model-limitations",
+            "model-flagged",
+            "model-retrain",
+            "model-error",
+        }
+        <= used
+        <= ids
+    )
+    # The confusion matrix is a labelled 2x2 table filled cell by cell.
+    assert {"cm-tn", "cm-fp", "cm-fn", "cm-tp"} <= ids
+    assert 'for (const key of ["tn", "fp", "fn", "tp"])' in script
+    for route in ("/api/practitioner/model-card", "DA.auditQuery("):
+        assert route in script, route
+    # Plain tables: no chart library on the page.
+    for lib in ("chart.js", "chartjs", "d3", "plotly", "recharts", "<canvas"):
+        assert lib not in html.lower(), lib
+
+
+@needs_node
+def test_model_metrics_put_precision_recall_f1_before_roc_auc() -> None:
+    metrics = run_js("DA.MODEL_METRICS")
+    assert isinstance(metrics, list)
+    keys = [key for key, _ in metrics]
+    assert keys[:3] == ["precision", "recall", "f1"]
+    assert keys.index("roc_auc") > 2
+    # Every metric the card returns is shown, in the API's own order.
+    assert keys == list(CardMetrics.model_fields)
+
+
+def test_limitations_are_shown_in_full() -> None:
+    _, script = _page()
+    # Each limitation is one list item with the API's text, never truncated or picked from.
+    assert 'card.limitations.map((text) => el("li", "", text))' in script
+
+
+@needs_node
+@pytest.mark.parametrize(
+    ("cr", "text"),
+    [
+        ({"count": 12, "denominator": 40, "rate": 0.3}, "12 of 40 (30.0%)"),
+        ({"count": 0, "denominator": 0, "rate": None}, "0 of 0 (n/a)"),
+    ],
+)
+def test_count_of_never_shows_a_rate_alone(cr: dict[str, object], text: str) -> None:
+    assert run_js(f"DA.countOf({json.dumps(cr)})") == text
+
+
+@needs_node
+def test_audit_rows_cover_every_summary_measure() -> None:
+    zero = {"count": 0, "denominator": 0, "rate": None}
+    counts = {
+        "total": 0,
+        "reviewed": zero,
+        "unreviewed": zero,
+        "verdicts": dict.fromkeys(get_args(ReviewVerdict), zero),
+        "escalated": zero,
+        "unanswered": zero,
+        "blocked_by_guard": zero,
+    }
+    rows = run_js(f"DA.auditRows({json.dumps(counts)}).map(([label]) => label)")
+    assert isinstance(rows, list)
+    # One row per CountRate in AnswerCounts (verdicts expanded).
+    expected = len(AnswerCounts.model_fields) - 2 + len(get_args(ReviewVerdict))
+    assert len(rows) == expected
+    # Every per-KB-version column picks a {count, denominator, rate} out of the counts.
+    picked = run_js(f"DA.AUDIT_KB_COLUMNS.map(([, pick]) => pick({json.dumps(counts)}))")
+    assert isinstance(picked, list) and picked
+    assert all(p == zero for p in picked)
+
+
+@needs_node
+def test_audit_query_sends_aware_timestamps_and_includes_the_last_day() -> None:
+    assert run_js("DA.auditQuery(null, null)") == "/api/practitioner/audit/summary"
+    # India time: 1 Nov 00:00 IST is 31 Oct 18:30 UTC; "to 17 Nov" ends at 18 Nov 00:00 IST.
+    assert run_js('DA.auditQuery("2026-11-01", "2026-11-17")') == (
+        "/api/practitioner/audit/summary?since=2026-10-31T18%3A30%3A00.000Z"
+        "&until=2026-11-17T18%3A30%3A00.000Z"
+    )
+    # The exclusive end shown back as the last included day.
+    assert run_js('DA.localDay("2026-11-17T18:30:00Z", 1)') == "2026-11-17"
+
+
+@needs_node
+@pytest.mark.parametrize(
+    ("kb", "line"),
+    [
+        (
+            {"approved": 16, "drafts": 0, "seed": 16, "priority": 0},
+            "16 of 16 approved entries were approved by the seed account, not yet reviewed "
+            "by a practitioner. 0 drafts awaiting approval.",
+        ),
+        (
+            {"approved": 5, "drafts": 1, "seed": 0, "priority": 1},
+            "All 5 approved entries were approved by a practitioner other than the seed "
+            "account. 1 draft awaiting approval (1 from answers marked unsafe).",
+        ),
+        (
+            {"approved": 0, "drafts": 2, "seed": 0, "priority": 0},
+            "No approved entries yet. 2 drafts awaiting approval.",
+        ),
+    ],
+)
+def test_kb_status_line(kb: dict[str, int], line: str) -> None:
+    payload = {
+        "approved": kb["approved"],
+        "drafts": kb["drafts"],
+        "priority_drafts": {"count": kb["priority"]},
+        "approved_by_seed_account": {"count": kb["seed"]},
+    }
+    assert run_js(f"DA.kbStatusLine({json.dumps(payload)})") == line
+
+
+@needs_node
+def test_retrain_line() -> None:
+    assert run_js("DA.retrainLine(null)") == (
+        "Last retrain: none yet. Retraining is manual (python -m app.jobs.retrain)."
+    )
+    run = {
+        "status": "succeeded",
+        "decision": "kept",
+        "error": None,
+        "report": {"new": {"version": "risk-2", "precision": 0.25, "recall": 0.8}},
+    }
+    assert run_js(f"DA.retrainLine({json.dumps(run)})") == (
+        "Last retrain: current model kept; candidate risk-2: precision 0.250, recall 0.800."
+    )
+    failed = {"status": "failed", "decision": "kept", "error": "RuntimeError", "report": None}
+    assert run_js(f"DA.retrainLine({json.dumps(failed)})") == (
+        "Last retrain: current model kept, training failed (RuntimeError)."
+    )
+    # A label for every decision the job records, and nothing else.
+    assert run_js("Object.keys(DA.RETRAIN_DECISIONS)") == list(get_args(RetrainDecision))

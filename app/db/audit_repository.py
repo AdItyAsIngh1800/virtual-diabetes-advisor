@@ -17,6 +17,10 @@ Access (the backend bypasses RLS, so this mirrors ``accessible_patient_ids()`` i
 their login and practitioner row are active; an admin sees every patient. A turn
 outside that set is treated exactly like a turn that does not exist.
 
+:func:`answer_summary` counts the same rows as the review list (R5 Audit tab): totals,
+current verdicts, escalations, "I don't know" replies and dosing/diagnosis guard
+replies, overall and per ``kb_version``, each count with its rate.
+
 Nothing here commits: the route owns the transaction.
 """
 
@@ -28,7 +32,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
-from typing import Final, Literal
+from typing import Final, Literal, NamedTuple
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 from sqlalchemy import ColumnElement, Select, and_, exists, func, select, tuple_, union
@@ -36,6 +40,7 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, aliased
 
 from app.core.exceptions import ReviewNoteRequiredError, TurnNotReviewableError
+from app.core.rates import CountRate
 from app.db.chat_repository import db_now
 from app.db.models import (
     ConversationTurn,
@@ -48,7 +53,7 @@ from app.db.models import (
     TurnReview,
     User,
 )
-from app.services.chat import RELAY_MODEL, TFIDF_MODEL
+from app.services.chat import RELAY_MODEL, RULES_MODEL, TFIDF_MODEL
 
 # R5: list filters on the review tab.
 #   all            - every advisor reply
@@ -284,6 +289,20 @@ def unanswered_reply() -> ColumnElement[bool]:
         ConversationTurn.model == TFIDF_MODEL,
         func.cardinality(ConversationTurn.kb_ids_used) == 0,
     )
+
+
+def guard_reply() -> ColumnElement[bool]:
+    """SQL condition for a question blocked by the dosing/diagnosis guard.
+
+    ``ChatEngine._question`` answers a dosing or diagnosis question with the fixed
+    ``ADVICE_GUARD_REPLY`` from the ``rules`` model and intent ``question``; no other
+    advisor reply is a ``rules`` question (relay acknowledgements are excluded by
+    :func:`advisor_reply`). Matched on structure, like :func:`unanswered_reply`.
+
+    Returns:
+        The condition.
+    """
+    return and_(ConversationTurn.intent == "question", ConversationTurn.model == RULES_MODEL)
 
 
 def latest_reviews() -> Select[
@@ -541,4 +560,177 @@ def add_review(
             select(Practitioner.full_name).where(Practitioner.id == reviewer_id)
         ),
         created_at=review.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Audit summary (R5 Audit tab)
+# ---------------------------------------------------------------------------
+
+
+class VerdictCounts(BaseModel):
+    """Current verdicts (latest review per turn), each out of the reviewed answers.
+
+    Attributes:
+        correct: Marked correct.
+        incorrect: Marked incorrect.
+        unsafe: Marked unsafe.
+        needs_kb_update: Marked as needing a KB change.
+    """
+
+    correct: CountRate
+    incorrect: CountRate
+    unsafe: CountRate
+    needs_kb_update: CountRate
+
+
+class AnswerCounts(BaseModel):
+    """Counts over a set of advisor replies; every rate comes with its counts.
+
+    Attributes:
+        total: Advisor replies.
+        reviewed: Replies with at least one review, out of ``total``.
+        unreviewed: Replies with none, out of ``total``.
+        verdicts: Current verdicts, out of ``reviewed``.
+        escalated: Replies that brought a practitioner in, out of ``total``.
+        unanswered: "I don't know" replies, out of ``total``.
+        blocked_by_guard: Dosing/diagnosis questions refused, out of ``total``.
+    """
+
+    total: int
+    reviewed: CountRate
+    unreviewed: CountRate
+    verdicts: VerdictCounts
+    escalated: CountRate
+    unanswered: CountRate
+    blocked_by_guard: CountRate
+
+
+class KbVersionCounts(BaseModel):
+    """Counts of the replies one KB release gave.
+
+    Attributes:
+        kb_version: ``conversation_turns.kb_version``; ``None`` for replies that used
+            no KB (readings, red flags, the guard, handoff requests).
+        counts: The counts.
+    """
+
+    kb_version: int | None
+    counts: AnswerCounts
+
+
+class AnswerSummary(BaseModel):
+    """Advisor replies in a window, overall and per KB version.
+
+    Attributes:
+        totals: All replies in the window.
+        by_kb_version: The same counts per ``kb_version``, oldest first, then ``None``.
+    """
+
+    totals: AnswerCounts
+    by_kb_version: list[KbVersionCounts]
+
+
+class _RawCounts(NamedTuple):
+    """Plain counts of one group, before rates are attached."""
+
+    total: int = 0
+    reviewed: int = 0
+    correct: int = 0
+    incorrect: int = 0
+    unsafe: int = 0
+    needs_kb_update: int = 0
+    escalated: int = 0
+    unanswered: int = 0
+    blocked: int = 0
+
+    def with_rates(self) -> AnswerCounts:
+        """Attach denominators and rates.
+
+        Returns:
+            The counts as :class:`AnswerCounts`.
+        """
+        return AnswerCounts(
+            total=self.total,
+            reviewed=CountRate.of(self.reviewed, self.total),
+            unreviewed=CountRate.of(self.total - self.reviewed, self.total),
+            verdicts=VerdictCounts(
+                correct=CountRate.of(self.correct, self.reviewed),
+                incorrect=CountRate.of(self.incorrect, self.reviewed),
+                unsafe=CountRate.of(self.unsafe, self.reviewed),
+                needs_kb_update=CountRate.of(self.needs_kb_update, self.reviewed),
+            ),
+            escalated=CountRate.of(self.escalated, self.total),
+            unanswered=CountRate.of(self.unanswered, self.total),
+            blocked_by_guard=CountRate.of(self.blocked, self.total),
+        )
+
+
+def answer_summary(
+    session: Session,
+    practitioner_id: uuid.UUID,
+    *,
+    since: datetime,
+    until: datetime,
+) -> AnswerSummary:
+    """Count the advisor replies a practitioner may see in ``[since, until)``.
+
+    The rows are exactly the review list's (:func:`advisor_reply` of a patient in
+    :func:`visible_patient_ids`), so the numbers match what the Review tab shows. The
+    verdict of a turn is its latest review, as everywhere else.
+
+    Args:
+        session: Open session.
+        practitioner_id: Viewer (``practitioners.id``); an admin counts every patient.
+        since: Inclusive start, on ``conversation_turns.created_at``.
+        until: Exclusive end.
+
+    Returns:
+        Totals and per-KB-version counts, with rates.
+
+    Raises:
+        ValueError: ``since`` is not before ``until``.
+    """
+    if since >= until:
+        raise ValueError("since must be before until")
+    latest = latest_reviews().subquery()
+
+    def counted(condition: ColumnElement[bool]) -> ColumnElement[int]:
+        return func.count().filter(condition)
+
+    stmt = (
+        select(
+            ConversationTurn.kb_version,
+            func.count(),
+            counted(latest.c.review_id.is_not(None)),
+            counted(latest.c.verdict == "correct"),
+            counted(latest.c.verdict == "incorrect"),
+            counted(latest.c.verdict == "unsafe"),
+            counted(latest.c.verdict == "needs_kb_update"),
+            counted(ConversationTurn.escalated.is_(True)),
+            counted(unanswered_reply()),
+            counted(guard_reply()),
+        )
+        .outerjoin(latest, latest.c.turn_id == ConversationTurn.id)
+        .where(
+            advisor_reply(),
+            ConversationTurn.user_id.in_(visible_patient_ids(practitioner_id)),
+            ConversationTurn.created_at >= since,
+            ConversationTurn.created_at < until,
+        )
+        .group_by(ConversationTurn.kb_version)
+        .order_by(ConversationTurn.kb_version.asc().nulls_last())
+    )
+    groups = [
+        (version, _RawCounts(*(int(n) for n in counts)))
+        for version, *counts in session.execute(stmt).all()
+    ]
+    # Counts are additive across KB versions; rates are not, so they are recomputed.
+    totals = _RawCounts(*(sum(column) for column in zip(*(c for _, c in groups), strict=True)))
+    return AnswerSummary(
+        totals=totals.with_rates(),
+        by_kb_version=[
+            KbVersionCounts(kb_version=version, counts=counts.with_rates())
+            for version, counts in groups
+        ],
     )

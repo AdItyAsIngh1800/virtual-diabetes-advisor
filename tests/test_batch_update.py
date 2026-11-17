@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -613,11 +614,38 @@ def test_missing_model_means_unscored(monkeypatch: pytest.MonkeyPatch) -> None:
         raise ModelNotTrainedError("no model")
 
     monkeypatch.setattr(RiskModel, "load", classmethod(missing))
-    batch_update.load_risk_scorer.cache_clear()
+    batch_update.cached_risk_scorer.cache_clear()
     try:
         assert batch_update.load_risk_scorer() is None
     finally:
-        batch_update.load_risk_scorer.cache_clear()
+        batch_update.cached_risk_scorer.cache_clear()
+
+
+def test_scorer_reloads_when_the_model_files_change(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A retrain promotion rewrites risk_model.meta.json; the next batch run must use it.
+    meta = tmp_path / "risk_model.meta.json"
+    meta.write_text("{}")
+    monkeypatch.setattr(batch_update, "DEFAULT_MODEL_DIR", tmp_path)
+    loads: list[int] = []
+
+    def counting(cls: Any) -> Any:
+        loads.append(1)
+        return object()
+
+    monkeypatch.setattr(RiskModel, "load", classmethod(counting))
+    batch_update.cached_risk_scorer.cache_clear()
+    try:
+        first = batch_update.load_risk_scorer()
+        assert batch_update.load_risk_scorer() is first
+        assert len(loads) == 1
+        stat = meta.stat()
+        os.utime(meta, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+        assert batch_update.load_risk_scorer() is not first
+        assert len(loads) == 2
+    finally:
+        batch_update.cached_risk_scorer.cache_clear()
 
 
 @live

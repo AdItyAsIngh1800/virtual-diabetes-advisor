@@ -24,6 +24,10 @@ conversation a draft came from is patient data, though: its question and the adv
 answer are only included for a practitioner who may see that patient (the same rule as
 the review tab, :func:`app.db.audit_repository.visible_patient_ids`).
 
+:func:`kb_status_counts` feeds the Audit tab's KB status line, including how many
+approved entries were approved by the seed's demo practitioner
+(:data:`SEED_PRACTITIONER_NAME`) rather than by a practitioner who reviewed them.
+
 Nothing here commits: the route or job owns the transaction.
 """
 
@@ -43,6 +47,7 @@ from app.core.exceptions import (
     KbEntryNotFoundError,
     KbEntryStateError,
 )
+from app.core.rates import CountRate
 from app.db.audit_repository import (
     advisor_reply,
     latest_reviews,
@@ -65,6 +70,11 @@ from app.services.kb_upgrade import (
     ReviewedQuestion,
     UnansweredQuestion,
 )
+
+# Display name scripts/seed_demo.py gives the practitioner it links with
+# --practitioner-email. scripts/kb_seed.py approves the seed KB in that practitioner's
+# name, so entries still approved by them have not been reviewed by anyone else (R5).
+SEED_PRACTITIONER_NAME: Final = "Demo Practitioner"
 
 # Serialises approvals so two practitioners approving at once cannot be given the same
 # kb_version. Transaction-scoped, so it works through Supabase's transaction pooler.
@@ -657,3 +667,60 @@ def reject_draft(session: Session, entry_id: uuid.UUID, practitioner_id: uuid.UU
     row.status = "retired"
     session.flush()
     return _views(session, [row], practitioner_id)[0]
+
+
+# ---------------------------------------------------------------------------
+# Audit tab
+# ---------------------------------------------------------------------------
+
+
+class KbStatusCounts(BaseModel):
+    """Knowledge-base status for the Audit tab.
+
+    Attributes:
+        approved: Entries being served.
+        drafts: Drafts awaiting a practitioner.
+        priority_drafts: Drafts from answers marked unsafe, out of ``drafts``.
+        approved_by_seed_account: Approved entries whose approver is the seed's demo
+            practitioner, out of ``approved``: clinical review still pending.
+        approved_by_others: Approved by anyone else, out of ``approved``.
+    """
+
+    approved: int
+    drafts: int
+    priority_drafts: CountRate
+    approved_by_seed_account: CountRate
+    approved_by_others: CountRate
+
+
+def kb_status_counts(session: Session) -> KbStatusCounts:
+    """Count approved entries, drafts and who approved what (KB is clinic-wide).
+
+    The seed account is any practitioner named :data:`SEED_PRACTITIONER_NAME`; the
+    seed script creates exactly one.
+
+    Args:
+        session: Open session.
+
+    Returns:
+        The counts, with rates.
+    """
+    seed_account = select(Practitioner.id).where(Practitioner.full_name == SEED_PRACTITIONER_NAME)
+    approved = KbEntry.status == "approved"
+    draft = KbEntry.status == "draft"
+    row = session.execute(
+        select(
+            func.count().filter(approved),
+            func.count().filter(draft),
+            func.count().filter(draft, KbEntry.priority.is_(True)),
+            func.count().filter(approved, KbEntry.approved_by.in_(seed_account)),
+        )
+    ).one()
+    n_approved, n_drafts, n_priority, n_seed = (int(n) for n in row)
+    return KbStatusCounts(
+        approved=n_approved,
+        drafts=n_drafts,
+        priority_drafts=CountRate.of(n_priority, n_drafts),
+        approved_by_seed_account=CountRate.of(n_seed, n_approved),
+        approved_by_others=CountRate.of(n_approved - n_seed, n_approved),
+    )

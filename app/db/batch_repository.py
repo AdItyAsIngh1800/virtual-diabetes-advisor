@@ -29,6 +29,7 @@ from app.db.models import (
     BatchTrigger,
     Profile,
     Reading,
+    RetrainDecision,
     RiskAssessmentRecord,
     User,
 )
@@ -168,6 +169,8 @@ class SqlBatchRepository:
         error: str | None,
         kb_candidates: int = 0,
         kb_drafts_proposed: int = 0,
+        retrain_decision: RetrainDecision | None = None,
+        retrain_report: Mapping[str, object] | None = None,
     ) -> None:
         """Record a run's final status and counts.
 
@@ -182,7 +185,16 @@ class SqlBatchRepository:
             error: Failure summary, or ``None``.
             kb_candidates: Questions a ``kb_upgrade`` run considered (R5).
             kb_drafts_proposed: Draft KB entries it inserted (R5).
+            retrain_decision: What a ``retrain`` run did with its candidate (R5).
+            retrain_report: Its old/new metrics and reasons, JSON-serialisable (R5).
         """
+        retrain: dict[str, object] = {}
+        if retrain_decision is not None:
+            # Only retrain runs carry these (0010 CHECK); other jobs leave them NULL.
+            retrain = {
+                "retrain_decision": retrain_decision,
+                "retrain_report": dict(retrain_report) if retrain_report is not None else None,
+            }
         self._session.execute(
             update(BatchRun)
             .where(BatchRun.id == run_id)
@@ -196,8 +208,27 @@ class SqlBatchRepository:
                 kb_candidates=kb_candidates,
                 kb_drafts_proposed=kb_drafts_proposed,
                 error=error,
+                **retrain,
             )
         )
+
+    def recent_runs(self, job: BatchJob, limit: int) -> list[BatchRun]:
+        """Return the latest runs of a job, newest first.
+
+        Args:
+            job: Job name.
+            limit: How many.
+
+        Returns:
+            Up to ``limit`` rows.
+        """
+        stmt = (
+            select(BatchRun)
+            .where(BatchRun.job == job)
+            .order_by(BatchRun.started_at.desc(), BatchRun.id.desc())
+            .limit(limit)
+        )
+        return list(self._session.scalars(stmt))
 
     # --- users and readings ------------------------------------------------------
 

@@ -38,6 +38,35 @@ _FILENAMES: Final[dict[DatasetKind, str]] = {
 }
 
 
+def dataset_path(kind: DatasetKind, data_dir: Path = DEFAULT_DATA_DIR) -> Path:
+    """Return where a BRFSS file is expected.
+
+    Args:
+        kind: Which BRFSS file.
+        data_dir: Folder holding the CSVs.
+
+    Returns:
+        The CSV path (it may not exist).
+    """
+    return data_dir / _FILENAMES[kind]
+
+
+def missing_datasets(data_dir: Path = DEFAULT_DATA_DIR) -> list[Path]:
+    """List the BRFSS CSVs that are not in ``data_dir``.
+
+    Args:
+        data_dir: Folder holding the CSVs.
+
+    Returns:
+        Paths of the missing files (empty when all three are present).
+    """
+    return [
+        dataset_path(kind, data_dir)
+        for kind in _FILENAMES
+        if not dataset_path(kind, data_dir).exists()
+    ]
+
+
 def target_column(kind: DatasetKind) -> str:
     """Return the name of the label column for a dataset kind.
 
@@ -97,7 +126,7 @@ def load_brfss(
         FileNotFoundError: If the CSV is not in ``data_dir``.
         DataValidationError: If the file fails :func:`validate_frame`.
     """
-    path = data_dir / _FILENAMES[kind]
+    path = dataset_path(kind, data_dir)
     if not path.exists():
         raise FileNotFoundError(f"{path} not found - put the BRFSS CSVs in {data_dir}")
 

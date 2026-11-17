@@ -44,11 +44,16 @@ from sqlalchemy.orm import Session
 
 from app.core.clinical_limits import GlucoseLimitKind
 from app.core.config import Settings, get_settings
-from app.core.exceptions import ModelNotTrainedError, ThresholdComputationError
+from app.core.exceptions import (
+    ModelMetadataError,
+    ModelNotTrainedError,
+    ThresholdComputationError,
+)
 from app.core.logging import configure_logging
 from app.db.batch_repository import SqlBatchRepository
 from app.db.models import AdvisoryState, BatchStatus, BatchTrigger, Profile
 from app.db.threshold_repository import SqlThresholdRepository
+from app.ml.artifacts import DEFAULT_MODEL_DIR, model_paths
 from app.ml.predict import RiskAssessment, RiskModel
 from app.ml.schema import RiskProfile
 from app.services.advisory import EvaluatedReading, plan_advisories
@@ -549,17 +554,39 @@ def run_batch_update(
     return summary
 
 
-@lru_cache(maxsize=1)
 def load_risk_scorer() -> RiskScorer | None:
-    """Load the risk model once per process.
+    """Return the current risk model, reloading it after a retrain promoted a new one.
+
+    Cached on the metadata file's modification time: the model is loaded once, and
+    again only when ``app.jobs.retrain`` (in this or another process) replaces the
+    files. The next batch run then records the new ``model_version`` with each risk
+    assessment (audit only; the tier never moves a glucose limit).
 
     Returns:
         The model, or ``None`` if it has not been trained yet (logged as an error:
-        the job still runs, but users get no risk adjustment until it exists).
+        the job still runs, but users are left unscored until it exists).
+    """
+    _, meta_path = model_paths(DEFAULT_MODEL_DIR)
+    try:
+        stamp: int | None = meta_path.stat().st_mtime_ns
+    except FileNotFoundError:
+        stamp = None
+    return cached_risk_scorer(stamp)
+
+
+@lru_cache(maxsize=1)
+def cached_risk_scorer(meta_mtime_ns: int | None) -> RiskScorer | None:
+    """Load the risk model; cached per metadata version (see :func:`load_risk_scorer`).
+
+    Args:
+        meta_mtime_ns: Modification time of ``risk_model.meta.json`` (cache key only).
+
+    Returns:
+        The model, or ``None`` if it is missing or its metadata is invalid (logged).
     """
     try:
         return RiskModel.load()
-    except ModelNotTrainedError:
+    except (ModelNotTrainedError, ModelMetadataError):
         logger.exception("risk model unavailable; batch update will leave users unscored")
         return None
 

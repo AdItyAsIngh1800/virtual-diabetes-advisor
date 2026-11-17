@@ -7,6 +7,8 @@
 // The Knowledge base tab (R5) lists drafts awaiting approval (proposed by the weekly
 // job or opened with Edit) and the approved entries. Only drafts are edited; approving
 // needs the entry text and a source citation, and retires the entry it supersedes.
+// The Audit tab (R5) shows answer counts with their rates (overall and per KB version),
+// the KB status and the risk model card. Plain tables, no chart library.
 "use strict";
 
 const { $, say, guarded, clock, VERDICTS } = window.DA;
@@ -25,7 +27,8 @@ let reviewCursor = null;
 let reviewLoaded = false;
 let reviewRequest = 0; // ignore a slow page that arrives after the filter changed
 let kbLoaded = false;
-const TABS = [["tab-inbox", "inbox"], ["tab-review", "review"], ["tab-kb", "kb"]];
+let auditLoaded = false;
+const TABS = [["tab-inbox", "inbox"], ["tab-review", "review"], ["tab-kb", "kb"], ["tab-audit", "audit"]];
 
 function bubble(message) {
   const el = document.createElement("div");
@@ -176,6 +179,7 @@ function showTab(name) {
   }
   if (name === "review" && !reviewLoaded) loadTurns(true).catch((err) => say(err.message, true));
   if (name === "kb" && !kbLoaded) loadKb().catch((err) => say(err.message, true));
+  if (name === "audit" && !auditLoaded) loadAudit().catch((err) => say(err.message, true));
 }
 
 function sourceLine(s) {
@@ -449,6 +453,77 @@ async function loadKb() {
   $("kb-approved-empty").hidden = listing.approved.length > 0;
 }
 
+// --- Audit tab (R5) ------------------------------------------------------------------
+
+function row(cells, header = false) {
+  const tr = el("tr");
+  cells.forEach(([text, num], i) => {
+    const cell = el(header || i === 0 ? "th" : "td", num ? "num" : "", text);
+    if (header) cell.scope = "col";
+    else if (i === 0) cell.scope = "row";
+    tr.append(cell);
+  });
+  return tr;
+}
+
+function renderSummary(summary) {
+  const t = summary.totals;
+  $("audit-since").value = window.DA.localDay(summary.since);
+  // until is exclusive: the last day shown is the one before it.
+  $("audit-until").value = window.DA.localDay(summary.until, 1);
+  $("audit-window").textContent = `${when(summary.since)} to ${when(summary.until)}`;
+  const body = $("audit-summary-body");
+  body.replaceChildren(row([["Advisor answers"], [String(t.total), true], ["", true], ["", true]]));
+  for (const [text, cr] of window.DA.auditRows(t)) {
+    body.append(row([[text], [String(cr.count), true], [String(cr.denominator), true], [window.DA.pct(cr.rate), true]]));
+  }
+  $("audit-by-kb-head").replaceChildren(row(
+    [["KB version"], ["Answers", true], ...window.DA.AUDIT_KB_COLUMNS.map(([h]) => [h, true])], true,
+  ));
+  $("audit-by-kb-body").replaceChildren(...summary.by_kb_version.map((g) => row([
+    [g.kb_version === null ? "No KB used" : `v${g.kb_version}`],
+    [String(g.counts.total), true],
+    ...window.DA.AUDIT_KB_COLUMNS.map(([, pick]) => [window.DA.countOf(pick(g.counts)), true]),
+  ])));
+  $("audit-kb-empty").hidden = summary.by_kb_version.length > 0;
+  $("audit-kb-status").textContent = window.DA.kbStatusLine(summary.kb_status);
+}
+
+function renderModelCard(card) {
+  const m = card.test_metrics;
+  $("model-meta").textContent = `Version ${card.version} (${card.model_name}), trained ${when(card.trained_at)} on ${card.training_rows.toLocaleString()} survey rows; ${window.DA.pct(card.prevalence)} of them had diabetes. Test set: ${card.test_rows.toLocaleString()} rows.`;
+  $("model-metrics-body").replaceChildren(...window.DA.MODEL_METRICS.map(([key, text]) => row([[text], [m[key].toFixed(3), true]])));
+  const c = card.confusion;
+  for (const key of ["tn", "fp", "fn", "tp"]) $(`cm-${key}`).textContent = c[key].toLocaleString();
+  const f = card.flagged_without_diabetes;
+  $("model-flagged").textContent = `Of the ${f.denominator.toLocaleString()} people the model flagged, ${f.count.toLocaleString()} (${window.DA.pct(f.rate)}) do not have diabetes: FP / (FP + TP).`;
+  $("model-threshold").textContent = `Flagged at probability ${card.decision_threshold.toFixed(3)} or above. Tiers: moderate from ${card.tier_cutoffs.moderate.toFixed(3)}, high from ${card.tier_cutoffs.high.toFixed(3)}.`;
+  $("model-limitations").replaceChildren(...card.limitations.map((text) => el("li", "", text)));
+  $("model-features-body").replaceChildren(...card.top_features.map((f2) => row([[f2.feature], [f2.importance.toFixed(4), true]])));
+  const last = card.recent_retrains[0] || null;
+  const at = last ? ` (${when(last.finished_at || last.started_at)})` : "";
+  $("model-retrain").textContent = `${window.DA.retrainLine(last)}${at}`;
+}
+
+async function loadAudit(query = window.DA.auditQuery(null, null)) {
+  const [summary, card] = await Promise.allSettled([
+    window.DA.api(query),
+    window.DA.api("/api/practitioner/model-card"),
+  ]);
+  auditLoaded = true;
+  if (card.status === "fulfilled") {
+    $("model-error").hidden = true;
+    $("model-card").hidden = false;
+    renderModelCard(card.value);
+  } else {
+    $("model-card").hidden = true;
+    $("model-error").hidden = false;
+    $("model-error").textContent = card.reason.message || String(card.reason);
+  }
+  if (summary.status === "rejected") throw summary.reason;
+  renderSummary(summary.value);
+}
+
 // --- Page --------------------------------------------------------------------------
 
 async function render() {
@@ -463,11 +538,13 @@ async function render() {
   $("inbox").hidden = true;
   $("review").hidden = true;
   $("kb").hidden = true;
+  $("audit").hidden = true;
   $("turns").replaceChildren();
   $("kb-drafts").replaceChildren();
   $("kb-approved").replaceChildren();
   reviewLoaded = false;
   kbLoaded = false;
+  auditLoaded = false;
   if (!session) return;
   $("who").textContent = session.user.email;
   const me = await window.DA.api("/api/me");
@@ -510,6 +587,16 @@ async function init() {
   });
   for (const b of document.querySelectorAll(".filters button")) b.addEventListener("click", guarded(() => setFilter(b)));
   $("more").addEventListener("click", guarded(() => loadTurns(false)));
+  $("audit-range").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const since = $("audit-since").value;
+    const until = $("audit-until").value;
+    if (since && until && since > until) {
+      say("The From date must be on or before the To date.", true);
+      return;
+    }
+    loadAudit(window.DA.auditQuery(since, until)).catch((err) => say(err.message, true));
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && !$("inbox").hidden) refresh().catch(() => {});
   });

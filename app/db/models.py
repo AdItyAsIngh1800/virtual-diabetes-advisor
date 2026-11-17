@@ -36,7 +36,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import DeclarativeBase, Mapped, Mapper, mapped_column
 
@@ -71,6 +71,7 @@ ReviewVerdict = Literal["correct", "incorrect", "unsafe", "needs_kb_update"]
 BatchJob = Literal["batch_update", "retrain", "kb_upgrade"]
 BatchTrigger = Literal["scheduler", "admin_api", "manual"]
 BatchStatus = Literal["running", "succeeded", "failed"]
+RetrainDecision = Literal["promoted", "kept", "dry_run"]  # 0010
 
 # Glucose columns are numeric(5, 1) mg/dL: up to 9999.9 with one decimal place.
 _GLUCOSE: Final = Numeric(5, 1)
@@ -263,6 +264,11 @@ class BatchRun(Base):
     # 0009: counts of a kb_upgrade run (R5).
     kb_candidates: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     kb_drafts_proposed: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # 0010: what a retrain run did, and its old/new metrics (R5).
+    retrain_decision: Mapped[RetrainDecision | None] = mapped_column(_choice(RetrainDecision))
+    # none_as_null: Python None must be SQL NULL, not the JSON value null, or every
+    # non-retrain run would break batch_runs_retrain_fields_only_on_retrain.
+    retrain_report: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(_TZ, nullable=False, server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(_TZ)

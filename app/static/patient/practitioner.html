@@ -55,7 +55,7 @@
     .notice { align-self: center; font-size: .8rem; font-style: italic; color: var(--muted); text-align: center; }
     #claim-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: 10px; background: var(--pt); margin-bottom: .5rem; }
     #claim-bar p { margin: 0; flex: 1 1 14rem; }
-    /* Tabs: Handoffs | Review | Knowledge base (R5). */
+    /* Tabs: Handoffs | Review | Knowledge base | Audit (R5). */
     .tabs { display: flex; gap: .25rem; margin-top: 1rem; border-bottom: 1px solid var(--line); }
     .tabs button { margin: 0; background: transparent; color: var(--muted); border-radius: 8px 8px 0 0;
                    border-bottom: 3px solid transparent; }
@@ -85,6 +85,20 @@
     .turn details { margin-top: .4rem; }
     .turn summary { cursor: pointer; color: var(--accent); font-weight: 600; }
     .turn input + label, .turn textarea + label { margin-top: .6rem; }
+    /* Audit tab (R5): plain tables, no chart library. Wide tables scroll inside their box. */
+    .table-wrap { overflow-x: auto; margin: .5rem 0; }
+    table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+    th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    caption { text-align: left; font-weight: 700; padding: .25rem 0; }
+    .range { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }
+    .range label { margin: 0; }
+    .range input { width: auto; }
+    .range button { margin: 0; }
+    #model-confusion { width: auto; }
+    #model-limitations { margin: .25rem 0; padding-left: 1.2rem; }
+    h3.sub { font-size: .95rem; margin: 1rem 0 .25rem; }
+    #model-error { color: var(--err); font-weight: 600; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -119,6 +133,7 @@
     <button type="button" role="tab" id="tab-inbox" aria-controls="inbox" aria-selected="true">Handoffs</button>
     <button type="button" role="tab" id="tab-review" aria-controls="review" aria-selected="false" tabindex="-1">Review</button>
     <button type="button" role="tab" id="tab-kb" aria-controls="kb" aria-selected="false" tabindex="-1">Knowledge base</button>
+    <button type="button" role="tab" id="tab-audit" aria-controls="audit" aria-selected="false" tabindex="-1">Audit</button>
   </div>
 
   <div class="layout" id="inbox" role="tabpanel" aria-labelledby="tab-inbox" hidden>
@@ -177,6 +192,73 @@
     </div>
     <ul id="kb-approved" aria-label="Approved entries"></ul>
     <p id="kb-approved-empty" class="panel muted" hidden>No approved entries yet.</p>
+  </div>
+
+  <div id="audit" role="tabpanel" aria-labelledby="tab-audit" hidden>
+    <div class="panel">
+      <h2>Advisor answers</h2>
+      <p class="muted">The same answers as the Review tab: replies the automatic advisor gave your patients. Verdicts are each answer's latest review. Every rate is shown with the counts it comes from.</p>
+      <form id="audit-range" class="range">
+        <div><label for="audit-since">From</label><input id="audit-since" type="date"></div>
+        <div><label for="audit-until">To (included)</label><input id="audit-until" type="date"></div>
+        <button type="submit">Show</button>
+      </form>
+      <p id="audit-window" class="muted"></p>
+      <div class="table-wrap">
+        <table id="audit-summary">
+          <caption>Summary</caption>
+          <thead><tr><th scope="col">Measure</th><th scope="col" class="num">Count</th><th scope="col" class="num">Out of</th><th scope="col" class="num">Rate</th></tr></thead>
+          <tbody id="audit-summary-body"></tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table id="audit-by-kb">
+          <caption>By knowledge-base version</caption>
+          <thead id="audit-by-kb-head"></thead>
+          <tbody id="audit-by-kb-body"></tbody>
+        </table>
+      </div>
+      <p id="audit-kb-empty" class="muted" hidden>No answers in this range.</p>
+      <h3 class="sub">Knowledge base</h3>
+      <p id="audit-kb-status"></p>
+    </div>
+    <div class="panel">
+      <h2>Risk model card</h2>
+      <p class="muted">The diabetes risk model behind each patient's risk tier. Numbers are from the held-out test set.</p>
+      <p id="model-error" class="error" role="alert" hidden></p>
+      <div id="model-card">
+        <p id="model-meta" class="muted"></p>
+        <div class="table-wrap">
+          <table id="model-metrics">
+            <caption>Test-set metrics</caption>
+            <thead><tr><th scope="col">Metric</th><th scope="col" class="num">Value</th></tr></thead>
+            <tbody id="model-metrics-body"></tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table id="model-confusion">
+            <caption>Confusion matrix (test set)</caption>
+            <thead><tr><th scope="col"></th><th scope="col" class="num">Not flagged</th><th scope="col" class="num">Flagged</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">No diabetes</th><td class="num" id="cm-tn"></td><td class="num" id="cm-fp"></td></tr>
+              <tr><th scope="row">Diabetes</th><td class="num" id="cm-fn"></td><td class="num" id="cm-tp"></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="model-flagged"></p>
+        <p id="model-threshold" class="muted"></p>
+        <h3 class="sub">Limitations</h3>
+        <ul id="model-limitations"></ul>
+        <div class="table-wrap">
+          <table id="model-features">
+            <caption>Most important features</caption>
+            <thead><tr><th scope="col">Feature</th><th scope="col" class="num">Importance</th></tr></thead>
+            <tbody id="model-features-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <p id="model-retrain"></p>
+    </div>
   </div>
 
   <p id="status" role="status" aria-live="polite"></p>

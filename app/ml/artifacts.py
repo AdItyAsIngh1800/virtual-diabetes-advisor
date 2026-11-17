@@ -5,6 +5,9 @@ Two files are written side by side in ``models/``:
     * ``risk_model.meta.json`` - :class:`ModelMetadata`: version, metrics, decision
       threshold and tier cut-offs. The app reads the cut-offs from here, so retraining
       never needs a code change.
+
+:func:`load_metadata` is the one reader of the metadata file: the risk model
+(:mod:`app.ml.predict`), the model card (R5) and the retrain job all go through it.
 """
 
 from __future__ import annotations
@@ -12,8 +15,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from app.core.exceptions import ModelMetadataError, ModelNotTrainedError
 from app.ml.data import PROJECT_ROOT
 
 DEFAULT_MODEL_DIR: Final = PROJECT_ROOT / "models"
@@ -43,6 +47,26 @@ class ClassificationMetrics(BaseModel):
     brier: float
     threshold: float
     confusion: list[list[int]]
+
+    @field_validator("confusion")
+    @classmethod
+    def _two_by_two(cls, value: list[list[int]]) -> list[list[int]]:
+        """Require a 2x2 matrix of non-negative counts.
+
+        Args:
+            value: The parsed matrix.
+
+        Returns:
+            The matrix unchanged.
+
+        Raises:
+            ValueError: It is not 2x2 or holds a negative count.
+        """
+        if len(value) != 2 or any(len(row) != 2 for row in value):  # noqa: PLR2004 - binary
+            raise ValueError("confusion must be [[tn, fp], [fn, tp]]")
+        if any(cell < 0 for row in value for cell in row):
+            raise ValueError("confusion counts must be non-negative")
+        return value
 
 
 class TierCutoffs(BaseModel):
@@ -88,3 +112,26 @@ def model_paths(model_dir: Path = DEFAULT_MODEL_DIR) -> tuple[Path, Path]:
         ``(model_path, metadata_path)``.
     """
     return model_dir / MODEL_FILENAME, model_dir / METADATA_FILENAME
+
+
+def load_metadata(model_dir: Path = DEFAULT_MODEL_DIR) -> ModelMetadata:
+    """Read and validate ``risk_model.meta.json``.
+
+    Args:
+        model_dir: Folder that holds the artifacts.
+
+    Returns:
+        The validated metadata.
+
+    Raises:
+        ModelNotTrainedError: The metadata file does not exist.
+        ModelMetadataError: It exists but is unreadable, not JSON, or not valid
+            :class:`ModelMetadata`.
+    """
+    _, meta_path = model_paths(model_dir)
+    if not meta_path.exists():
+        raise ModelNotTrainedError(f"No model in {model_dir}. Run: uv run python -m app.ml.train")
+    try:
+        return ModelMetadata.model_validate_json(meta_path.read_bytes())
+    except (OSError, ValidationError) as exc:
+        raise ModelMetadataError(f"{meta_path} is not valid model metadata") from exc

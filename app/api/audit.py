@@ -12,6 +12,16 @@ as the handoff inbox), and only for patients they may see:
   ``correct``). Reviews are append-only: a second review of the same turn is added,
   and the latest one becomes the turn's current verdict.
 
+* ``GET /api/practitioner/audit/summary`` - counts over the same advisor replies as
+  the review list, in ``[since, until)`` (default: the last 30 days): totals, current
+  verdicts, escalated, "I don't know" and dosing/diagnosis-guard replies, overall and
+  per ``kb_version``, plus the knowledge-base status. Every rate comes with its count
+  and denominator (``null`` when the denominator is 0).
+* ``GET /api/practitioner/model-card`` - the risk model's test-set metrics (precision,
+  recall and F1 before ROC-AUC), labelled confusion matrix, FP / (FP + TP), decision
+  threshold, tier cut-offs, top features, fixed limitations and the last five retrain
+  runs. Read from ``models/risk_model.meta.json``; an invalid file answers 500.
+
 Patients are shown by first name only; no phone number or push endpoint is returned.
 A turn the practitioner may not see answers 404, the same as one that does not exist.
 """
@@ -20,28 +30,44 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import timedelta
+from pathlib import Path
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.auth import current_auth_user
 from app.api.chat import _require_practitioner
 from app.core.config import Settings, get_settings
-from app.core.exceptions import ReviewNoteRequiredError, TurnNotReviewableError
+from app.core.exceptions import (
+    ModelMetadataError,
+    ModelNotTrainedError,
+    ReviewNoteRequiredError,
+    TurnNotReviewableError,
+)
 from app.db.audit_repository import (
     MAX_PAGE_SIZE,
     NOTE_REQUIRED,
+    AnswerCounts,
+    KbVersionCounts,
     ReviewFilter,
     ReviewRecord,
     TurnCursor,
     TurnPage,
     add_review,
+    answer_summary,
     list_reviewable_turns,
 )
+from app.db.batch_repository import SqlBatchRepository
+from app.db.chat_repository import db_now
+from app.db.kb_repository import KbStatusCounts, kb_status_counts
 from app.db.models import ReviewVerdict
 from app.db.session import get_session_factory
+from app.jobs.retrain import RECENT_RUNS, RETRAIN_JOB, RetrainRunView, run_view
+from app.ml.artifacts import DEFAULT_MODEL_DIR, load_metadata
+from app.ml.model_card import ModelCard, build_model_card
 from app.services.supabase_auth import AuthUser
 
 logger = logging.getLogger(__name__)
@@ -54,6 +80,8 @@ DEFAULT_PAGE_SIZE: Final = 25
 # longer is not one of ours.
 _MAX_CURSOR_CHARS: Final = 256
 TURN_NOT_FOUND: Final = "turn not found"
+DEFAULT_SUMMARY_DAYS: Final = 30
+MODEL_CARD_UNAVAILABLE: Final = "the model card is unavailable: the model metadata is invalid"
 
 
 class ReviewIn(BaseModel):
@@ -169,3 +197,122 @@ def review_turn(
         session.commit()
     logger.info("practitioner %s reviewed turn %s: %s", reviewer_id, turn_id, body.verdict)
     return review
+
+
+# ---------------------------------------------------------------------------
+# Audit tab (R5)
+# ---------------------------------------------------------------------------
+
+
+class AuditSummary(BaseModel):
+    """Body of ``GET /api/practitioner/audit/summary``.
+
+    Attributes:
+        since: Inclusive start of the window.
+        until: Exclusive end.
+        totals: Advisor replies the caller may see, in the window.
+        by_kb_version: The same counts per KB release, to compare versions.
+        kb_status: Approved entries, drafts and who approved them (clinic-wide).
+    """
+
+    since: AwareDatetime
+    until: AwareDatetime
+    totals: AnswerCounts
+    by_kb_version: list[KbVersionCounts]
+    kb_status: KbStatusCounts
+
+
+class ModelCardOut(ModelCard):
+    """Body of ``GET /api/practitioner/model-card``: the card plus recent retrains.
+
+    Attributes:
+        recent_retrains: The last :data:`app.jobs.retrain.RECENT_RUNS` retrain runs,
+            newest first.
+    """
+
+    recent_retrains: list[RetrainRunView]
+
+
+def live_model_dir() -> Path:
+    """Where the live model is (a dependency so tests can point elsewhere).
+
+    Returns:
+        ``models/``.
+    """
+    return DEFAULT_MODEL_DIR
+
+
+@router.get("/api/practitioner/audit/summary")
+def audit_summary(
+    auth_user: Annotated[AuthUser, Depends(current_auth_user)],
+    session_factory: Annotated[sessionmaker[Session], Depends(get_session_factory)],
+    since: AwareDatetime | None = None,
+    until: AwareDatetime | None = None,
+) -> AuditSummary:
+    """Count advisor replies to the caller's patients, overall and per KB version.
+
+    Args:
+        auth_user: Verified login.
+        session_factory: Database sessions.
+        since: Inclusive start (default: 30 days before ``until``).
+        until: Exclusive end (default: now, on the database clock).
+
+    Returns:
+        Counts with rates, and the KB status.
+
+    Raises:
+        HTTPException: 401 without a valid login, 403 without a practitioner login,
+            422 for a naive timestamp or ``since`` not before ``until``.
+    """
+    with session_factory() as session:
+        practitioner = _require_practitioner(session, auth_user)
+        end = until or db_now(session)
+        start = since or end - timedelta(days=DEFAULT_SUMMARY_DAYS)
+        try:
+            answers = answer_summary(session, practitioner.id, since=start, until=end)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        return AuditSummary(
+            since=start,
+            until=end,
+            totals=answers.totals,
+            by_kb_version=answers.by_kb_version,
+            kb_status=kb_status_counts(session),
+        )
+
+
+@router.get("/api/practitioner/model-card")
+def model_card(
+    auth_user: Annotated[AuthUser, Depends(current_auth_user)],
+    session_factory: Annotated[sessionmaker[Session], Depends(get_session_factory)],
+    models: Annotated[Path, Depends(live_model_dir)],
+) -> ModelCardOut:
+    """Describe the live risk model honestly (R5).
+
+    Args:
+        auth_user: Verified login.
+        session_factory: Database sessions.
+        models: Folder of the live model.
+
+    Returns:
+        The card and the last retrain runs.
+
+    Raises:
+        HTTPException: 401 without a valid login, 403 without a practitioner login,
+            503 when no model is installed, 500 when its metadata is invalid (logged).
+    """
+    with session_factory() as session:
+        _require_practitioner(session, auth_user)
+        runs = SqlBatchRepository(session).recent_runs(RETRAIN_JOB, RECENT_RUNS)
+        recent = [run_view(r) for r in runs]
+    try:
+        metadata = load_metadata(models)
+    except ModelNotTrainedError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "no risk model is installed"
+        ) from exc
+    except ModelMetadataError as exc:
+        logger.exception("model card: invalid risk model metadata")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, MODEL_CARD_UNAVAILABLE) from exc
+    card = build_model_card(metadata)
+    return ModelCardOut(**card.model_dump(), recent_retrains=recent)
