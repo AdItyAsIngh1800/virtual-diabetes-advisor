@@ -43,6 +43,7 @@ SETTINGS = Settings(
     supabase_service_role_key="srk",
     database_url="postgresql://u:p@localhost:5432/db",
     admin_api_key=ADMIN_KEY,
+    admin_local_only=False,  # TestClient is not 127.0.0.1
 )
 DOCTOR_LOGIN = AuthUser(id=uuid.uuid4(), email="doctor@example.com")
 PATIENT_LOGIN = AuthUser(id=uuid.uuid4(), email="patient@example.com")

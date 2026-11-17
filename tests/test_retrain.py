@@ -47,6 +47,7 @@ SETTINGS = Settings(
     supabase_service_role_key="srk",
     database_url="postgresql://u:p@localhost:5432/db",
     admin_api_key=ADMIN_KEY,
+    admin_local_only=False,  # TestClient is not 127.0.0.1
 )
 TEMPLATE = load_metadata(DEFAULT_MODEL_DIR)
 CURRENT_RECALL = 0.88

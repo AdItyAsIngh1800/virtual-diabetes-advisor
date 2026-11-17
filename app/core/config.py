@@ -80,6 +80,10 @@ class Settings(BaseSettings):
         chat_kb_min_similarity: Minimum TF-IDF similarity for a KB entry to answer a
             chat question (below it: "I don't know" + practitioner connect).
         chat_audio_max_bytes: Largest accepted voice-message upload.
+        expose_api_docs: Serve ``/docs``, ``/redoc`` and ``/openapi.json`` (off by
+            default: the app is reachable through a public tunnel).
+        admin_local_only: Answer 404 to ``/admin/*`` unless the request comes straight
+            from the same machine (no ``X-Forwarded-For``, which ngrok adds).
         review_low_confidence_below: KB answers whose retrieval similarity is below
             this are listed under the "low confidence" review filter (R5).
         kb_upgrade_enabled: Schedule the weekly knowledge-base upgrade job (R5),
@@ -206,6 +210,10 @@ class Settings(BaseSettings):
     # Optional so tests, scripts and the batch job start without it; the admin
     # endpoint fails closed (503) when it is missing.
     admin_api_key: SecretStr | None = None
+    # The public tunnel must not reach /admin/*: only curl on this machine may.
+    admin_local_only: bool = True
+    # The API map (including /admin/*) is not for the public internet.
+    expose_api_docs: bool = False
     # R1: 15 min keeps advisories close to real time while each run stays small; the
     # upper bound (one day) stops a typo from silently disabling alerts for weeks.
     batch_interval_minutes: int = Field(default=15, ge=1, le=24 * 60)

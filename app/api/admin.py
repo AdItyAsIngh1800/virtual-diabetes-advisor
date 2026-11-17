@@ -10,7 +10,7 @@ import hmac
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import (
@@ -27,6 +27,30 @@ from app.jobs.retrain import RetrainSummary, run_retrain
 logger = logging.getLogger(__name__)
 
 ADMIN_KEY_HEADER = "X-Admin-Api-Key"
+
+
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "::1"})
+
+
+def require_local(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> None:
+    """Hide ``/admin/*`` from the public tunnel when ``ADMIN_LOCAL_ONLY`` is on.
+
+    ngrok connects from this machine too, but always adds ``X-Forwarded-For``; a
+    request without it, from 127.0.0.1 or ::1, is a local curl.
+
+    Args:
+        request: The request.
+        settings: Application settings.
+
+    Raises:
+        HTTPException: 404 for a request that did not come straight from this machine.
+    """
+    if not settings.admin_local_only:
+        return
+    if (request.client.host if request.client else "") not in _LOCAL_HOSTS or (
+        "x-forwarded-for" in request.headers
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
 
 def require_admin(
@@ -56,7 +80,11 @@ def require_admin(
         )
 
 
-router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_local), Depends(require_admin)],
+)
 
 
 @router.post("/batch-run")

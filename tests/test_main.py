@@ -50,7 +50,8 @@ SUMMARY = BatchRunSummary(
 
 
 def make_settings(**overrides: Any) -> Settings:
-    return Settings(_env_file=None, **{**REQUIRED, **overrides})
+    # TestClient's client host is "testclient": the local-only gate is tested on its own.
+    return Settings(_env_file=None, **{"admin_local_only": False, **REQUIRED, **overrides})
 
 
 @pytest.fixture(autouse=True)
@@ -230,3 +231,35 @@ def test_lifespan_respects_scheduler_switch(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(main, "build_scheduler", fail)
     with TestClient(main.create_app()):
         pass
+
+
+@pytest.mark.parametrize(
+    ("host", "headers", "status"),
+    [
+        ("127.0.0.1", {}, 200),
+        ("::1", {}, 200),
+        ("127.0.0.1", {"X-Forwarded-For": "203.0.113.9"}, 404),  # what ngrok adds
+        ("203.0.113.9", {}, 404),
+    ],
+)
+def test_admin_is_local_only_by_default(
+    client_with: Any, host: str, headers: dict[str, str], status: int
+) -> None:
+    client = client_with(make_settings(admin_api_key=KEY, admin_local_only=True))
+    client = TestClient(client.app, client=(host, 5000))
+    response = client.post("/admin/dispatch-run", headers={"X-Admin-Api-Key": KEY, **headers})
+    assert (response.status_code == 404) == (status == 404)
+
+
+def test_admin_local_only_can_be_switched_off(client_with: Any) -> None:
+    client = client_with(make_settings(admin_api_key=KEY, admin_local_only=False))
+    client = TestClient(client.app, client=("203.0.113.9", 5000))
+    response = client.post("/admin/dispatch-run", headers={"X-Admin-Api-Key": KEY})
+    assert response.status_code != 404
+
+
+@pytest.mark.parametrize(("expose", "status"), [(False, 404), (True, 200)])
+def test_api_docs_are_off_unless_exposed(expose: bool, status: int) -> None:
+    client = TestClient(main.create_app(expose_docs=expose))
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == status

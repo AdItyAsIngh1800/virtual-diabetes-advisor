@@ -31,6 +31,8 @@ OPTIONAL_ENV = (
     "CHAT_LLM_REPHRASE_ENABLED",
     "CHAT_KB_MIN_SIMILARITY",
     "CHAT_AUDIO_MAX_BYTES",
+    "EXPOSE_API_DOCS",
+    "ADMIN_LOCAL_ONLY",
     "REVIEW_LOW_CONFIDENCE_BELOW",
     "KB_UPGRADE_ENABLED",
     "KB_UPGRADE_MIN_REPEATS",
@@ -72,6 +74,7 @@ def test_every_settings_field_is_covered_by_this_test() -> None:
 
 def test_defaults(env: pytest.MonkeyPatch) -> None:
     s = load_settings(env_file=None)
+    assert s.expose_api_docs is False and s.admin_local_only is True
     assert s.pre_breach_band == 0.05
     assert s.advisory_cooldown_hours == 24
     assert s.batch_interval_minutes == 15

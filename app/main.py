@@ -194,14 +194,31 @@ async def database_unavailable(request: Request, exc: Exception) -> JSONResponse
     return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": detail})
 
 
-def create_app() -> FastAPI:
+def create_app(expose_docs: bool | None = None) -> FastAPI:
     """Build the FastAPI application.
+
+    Args:
+        expose_docs: Serve ``/docs``, ``/redoc`` and ``/openapi.json``. ``None`` reads
+            ``EXPOSE_API_DOCS`` (off when settings cannot be loaded yet).
 
     Returns:
         The app with the admin, push, advisory, chat/practitioner, answer-review,
         knowledge-base and patient-app routes mounted.
     """
-    app = FastAPI(title="Virtual Diabetes Advisor", version="0.1.0", lifespan=lifespan)
+    if expose_docs is None:
+        try:
+            expose_docs = get_settings().expose_api_docs
+        except ConfigurationError:
+            expose_docs = False
+    # None turns the route off: the API map would otherwise be public on the tunnel.
+    app = FastAPI(
+        title="Virtual Diabetes Advisor",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
+        openapi_url="/openapi.json" if expose_docs else None,
+    )
     app.add_exception_handler(OperationalError, database_unavailable)
     app.add_exception_handler(psycopg.OperationalError, database_unavailable)
     app.include_router(admin.router)
