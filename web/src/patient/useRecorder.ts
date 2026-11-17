@@ -3,7 +3,7 @@
  * away to cancel, a 60 s cap. The state machine is recordingReducer (tested); this
  * hook wires it to the microphone and the pointer/keyboard events.
  */
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import {
   MAX_RECORDING_MS,
@@ -33,14 +33,18 @@ interface Media {
 export function useRecorder({ onRecorded, onMessage, disabled }: Options) {
   const [state, dispatch] = useReducer(recordingReducer, { phase: "idle" } as RecordingState);
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const media = useRef<Media | null>(null);
   const outcome = useRef<RecordingOutcome>("cancelled");
   const origin = useRef({ x: 0, y: 0 });
   const [elapsed, setElapsed] = useState(0);
   const cap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbacks = useRef({ onRecorded, onMessage });
-  callbacks.current = { onRecorded, onMessage };
+  useLayoutEffect(() => {
+    callbacks.current = { onRecorded, onMessage };
+  }, [onRecorded, onMessage]);
 
   const stop = useCallback((cancel: boolean) => {
     const m = media.current;

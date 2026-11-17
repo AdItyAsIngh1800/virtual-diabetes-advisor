@@ -20,30 +20,32 @@ export function OverviewPage() {
       {ov.isError && <ErrorState message={ov.error.message} onRetry={() => void ov.refetch()} />}
       {ov.isSuccess && (
         <>
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-label="Key figures">
             {overviewTiles(ov.data).map((t) => {
               const body = (
                 <>
-                  <dt className="text-sm font-medium text-muted-foreground">{t.label}</dt>
-                  <dd className="mt-1">
-                    <span className="block text-3xl font-bold tracking-tight tabular">{t.value}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {t.urgent && <span className="font-semibold text-critical">Needs attention · </span>}
-                      {t.detail}
-                    </span>
-                  </dd>
+                  <span className="block text-sm font-medium text-muted-foreground">{t.label}</span>
+                  <span className="mt-1 block text-3xl font-bold tracking-tight tabular">{t.value}</span>
+                  <span className="block text-sm text-muted-foreground">
+                    {t.urgent && <span className="font-semibold text-critical">Needs attention · </span>}
+                    {t.detail}
+                  </span>
                 </>
               );
               const cls = cn("block rounded-2xl border bg-card p-4", t.urgent && "border-l-4 border-l-critical");
-              return t.to ? (
-                <Link key={t.key} to={t.to} className={cn(cls, "hover:border-primary/60")} aria-label={`${t.label}: ${t.value}. ${t.detail}. Open`}>
-                  <div>{body}</div>
-                </Link>
-              ) : (
-                <div key={t.key} className={cls}>{body}</div>
+              return (
+                <li key={t.key}>
+                  {t.to ? (
+                    <Link to={t.to} className={cn(cls, "h-full hover:border-primary/60")}>
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className={cn(cls, "h-full")}>{body}</div>
+                  )}
+                </li>
               );
             })}
-          </dl>
+          </ul>
           <p className="mt-4 text-muted-foreground">{batchLine(ov.data.last_batch_run)}</p>
 
           <h2 className="mt-8 mb-1 text-lg font-bold">Alert delivery, last 24 hours</h2>

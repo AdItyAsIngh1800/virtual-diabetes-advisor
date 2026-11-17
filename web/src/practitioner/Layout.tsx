@@ -170,7 +170,7 @@ export function Layout() {
             <p className="flex-1 truncate font-semibold md:text-lg">
               {section.label}
             </p>
-            <Button variant="outline" size="sm" onClick={() => setPaletteOpen(true)} className="hidden text-muted-foreground sm:inline-flex" aria-label="Search patients and sections (Ctrl+K)">
+            <Button variant="outline" size="sm" onClick={() => setPaletteOpen(true)} className="hidden text-muted-foreground sm:inline-flex" title="Search patients and sections (Ctrl+K)">
               <CommandIcon aria-hidden /> Search <kbd className="ml-1 rounded border bg-muted px-1.5 text-xs">⌘K</kbd>
             </Button>
             <Button variant="ghost" size="icon" onClick={() => setPaletteOpen(true)} className="sm:hidden" aria-label="Search patients and sections">
@@ -180,9 +180,10 @@ export function Layout() {
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="gap-2 px-2" aria-label={`Signed in as ${name}. Account menu`}>
+                <Button variant="ghost" className="gap-2 px-2">
                   <span aria-hidden className="grid size-8 place-items-center rounded-full bg-primary font-bold text-primary-foreground">{name.charAt(0)}</span>
-                  <span className="hidden max-w-32 truncate lg:inline">{name}</span>
+                  <span className="sr-only">Account menu: </span>
+                  <span className="max-w-32 truncate max-lg:sr-only">{name}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

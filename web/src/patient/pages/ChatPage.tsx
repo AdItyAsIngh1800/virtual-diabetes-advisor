@@ -73,14 +73,14 @@ export function ChatPage() {
   }, [uid, queryClient]);
 
   // Announce a new advisor or practitioner reply to screen readers (once).
+  const last = messages.at(-1);
   useEffect(() => {
-    const last = messages.at(-1);
     if (!last) return;
     if (lastSeen.current !== null && last.id !== lastSeen.current && last.role !== "patient") {
       setAnnounce(`${WHO[last.role] ?? "Notice"}: ${last.text}`);
     }
     lastSeen.current = last.id;
-  }, [messages]);
+  }, [last]);
 
   const speakWithBrowser = useCallback((reply: string) => {
     if (!("speechSynthesis" in window)) {
@@ -244,7 +244,7 @@ export function ChatPage() {
         )}
         {pending && (
           <>
-            <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-bubble-me px-4 py-2.5 whitespace-pre-wrap text-bubble-me-foreground opacity-80">{pending}</div>
+            <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-bubble-me px-4 py-2.5 whitespace-pre-wrap text-bubble-me-foreground outline-2 outline-offset-2 outline-bubble-me/60 outline-dashed">{pending}</div>
             <p className="text-muted-foreground" role="status">
               {handoff?.status === "assigned" ? "Sending to your practitioner…" : "Advisor is replying…"}
             </p>
@@ -365,7 +365,7 @@ function Bubble({ message: m, audio, onPlay }: { message: Message; audio: Spoken
     );
   }
   const meta = (
-    <span className="mt-1 flex items-center gap-1 text-[0.8rem] opacity-80">
+    <span className="mt-1 flex items-center gap-1 text-[0.8rem]">
       {m.spoken && <Icons.voice className="size-3.5" aria-label="Spoken" />}
       <time dateTime={m.created_at}>{clock(m.created_at)}</time>
     </span>

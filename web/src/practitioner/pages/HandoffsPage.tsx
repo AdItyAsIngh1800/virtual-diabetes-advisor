@@ -194,7 +194,7 @@ function ThreadPanel({ id }: { id: string }) {
         </div>
       </div>
 
-      <div className="max-h-[60vh] min-h-40 overflow-y-auto rounded-xl border bg-background/40 p-3">
+      <div className="max-h-[60vh] min-h-40 overflow-y-auto rounded-xl border bg-background/40 p-3" tabIndex={0} role="region" aria-label={`Messages with ${name}`}>
         <Thread messages={detail.data.messages} patientName={name} />
       </div>
 
