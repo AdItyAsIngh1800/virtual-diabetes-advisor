@@ -6,7 +6,7 @@
  * reads an e-mail, phone number or push endpoint.
  */
 import type { S } from "@/shared/api/client";
-import { countOf, dayStart, mgdl, pct, shortWhen, withParams, type CountRate } from "@/shared/lib/format";
+import { countOf, dayStart, firstName, mgdl, pct, shortWhen, withParams, type CountRate } from "@/shared/lib/format";
 import {
   BAND_TONE,
   CONTEXT_LABELS,
@@ -245,9 +245,9 @@ export const HANDOFF_STATUS: Record<S["HandoffSummary"]["status"], string> = {
   resolved: "Resolved",
 };
 
-/** First name of a handoff's patient (the API sends first names only). */
+/** First name of a handoff's patient (the API sends the full name; only the first is shown). */
 export function handoffName(h: S["HandoffSummary"]): string {
-  return h.patient_name || `Patient ${h.patient_id.slice(0, 8)}`;
+  return firstName(h.patient_name, `Patient ${h.patient_id.slice(0, 8)}`);
 }
 
 /** Waiting first, then claimed, then resolved; newest activity first inside each. */
@@ -262,7 +262,8 @@ export function claimLine(h: S["HandoffSummary"], myName: string | null): string
   const mine = Boolean(h.practitioner_name) && h.practitioner_name === myName;
   if (h.status === "open") return "Not claimed yet: the Advisor is still answering. Claim it (or reply) to take over the chat.";
   if (h.status === "assigned") {
-    return `Claimed by ${mine ? "you" : h.practitioner_name || "a practitioner"}: the patient's messages come to ${mine ? "you" : "them"}.`;
+    const who = mine ? "you" : firstName(h.practitioner_name, "a practitioner");
+    return `Claimed by ${who}: the patient's messages come to ${mine ? "you" : "them"}.`;
   }
   return "Resolved.";
 }
@@ -323,7 +324,7 @@ export function sourceLine(s: S["KbSource"]): string {
 // --- Knowledge base ----------------------------------------------------------------
 
 /** Why a draft cannot be approved yet, or null. Mirrors approve_draft (422 otherwise). */
-export function kbApproveProblem(d: { body: string; source_citation: string | null }): string | null {
+export function kbApproveProblem(d: { body: string; source_citation?: string | null }): string | null {
   const missing: string[] = [];
   if (!d.body.trim()) missing.push("the entry text");
   if (!(d.source_citation ?? "").trim()) missing.push("a source citation");
@@ -334,10 +335,10 @@ export function kbApproveProblem(d: { body: string; source_citation: string | nu
 export function kbDraftOrigin(e: S["KbEntryView"]): string {
   if (e.supersedes_id) {
     const version = e.supersedes_version ? ` v${e.supersedes_version}` : "";
-    return `Edit of approved entry ${e.entry_key}${version}${e.created_by_name ? ` by ${e.created_by_name}` : ""}`;
+    return `Edit of approved entry ${e.entry_key}${version}${e.created_by_name ? ` by ${firstName(e.created_by_name, "a practitioner")}` : ""}`;
   }
   if (e.origin === "proposed_from_review") return "Proposed by the weekly knowledge-base review";
-  return `New entry${e.created_by_name ? ` by ${e.created_by_name}` : ""}`;
+  return `New entry${e.created_by_name ? ` by ${firstName(e.created_by_name, "a practitioner")}` : ""}`;
 }
 
 // Mirrors PRIORITY_LABEL in app/services/kb_upgrade.py.

@@ -6,6 +6,7 @@ import {
   alertsQuery,
   auditQuery,
   claimLine,
+  handoffName,
   kbApproveProblem,
   kbSortDrafts,
   kbStatusLine,
@@ -128,6 +129,10 @@ describe("handoffs", () => {
   it("lists waiting first, then claimed, then resolved", () => {
     const list = [h("r", "resolved", "2026-11-17T10:00:00Z"), h("a", "assigned", "2026-11-17T09:00:00Z"), h("o1", "open", "2026-11-17T08:00:00Z"), h("o2", "open", "2026-11-17T11:00:00Z")];
     expect(sortHandoffs(list).map((x) => x.id)).toEqual(["o2", "o1", "a", "r"]);
+  });
+  it("shows only the patient's first name", () => {
+    expect(handoffName({ ...h("a", "open", "2026-11-17T09:00:00Z"), patient_name: "Meera Iyer" })).toBe("Meera");
+    expect(handoffName({ ...h("a", "open", "2026-11-17T09:00:00Z"), patient_name: null, patient_id: "0123456789abcdef" })).toBe("Patient 01234567");
   });
   it("says who has the chat", () => {
     expect(claimLine(h("a", "assigned", "2026-11-17T09:00:00Z"), "Meera")).toMatch(/^Claimed by you/);
