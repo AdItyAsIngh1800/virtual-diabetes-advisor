@@ -217,13 +217,22 @@ def test_advisory_page_is_served_for_a_uuid(repo: FakeRepo) -> None:
     response = client.get(f"/app/advisory/{uuid.uuid4()}")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+    assert '<div id="root">' in response.text  # the React patient app renders the page
+    assert client.get("/app/advisory/not-a-uuid").status_code == 422
+
+
+def test_classic_advisory_page_is_still_served(repo: FakeRepo) -> None:
+    client, _ = client_for()
+    response = client.get(f"/app/classic/advisory/{uuid.uuid4()}")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
     for marker in ('id="play"', "Talk to a doctor", "/app/advisory.js"):
         assert marker in response.text
     # Phase 7 (R4): the button is live and opens the chat's practitioner connect.
     assert 'id="doctor" type="button">' in response.text
     assert "disabled" not in response.text.split('id="doctor"', 1)[1].split(">", 1)[0]
     assert "/app/?connect=1" in client.get("/app/advisory.js").text
-    assert client.get("/app/advisory/not-a-uuid").status_code == 422
+    assert client.get("/app/classic/advisory/not-a-uuid").status_code == 422
 
 
 def test_advisory_script_falls_back_to_speech_synthesis(repo: FakeRepo) -> None:

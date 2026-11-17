@@ -10,9 +10,9 @@ practitioners to write and approve; ``POST /admin/kb-upgrade-run`` runs it on de
 and ``/api/practitioner/kb`` is the practitioner's Knowledge base tab.
 ``/api/push/*`` manages Web Push subscriptions, ``/api/advisories/{id}`` serves one
 advisory to its patient, ``/api/chat`` and ``/api/practitioner/*`` are the two-way help
-chat and practitioner connect (R4), and ``/app`` serves the patient web app (Supabase
-login, "Enable alerts", chat, the advisory page) and ``/app/practitioner``; see
-``app.api``.
+chat and practitioner connect (R4), and ``/app`` serves the React patient app and
+``/app/practitioner`` the practitioner app (``app.api.patient_app``); ``/api/me/health``
+is the patient's own limits, readings and alerts.
 Scheduled and manual runs cannot overlap: the second gets ``BatchAlreadyRunningError``.
 """
 
@@ -30,7 +30,17 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
-from app.api import admin, advisories, audit, chat, dashboard, kb_admin, patient_app, push
+from app.api import (
+    admin,
+    advisories,
+    audit,
+    chat,
+    dashboard,
+    kb_admin,
+    patient_app,
+    patient_health,
+    push,
+)
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BatchAlreadyRunningError, ConfigurationError
 from app.core.logging import configure_logging
@@ -228,10 +238,9 @@ def create_app(expose_docs: bool | None = None) -> FastAPI:
     app.include_router(audit.router)
     app.include_router(kb_admin.router)
     app.include_router(dashboard.router)
-    # Before mount_patient_app: the /app static mount would otherwise swallow
-    # /app/advisory/{id}.
+    app.include_router(patient_health.router)
+    # Last: its /app/{path} catch-all must not shadow a route registered after it.
     app.include_router(patient_app.router)
-    patient_app.mount_patient_app(app)
     return app
 
 

@@ -9,6 +9,7 @@ practitioner and their login are active; every patient for an admin):
 * :func:`patient_detail` - readings, the full threshold history with every component,
   the latest risk assessment and recent advisories of one patient.
 * :func:`list_alerts` - advisories, newest reading first, keyset-paginated.
+* :func:`own_health` - a patient's own limits, readings and advisories (no risk).
 
 Nothing here writes: no INSERT, UPDATE or DELETE is issued, and nothing commits.
 
@@ -1130,6 +1131,21 @@ def patient_detail(
         raise ValueError(f"days must be between 1 and {MAX_DETAIL_DAYS}")
     if not is_visible(session, practitioner_id, user_id):
         return None
+    return _load_detail(session, user_id, days=days, band=band)
+
+
+def _load_detail(session: Session, user_id: uuid.UUID, *, days: int, band: float) -> PatientDetail:
+    """Load one patient's chart data without any access check (callers check).
+
+    Args:
+        session: Open session.
+        user_id: Patient.
+        days: How many days of readings (already validated).
+        band: Pre-breach band fraction.
+
+    Returns:
+        The detail.
+    """
     end = db_now(session)
     start = end - timedelta(days=days)
     profile = session.get(Profile, user_id)
@@ -1201,6 +1217,62 @@ def patient_detail(
         thresholds=[_steps(t) for t in steps],
         risk=_risk(latest_risk),
         advisories=[_advisory_out(*row) for row in advisories],
+    )
+
+
+class OwnHealth(BaseModel):
+    """A patient's own limits, readings and alerts (the patient app's R6 view).
+
+    Deliberately narrower than :class:`PatientDetail`: no risk assessment (the
+    survey-based risk is never shown to patients) and no threshold components, only
+    the current limits.
+
+    Attributes:
+        window: The readings' time range.
+        pre_breach_band: Band fraction from settings.
+        limits: Current limits (the latest row of each kind).
+        readings: Readings in the window, oldest first, with their band state.
+        advisories: Last :data:`RECENT_ADVISORIES` advisories, newest first.
+    """
+
+    window: TimeWindow
+    pre_breach_band: float
+    limits: CurrentLimits
+    readings: list[ReadingPointOut]
+    advisories: list[AdvisoryRow]
+
+
+def own_health(session: Session, user_id: uuid.UUID, *, days: int, band: float) -> OwnHealth:
+    """Load the signed-in patient's own view (the caller has resolved ``user_id``).
+
+    Args:
+        session: Open session.
+        user_id: The patient asking (never a request parameter).
+        days: How many days of readings, 1 to :data:`MAX_DETAIL_DAYS`.
+        band: Pre-breach band fraction.
+
+    Returns:
+        The patient's limits, readings and advisories.
+
+    Raises:
+        ValueError: ``days`` is out of range.
+    """
+    if not 1 <= days <= MAX_DETAIL_DAYS:
+        raise ValueError(f"days must be between 1 and {MAX_DETAIL_DAYS}")
+    detail = _load_detail(session, user_id, days=days, band=band)
+    latest: dict[str, float] = {}
+    for step in detail.thresholds:  # oldest first: the last row of each kind wins
+        latest[step.limit_kind] = step.value_mg_dl
+    return OwnHealth(
+        window=detail.window,
+        pre_breach_band=detail.pre_breach_band,
+        limits=CurrentLimits(
+            fasting_high=latest.get("fasting_high"),
+            post_meal_high=latest.get("post_meal_high"),
+            low=latest.get("low"),
+        ),
+        readings=detail.readings,
+        advisories=detail.advisories,
     )
 
 

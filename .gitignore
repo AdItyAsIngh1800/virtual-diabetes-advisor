@@ -16,3 +16,8 @@ logs/
 models/candidates/
 models/backups/
 .playwright-mcp/
+
+# React app (web/): agent-browser screenshots and Playwright output
+.agent-browser-shots/
+web/test-results/
+web/playwright-report/

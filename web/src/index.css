@@ -1,0 +1,227 @@
+/* Shared design system for both apps: tokens, theme (dark default, light on request),
+   glass chrome, and the chart palette. Glass is only for chrome (header, sidebar,
+   bottom bar, floating panels); readings, limits, alerts, chat bubbles, tables and the
+   emergency line sit on solid surfaces. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/atkinson-hyperlegible-next";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-critical: var(--critical);
+  --color-critical-surface: var(--critical-surface);
+  --color-good: var(--good);
+  --color-good-surface: var(--good-surface);
+  --color-info-surface: var(--info-surface);
+  --color-info: var(--info);
+  --color-bubble-me: var(--bubble-me);
+  --color-bubble-me-foreground: var(--bubble-me-foreground);
+  --color-bubble-advisor: var(--bubble-advisor);
+  --color-bubble-doctor: var(--bubble-doctor);
+  --color-bubble-doctor-foreground: var(--bubble-doctor-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+}
+
+/* Light. Every text/background pair below is WCAG AA (4.5:1) or better. */
+:root {
+  --radius: 0.75rem;
+  --background: #eef4f2;
+  --foreground: #10221f;
+  --card: #ffffff;
+  --card-foreground: #10221f;
+  --popover: #ffffff;
+  --popover-foreground: #10221f;
+  --primary: #0f766e;
+  --primary-foreground: #ffffff;
+  --secondary: #e3ecea;
+  --secondary-foreground: #10221f;
+  --muted: #e9f0ee;
+  --muted-foreground: #475955;
+  --accent: #dcebe8;
+  --accent-foreground: #0b4f49;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --border: #cfdbd8;
+  --input: #8fa29e;
+  --ring: #0f766e;
+  --warning: #7a4a00;
+  --warning-surface: #fff1d1;
+  --critical: #b42318;
+  --critical-surface: #fdecea;
+  --good: #11663d;
+  --good-surface: #e3f5ea;
+  --info: #17325c;
+  --info-surface: #e8f0fe;
+  --bubble-me: #0f766e;
+  --bubble-me-foreground: #ffffff;
+  --bubble-advisor: #f3f7f6;
+  --bubble-doctor: #e8f0fe;
+  --bubble-doctor-foreground: #17325c;
+  --glass: rgb(255 255 255 / 0.72);
+  --glass-border: rgb(16 34 31 / 0.08);
+  --backdrop: radial-gradient(1200px 600px at 10% -10%, #d5ebe6 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #dfe8f6 0%, transparent 55%), #eef4f2;
+  /* Chart (dataviz): reading contexts are categorical slots 1-3 (validated all-pairs);
+     the band is the status warning, the breach ring the status critical. */
+  --s-fasting: #2a78d6;
+  --s-post: #eb6834;
+  --s-random: #1baf7a;
+  --band: #fab219;
+  --chart-critical: #d03b3b;
+  --grid: #e3eae8;
+  --axis: #475955;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #0b1513;
+  --foreground: #e7efed;
+  --card: #13201d;
+  --card-foreground: #e7efed;
+  --popover: #172623;
+  --popover-foreground: #e7efed;
+  --primary: #2bb3a3;
+  --primary-foreground: #04201c;
+  --secondary: #1d2b28;
+  --secondary-foreground: #e7efed;
+  --muted: #18241f;
+  --muted-foreground: #a3b5b1;
+  --accent: #1c312c;
+  --accent-foreground: #b6ece4;
+  --destructive: #f97066;
+  --destructive-foreground: #2a0906;
+  --border: #26332f;
+  --input: #5d706b;
+  --ring: #2bb3a3;
+  --warning: #f5c76a;
+  --warning-surface: #33270f;
+  --critical: #ff8a80;
+  --critical-surface: #3a1714;
+  --good: #7fd8a5;
+  --good-surface: #12291d;
+  --info: #d6e3fb;
+  --info-surface: #1b2940;
+  --bubble-me: #1d8c80;
+  --bubble-me-foreground: #ffffff;
+  --bubble-advisor: #1a2622;
+  --bubble-doctor: #1b2940;
+  --bubble-doctor-foreground: #d6e3fb;
+  --glass: rgb(19 32 29 / 0.66);
+  --glass-border: rgb(231 239 237 / 0.08);
+  --backdrop: radial-gradient(1200px 600px at 10% -10%, #123430 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #16233a 0%, transparent 55%), #0b1513;
+  --s-fasting: #3987e5;
+  --s-post: #d95926;
+  --s-random: #199e70;
+  --band: #fab219;
+  --chart-critical: #e66767;
+  --grid: #22302c;
+  --axis: #a3b5b1;
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+  }
+  /* The patient app is read by older people: an 18 px base, and every rem scales. */
+  html.patient {
+    font-size: 112.5%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    background: var(--backdrop);
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Frosted chrome. Turned solid when the reader asks for less transparency, and in
+   forced-colours mode. */
+.glass {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  body {
+    background: var(--background);
+  }
+}
+@media (forced-colors: active) {
+  .glass {
+    background: Canvas;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen-reader-only text that stays in the accessibility tree. */
+.sr-only-focusable:not(:focus):not(:focus-within) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

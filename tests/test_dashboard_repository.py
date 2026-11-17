@@ -651,6 +651,23 @@ def test_patient_detail(clinic: tuple[Session, Clinic]) -> None:
         dash.patient_detail(session, c.doctor, c.asha, days=0, band=BAND)
 
 
+def test_own_health_is_the_patients_own_view_without_risk(clinic: tuple[Session, Clinic]) -> None:
+    session, c = clinic
+    own = dash.own_health(session, c.asha, days=30, band=BAND)
+    detail = dash.patient_detail(session, c.doctor, c.asha, days=30, band=BAND)
+    assert detail is not None
+    assert own.readings == detail.readings
+    assert own.advisories == detail.advisories
+    latest = {t.limit_kind: t.value_mg_dl for t in detail.thresholds}
+    assert own.limits.fasting_high == latest["fasting_high"]
+    assert own.limits.post_meal_high == latest["post_meal_high"]
+    assert own.limits.low == latest["low"]
+    dumped = own.model_dump()
+    assert "risk" not in dumped and "thresholds" not in dumped
+    with pytest.raises(ValueError, match="days"):
+        dash.own_health(session, c.asha, days=0, band=BAND)
+
+
 def test_readings_before_the_first_limit_are_judged_by_it(clinic: tuple[Session, Clinic]) -> None:
     session, c = clinic
     # Older than Asha's first limits (written 10 days ago): judged by those, flagged.

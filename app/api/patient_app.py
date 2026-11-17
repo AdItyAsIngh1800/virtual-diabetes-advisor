@@ -1,11 +1,18 @@
-"""The minimal patient web app at ``/app`` and the config it bootstraps from (R3).
+"""The web apps at ``/app`` and the config they bootstrap from (R3, R4, R6).
 
-``app/static/patient`` holds a plain HTML/JS page (Supabase email login, "Enable
-alerts", the help chat with hold-to-record voice), the advisory page ``advisory.html``
-(served at ``/app/advisory/{id}``), the practitioner page ``practitioner.html`` (served
-at ``/app/practitioner``), the service worker ``sw.js`` and ``manifest.webmanifest``.
-It is a small test harness for Web Push and chat, not the R6 dashboard (``web/``).
-Serving it from FastAPI keeps it same-origin with ``/api``, so the ngrok https URL
+``app/static/web`` is the React build of ``web/`` (committed, so the demo machine
+needs no Node): the patient app (``patient.html``) at ``/app/`` and every client route
+under it (``/app/advisory/{id}``, ``/app/readings``, ...), and the practitioner app
+(``practitioner.html``) at ``/app/practitioner`` and ``/app/practitioner/*``. The
+service worker ``/app/sw.js`` (scope ``/app/``), ``manifest.webmanifest`` and the icons
+ship from Vite's ``public/`` folder unhashed.
+
+The earlier plain HTML/JS pages in ``app/static/patient`` stay reachable at
+``/app/classic/`` and ``/app/practitioner-classic`` until parity is confirmed; their
+scripts (``/app/common.js`` ...) are found by the same ``/app/{path}`` lookup, which
+tries the React build first and the classic folder second.
+
+Serving from FastAPI keeps the pages same-origin with ``/api``, so the ngrok https URL
 covers both.
 """
 
@@ -15,17 +22,25 @@ import uuid
 from pathlib import Path
 from typing import Annotated, Final
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ConfigurationError
 from app.db.session import DatabaseHealth, get_database_health
 
-STATIC_DIR: Final = Path(__file__).resolve().parents[1] / "static" / "patient"
+STATIC_ROOT: Final = Path(__file__).resolve().parents[1] / "static"
+WEB_DIR: Final = STATIC_ROOT / "web"
+CLASSIC_DIR: Final = STATIC_ROOT / "patient"
+# Kept for callers that read the classic folder (tests, scripts).
+STATIC_DIR: Final = CLASSIC_DIR
 APP_PATH: Final = "/app"
+# HTML shells and the service worker must be revalidated, or a phone keeps running an
+# old build; Vite's hashed /app/assets/* files never change, so they cache for a year.
+_NO_CACHE: Final = {"Cache-Control": "no-cache"}
+_IMMUTABLE: Final = {"Cache-Control": "public, max-age=31536000, immutable"}
+_MEDIA_TYPES: Final = {".webmanifest": "application/manifest+json", ".js": "text/javascript"}
 
 router = APIRouter(tags=["patient-app"])
 
@@ -80,43 +95,157 @@ def app_config(
     )
 
 
+def _file(path: Path) -> FileResponse:
+    """Serve one file with the right content type and cache policy.
+
+    Args:
+        path: An existing file under :data:`STATIC_ROOT`.
+
+    Returns:
+        The response.
+    """
+    hashed = path.parent.name == "assets" and path.parent.parent == WEB_DIR
+    headers = _IMMUTABLE if hashed else _NO_CACHE
+    return FileResponse(path, media_type=_MEDIA_TYPES.get(path.suffix), headers=headers)
+
+
+def _shell(name: str) -> FileResponse:
+    """Serve one of the React build's HTML shells.
+
+    Args:
+        name: ``patient.html`` or ``practitioner.html``.
+
+    Returns:
+        The page.
+
+    Raises:
+        HTTPException: 503 if the build is missing (run ``npm run build`` in ``web/``).
+    """
+    page = WEB_DIR / name
+    if not page.is_file():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "web app not built (npm run build in web/)"
+        )
+    return FileResponse(page, media_type="text/html", headers=_NO_CACHE)
+
+
+def _find(base: Path, relative: str) -> Path | None:
+    """Return ``base / relative`` if it is a file inside ``base`` (no ``..`` escapes).
+
+    Args:
+        base: Folder to look in.
+        relative: Request path below ``/app/``.
+
+    Returns:
+        The file, or ``None``.
+    """
+    candidate = (base / relative).resolve()
+    if candidate.is_file() and candidate.is_relative_to(base.resolve()):
+        return candidate
+    return None
+
+
+@router.get(APP_PATH, include_in_schema=False)
+def app_root() -> RedirectResponse:
+    """Redirect ``/app`` to ``/app/`` (the service worker scope).
+
+    Returns:
+        A redirect.
+    """
+    return RedirectResponse(f"{APP_PATH}/")
+
+
 @router.get(f"{APP_PATH}/advisory/{{advisory_id}}", include_in_schema=False)
 def advisory_page(advisory_id: uuid.UUID) -> FileResponse:
-    """Serve the advisory page; its script loads the advisory by the id in the URL.
+    """Serve the patient app for an advisory link; the page loads the advisory by id.
 
-    The id is validated as a UUID here so arbitrary paths 404/422 instead of serving
-    the page. Ownership is checked by ``GET /api/advisories/{id}``, not here: the
-    page itself holds no patient data.
+    The id is validated as a UUID here so arbitrary paths 422 instead of serving the
+    page. Ownership is checked by ``GET /api/advisories/{id}``, not here: the page
+    itself holds no patient data.
 
     Args:
         advisory_id: Advisory id from the notification link.
 
     Returns:
-        ``advisory.html``.
+        ``patient.html``.
     """
-    del advisory_id  # read by the page's script from location.pathname
-    return FileResponse(STATIC_DIR / "advisory.html", media_type="text/html")
+    del advisory_id  # read by the page from location.pathname
+    return _shell("patient.html")
 
 
 @router.get(f"{APP_PATH}/practitioner", include_in_schema=False)
-def practitioner_page() -> FileResponse:
-    """Serve the practitioner page (R4): open handoffs, conversation, reply, resolve.
+@router.get(f"{APP_PATH}/practitioner/{{rest:path}}", include_in_schema=False)
+def practitioner_page(rest: str = "") -> FileResponse:
+    """Serve the practitioner app for any of its client routes.
 
-    Access is checked by the ``/api/practitioner/*`` routes; the page holds no data.
+    Access is checked by the ``/api/practitioner/*`` and ``/api/dashboard/*`` routes;
+    the page holds no data.
+
+    Args:
+        rest: Client route below ``/app/practitioner/`` (read by the page).
 
     Returns:
         ``practitioner.html``.
     """
-    return FileResponse(STATIC_DIR / "practitioner.html", media_type="text/html")
+    del rest
+    return _shell("practitioner.html")
 
 
-def mount_patient_app(app: FastAPI) -> None:
-    """Serve ``app/static/patient`` at ``/app`` (``/app`` redirects to ``/app/``).
+@router.get(f"{APP_PATH}/classic", include_in_schema=False)
+@router.get(f"{APP_PATH}/classic/", include_in_schema=False)
+def classic_patient_page() -> FileResponse:
+    """Serve the earlier plain HTML patient page (kept until parity is confirmed).
 
-    The service worker lives at ``/app/sw.js``, so its scope is ``/app/``: it only
-    controls the patient app, never ``/api`` or ``/docs``.
+    Returns:
+        The classic ``index.html``.
+    """
+    return _file(CLASSIC_DIR / "index.html")
+
+
+@router.get(f"{APP_PATH}/classic/advisory/{{advisory_id}}", include_in_schema=False)
+def classic_advisory_page(advisory_id: uuid.UUID) -> FileResponse:
+    """Serve the earlier plain HTML advisory page.
 
     Args:
-        app: The application to mount on.
+        advisory_id: Advisory id (read by the page's script).
+
+    Returns:
+        The classic ``advisory.html``.
     """
-    app.mount(APP_PATH, StaticFiles(directory=STATIC_DIR, html=True), name="patient-app")
+    del advisory_id
+    return _file(CLASSIC_DIR / "advisory.html")
+
+
+@router.get(f"{APP_PATH}/practitioner-classic", include_in_schema=False)
+def classic_practitioner_page() -> FileResponse:
+    """Serve the earlier plain HTML practitioner page.
+
+    Returns:
+        The classic ``practitioner.html``.
+    """
+    return _file(CLASSIC_DIR / "practitioner.html")
+
+
+@router.get(f"{APP_PATH}/{{path:path}}", include_in_schema=False)
+def app_file_or_route(path: str) -> FileResponse:
+    """Serve a file of the React build or the classic pages, else the patient app.
+
+    A path with a file extension that matches nothing is a 404 (a missing script must
+    not come back as HTML); any other path is a patient-app client route.
+
+    Args:
+        path: Request path below ``/app/``.
+
+    Returns:
+        The file, or ``patient.html`` for a client route.
+
+    Raises:
+        HTTPException: 404 for a missing file.
+    """
+    for base in (WEB_DIR, CLASSIC_DIR):
+        found = _find(base, path) if path else None
+        if found is not None:
+            return _file(found)
+    if Path(path).suffix:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    return _shell("patient.html")

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Practitioner dashboard</title>
+  <meta name="theme-color" content="#0b1513">
+  <link rel="manifest" href="/app/manifest.webmanifest">
+  <link rel="icon" href="/app/icon-192.png">
+  <link rel="apple-touch-icon" href="/app/icon-192.png">
+  <script>
+    // Theme before first paint (same rule as src/shared/theme.tsx): saved choice,
+    // else the system preference, else dark.
+    (function () {
+      var t = null;
+      try { t = JSON.parse(localStorage.getItem("da:theme")); } catch (e) {}
+      if (t !== "light" && t !== "dark") {
+        try { t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; } catch (e) { t = "dark"; }
+      }
+      if (t === "dark") document.documentElement.classList.add("dark");
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <noscript>The practitioner dashboard needs JavaScript.</noscript>
+  <script type="module" src="/src/practitioner/main.tsx"></script>
+</body>
+</html>

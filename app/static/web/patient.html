@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" class="patient">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Diabetes Advisor</title>
+  <meta name="description" content="Glucose alerts and help from your care team.">
+  <meta name="theme-color" content="#0b1513">
+  <link rel="manifest" href="/app/manifest.webmanifest">
+  <link rel="icon" href="/app/icon-192.png">
+  <link rel="apple-touch-icon" href="/app/icon-192.png">
+  <script>
+    // Theme before first paint (same rule as src/shared/theme.tsx): saved choice,
+    // else the system preference, else dark.
+    (function () {
+      var t = null;
+      try { t = JSON.parse(localStorage.getItem("da:theme")); } catch (e) {}
+      if (t !== "light" && t !== "dark") {
+        try { t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; } catch (e) { t = "dark"; }
+      }
+      if (t === "dark") document.documentElement.classList.add("dark");
+    })();
+  </script>
+  <script type="module" crossorigin src="/app/assets/patient-DxaE3unM.js"></script>
+  <link rel="modulepreload" crossorigin href="/app/assets/src-B6kGEGAk.js">
+  <link rel="stylesheet" crossorigin href="/app/assets/src-T2W0YghA.css">
+</head>
+<body>
+  <div id="root"></div>
+  <noscript>This app needs JavaScript. Not for emergencies: call 112.</noscript>
+</body>
+</html>

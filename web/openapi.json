@@ -1,0 +1,5401 @@
+{
+  "components": {
+    "schemas": {
+      "AdvisoryOut": {
+        "description": "One advisory as the advisory page shows it.\n\nAttributes:\n    id: Advisory id.\n    state: Band state.\n    direction: ``high`` or ``low``.\n    limit_kind: Limit approached or crossed.\n    reading_value_mg_dl: The reading.\n    threshold_mg_dl: The patient's personal limit.\n    context: Reading context.\n    measured_at: When the reading was taken.\n    urgent: Reading below 54 mg/dL (show the emergency styling).\n    escalated: Flagged for the care team.\n    language: Language of the text (BCP-47 base, for speechSynthesis).\n    message_text: Advice to show.\n    spoken_text: What the voice says (fallback for speechSynthesis).\n    audio_url: Signed mp3 URL, or ``None`` when no recording exists.\n    audio_url_expires_in_s: Lifetime of ``audio_url``.\n    delivery_status: Delivery state after this read.\n    opened_at: First time the patient opened it.",
+        "properties": {
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "audio_url_expires_in_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url Expires In S"
+          },
+          "context": {
+            "enum": [
+              "fasting",
+              "post_meal",
+              "random"
+            ],
+            "title": "Context",
+            "type": "string"
+          },
+          "delivery_status": {
+            "enum": [
+              "queued",
+              "sent",
+              "opened",
+              "failed",
+              "expired",
+              "suppressed"
+            ],
+            "title": "Delivery Status",
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "high",
+              "low"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "escalated": {
+            "title": "Escalated",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "enum": [
+              "en",
+              "ta",
+              "hi"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "limit_kind": {
+            "enum": [
+              "fasting_high",
+              "post_meal_high",
+              "low"
+            ],
+            "title": "Limit Kind",
+            "type": "string"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "message_text": {
+            "title": "Message Text",
+            "type": "string"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "reading_value_mg_dl": {
+            "title": "Reading Value Mg Dl",
+            "type": "string"
+          },
+          "spoken_text": {
+            "title": "Spoken Text",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pre_breach_high",
+              "pre_breach_low",
+              "breach_high",
+              "breach_low"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "threshold_mg_dl": {
+            "title": "Threshold Mg Dl",
+            "type": "string"
+          },
+          "urgent": {
+            "title": "Urgent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "direction",
+          "limit_kind",
+          "reading_value_mg_dl",
+          "threshold_mg_dl",
+          "context",
+          "measured_at",
+          "urgent",
+          "escalated",
+          "language",
+          "message_text",
+          "spoken_text",
+          "audio_url",
+          "audio_url_expires_in_s",
+          "delivery_status",
+          "opened_at"
+        ],
+        "title": "AdvisoryOut",
+        "type": "object"
+      },
+      "AdvisoryRow": {
+        "description": "One advisory (alert) and its delivery state.\n\nAttributes:\n    id: ``advisories.id``.\n    user_id: Patient id.\n    first_name: Patient's first name.\n    measured_at: When the reading was measured.\n    created_at: When the alert was raised.\n    limit_kind: Which limit.\n    state: Pre-breach or breach, high or low.\n    reading_value_mg_dl: The reading.\n    threshold_mg_dl: The limit the batch judged it against.\n    escalated: A practitioner was brought in.\n    delivery_status: Delivery state.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivery_status": {
+            "enum": [
+              "queued",
+              "sent",
+              "opened",
+              "failed",
+              "expired",
+              "suppressed"
+            ],
+            "title": "Delivery Status",
+            "type": "string"
+          },
+          "escalated": {
+            "title": "Escalated",
+            "type": "boolean"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limit_kind": {
+            "enum": [
+              "fasting_high",
+              "post_meal_high",
+              "low"
+            ],
+            "title": "Limit Kind",
+            "type": "string"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "reading_value_mg_dl": {
+            "title": "Reading Value Mg Dl",
+            "type": "number"
+          },
+          "state": {
+            "enum": [
+              "pre_breach_high",
+              "pre_breach_low",
+              "breach_high",
+              "breach_low"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "threshold_mg_dl": {
+            "title": "Threshold Mg Dl",
+            "type": "number"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "first_name",
+          "measured_at",
+          "created_at",
+          "limit_kind",
+          "state",
+          "reading_value_mg_dl",
+          "threshold_mg_dl",
+          "escalated",
+          "delivery_status"
+        ],
+        "title": "AdvisoryRow",
+        "type": "object"
+      },
+      "AlertPage": {
+        "description": "One page of the alert list.\n\nAttributes:\n    items: Advisories, newest reading first.\n    next_cursor: Pass back as ``cursor``; ``None`` on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AlertPage",
+        "type": "object"
+      },
+      "AnswerCounts": {
+        "description": "Counts over a set of advisor replies; every rate comes with its counts.\n\nAttributes:\n    total: Advisor replies.\n    reviewed: Replies with at least one review, out of ``total``.\n    unreviewed: Replies with none, out of ``total``.\n    verdicts: Current verdicts, out of ``reviewed``.\n    escalated: Replies that brought a practitioner in, out of ``total``.\n    unanswered: \"I don't know\" replies, out of ``total``.\n    blocked_by_guard: Dosing/diagnosis questions refused, out of ``total``.",
+        "properties": {
+          "blocked_by_guard": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "escalated": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "reviewed": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unanswered": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "unreviewed": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "verdicts": {
+            "$ref": "#/components/schemas/VerdictCounts"
+          }
+        },
+        "required": [
+          "total",
+          "reviewed",
+          "unreviewed",
+          "verdicts",
+          "escalated",
+          "unanswered",
+          "blocked_by_guard"
+        ],
+        "title": "AnswerCounts",
+        "type": "object"
+      },
+      "AppConfigOut": {
+        "description": "Public values the browser needs (nothing secret).\n\nAttributes:\n    supabase_url: Supabase project URL.\n    supabase_anon_key: Publishable key for Supabase Auth in the browser.\n    vapid_public_key: ``applicationServerKey``, or ``None`` before keys exist.",
+        "properties": {
+          "supabase_anon_key": {
+            "title": "Supabase Anon Key",
+            "type": "string"
+          },
+          "supabase_url": {
+            "title": "Supabase Url",
+            "type": "string"
+          },
+          "vapid_public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vapid Public Key"
+          }
+        },
+        "required": [
+          "supabase_url",
+          "supabase_anon_key",
+          "vapid_public_key"
+        ],
+        "title": "AppConfigOut",
+        "type": "object"
+      },
+      "AuditSummary": {
+        "description": "Body of ``GET /api/practitioner/audit/summary``.\n\nAttributes:\n    since: Inclusive start of the window.\n    until: Exclusive end.\n    totals: Advisor replies the caller may see, in the window.\n    by_kb_version: The same counts per KB release, to compare versions.\n    kb_status: Approved entries, drafts and who approved them (clinic-wide).",
+        "properties": {
+          "by_kb_version": {
+            "items": {
+              "$ref": "#/components/schemas/KbVersionCounts"
+            },
+            "title": "By Kb Version",
+            "type": "array"
+          },
+          "kb_status": {
+            "$ref": "#/components/schemas/KbStatusCounts"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/AnswerCounts"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until",
+          "totals",
+          "by_kb_version",
+          "kb_status"
+        ],
+        "title": "AuditSummary",
+        "type": "object"
+      },
+      "BatchRunInfo": {
+        "description": "The latest threshold batch run (R1).\n\nAttributes:\n    started_at: When it started.\n    finished_at: When it finished; ``None`` while running.\n    status: ``running``, ``succeeded`` or ``failed``.",
+        "properties": {
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "finished_at",
+          "status"
+        ],
+        "title": "BatchRunInfo",
+        "type": "object"
+      },
+      "BatchRunSummary": {
+        "description": "Result of one run; also the response body of ``POST /admin/batch-run``.\n\nAttributes:\n    run_id: ``batch_runs.id``.\n    status: ``succeeded`` or ``failed`` (some users failed).\n    triggered_by: Who started the run.\n    window_start: Exclusive start of the readings window (``None``: everything).\n    window_end: Inclusive end of the window; thresholds are computed as of it.\n    model_version: Risk-model version, or ``\"unscored\"`` without a model.\n    users_processed: Users whose transaction committed.\n    users_skipped: Active patients without a diabetes status (no limit set applies).\n    users_failed: Users rolled back because of an error.\n    failed_user_ids: Ids of those users.\n    risk_rescored: Users whose profile (or the model) changed and were re-scored.\n    readings_evaluated: New readings classified.\n    thresholds_written: ``thresholds_history`` rows written.\n    advisories_created: Advisories inserted as ``queued``.\n    advisories_by_state: Those advisories per band state.",
+        "properties": {
+          "advisories_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "pre_breach_high",
+                "pre_breach_low",
+                "breach_high",
+                "breach_low"
+              ]
+            },
+            "title": "Advisories By State",
+            "type": "object"
+          },
+          "advisories_created": {
+            "minimum": 0.0,
+            "title": "Advisories Created",
+            "type": "integer"
+          },
+          "failed_user_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Failed User Ids",
+            "type": "array"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "readings_evaluated": {
+            "minimum": 0.0,
+            "title": "Readings Evaluated",
+            "type": "integer"
+          },
+          "risk_rescored": {
+            "minimum": 0.0,
+            "title": "Risk Rescored",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "thresholds_written": {
+            "minimum": 0.0,
+            "title": "Thresholds Written",
+            "type": "integer"
+          },
+          "triggered_by": {
+            "enum": [
+              "scheduler",
+              "admin_api",
+              "manual"
+            ],
+            "title": "Triggered By",
+            "type": "string"
+          },
+          "users_failed": {
+            "minimum": 0.0,
+            "title": "Users Failed",
+            "type": "integer"
+          },
+          "users_processed": {
+            "minimum": 0.0,
+            "title": "Users Processed",
+            "type": "integer"
+          },
+          "users_skipped": {
+            "minimum": 0.0,
+            "title": "Users Skipped",
+            "type": "integer"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "triggered_by",
+          "window_start",
+          "window_end",
+          "model_version",
+          "users_processed",
+          "users_skipped",
+          "users_failed",
+          "failed_user_ids",
+          "risk_rescored",
+          "readings_evaluated",
+          "thresholds_written",
+          "advisories_created",
+          "advisories_by_state"
+        ],
+        "title": "BatchRunSummary",
+        "type": "object"
+      },
+      "Body_post_chat_api_chat_post": {
+        "properties": {
+          "advisory_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisory Id"
+          },
+          "audio": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "request_practitioner": {
+            "default": false,
+            "title": "Request Practitioner",
+            "type": "boolean"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "Body_post_chat_api_chat_post",
+        "type": "object"
+      },
+      "CardMetrics": {
+        "description": "Test-set scores in the order the card shows them.\n\nField order is deliberate: precision, recall and F1 first; the threshold-free\nROC-AUC and PR-AUC only after them, so ROC-AUC never appears without them.\n\nAttributes:\n    precision: Share of flagged people who have diabetes.\n    recall: Share of people with diabetes who are flagged.\n    f1: Harmonic mean of precision and recall.\n    roc_auc: Area under the ROC curve.\n    pr_auc: Average precision.\n    brier: Mean squared error of the probabilities (lower is better calibrated).",
+        "properties": {
+          "brier": {
+            "title": "Brier",
+            "type": "number"
+          },
+          "f1": {
+            "title": "F1",
+            "type": "number"
+          },
+          "pr_auc": {
+            "title": "Pr Auc",
+            "type": "number"
+          },
+          "precision": {
+            "title": "Precision",
+            "type": "number"
+          },
+          "recall": {
+            "title": "Recall",
+            "type": "number"
+          },
+          "roc_auc": {
+            "title": "Roc Auc",
+            "type": "number"
+          }
+        },
+        "required": [
+          "precision",
+          "recall",
+          "f1",
+          "roc_auc",
+          "pr_auc",
+          "brier"
+        ],
+        "title": "CardMetrics",
+        "type": "object"
+      },
+      "ChatMessageOut": {
+        "description": "One chat bubble.\n\nAttributes:\n    id: Stable id (turn id + side).\n    role: Who wrote it.\n    text: Message text.\n    spoken: The patient sent it as voice (text is the transcript).\n    voice_reply: An advisor reply to a voice message: the page shows Play.\n    audio_url: Signed mp3 of that reply (``None``: play with the browser voice).\n    created_at: When.\n    handoff_id: Handoff it belongs to.",
+        "properties": {
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "handoff_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "patient",
+              "assistant",
+              "practitioner",
+              "system"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "spoken": {
+            "default": false,
+            "title": "Spoken",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "voice_reply": {
+            "default": false,
+            "title": "Voice Reply",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "text",
+          "created_at"
+        ],
+        "title": "ChatMessageOut",
+        "type": "object"
+      },
+      "ChatReplyOut": {
+        "description": "Result of ``POST /api/chat``.\n\nAttributes:\n    turn_id: Audited turn.\n    transcript: What was heard, for voice messages.\n    reply: Reply text.\n    intent: Classified intent.\n    escalated: A practitioner was brought in.\n    handoff: Live handoff after this turn.\n    audio_url: Signed mp3 of the spoken reply (voice messages only).\n    audio_url_expires_in_s: Lifetime of ``audio_url``.\n    duplicate: The message id was seen before; this is the stored reply.",
+        "properties": {
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "audio_url_expires_in_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url Expires In S"
+          },
+          "duplicate": {
+            "default": false,
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "escalated": {
+            "title": "Escalated",
+            "type": "boolean"
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HandoffOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "enum": [
+                  "reading_report",
+                  "question",
+                  "symptom_red_flag",
+                  "practitioner_request",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "reply",
+          "intent",
+          "escalated"
+        ],
+        "title": "ChatReplyOut",
+        "type": "object"
+      },
+      "ConfusionMatrix": {
+        "description": "Test-set confusion matrix at the decision threshold, labelled.\n\nAttributes:\n    tn: No diabetes, not flagged.\n    fp: No diabetes, flagged.\n    fn: Diabetes, not flagged.\n    tp: Diabetes, flagged.",
+        "properties": {
+          "fn": {
+            "title": "Fn",
+            "type": "integer"
+          },
+          "fp": {
+            "title": "Fp",
+            "type": "integer"
+          },
+          "tn": {
+            "title": "Tn",
+            "type": "integer"
+          },
+          "tp": {
+            "title": "Tp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tn",
+          "fp",
+          "fn",
+          "tp"
+        ],
+        "title": "ConfusionMatrix",
+        "type": "object"
+      },
+      "ConversationOut": {
+        "description": "The patient's recent conversation.\n\nAttributes:\n    messages: Oldest first.\n    handoff: Live handoff, if any.",
+        "properties": {
+          "handoff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HandoffOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages",
+          "handoff"
+        ],
+        "title": "ConversationOut",
+        "type": "object"
+      },
+      "CountRate": {
+        "description": "A count, what it is out of, and the rate.\n\nAttributes:\n    count: Numerator.\n    denominator: What it is out of.\n    rate: ``count / denominator``, or ``None`` when the denominator is 0.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "denominator": {
+            "title": "Denominator",
+            "type": "integer"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          }
+        },
+        "required": [
+          "count",
+          "denominator",
+          "rate"
+        ],
+        "title": "CountRate",
+        "type": "object"
+      },
+      "CurrentLimits": {
+        "description": "A patient's current personal limits in mg/dL (``None`` if never computed).\n\nAttributes:\n    fasting_high: Upper limit for fasting readings.\n    post_meal_high: Upper limit for post-meal readings.\n    low: Lower limit for every reading.",
+        "properties": {
+          "fasting_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fasting High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "post_meal_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Meal High"
+          }
+        },
+        "required": [
+          "fasting_high",
+          "post_meal_high",
+          "low"
+        ],
+        "title": "CurrentLimits",
+        "type": "object"
+      },
+      "DeliveryCounts": {
+        "description": "Advisory delivery states in a window, each out of all advisories in it.\n\nAttributes:\n    total: Advisories raised for readings in the window.\n    queued: Not dispatched yet.\n    sent: Pushed to the patient's device.\n    opened: Opened by the patient.\n    failed: The push service refused it.\n    expired: The reading was too old to be worth pushing by dispatch time.\n    suppressed: Not sent on purpose (same alert inside the cooldown).\n    delivered: Sent or opened, out of every advisory except suppressed ones.",
+        "properties": {
+          "delivered": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "expired": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "failed": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "opened": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "queued": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "sent": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "suppressed": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "queued",
+          "sent",
+          "opened",
+          "failed",
+          "expired",
+          "suppressed",
+          "delivered"
+        ],
+        "title": "DeliveryCounts",
+        "type": "object"
+      },
+      "DispatchSummary": {
+        "description": "What one dispatch run did.\n\nAttributes:\n    considered: Queued advisories looked at.\n    sent: Pushed to at least one device.\n    failed: Claimed but no device accepted the push.\n    expired: Reading too old; never sent.\n    suppressed: Same alert pushed within the cooldown.\n    blocked: Refused by the recipient guard.\n    skipped: Already taken by another, overlapping run.\n    stale_claims_failed: Claims from a crashed run, failed instead of re-sent.\n    audio_missing: Sent or failed without a voice file (page uses speechSynthesis).\n    sent_ids: Ids of the advisories pushed.",
+        "properties": {
+          "audio_missing": {
+            "default": 0,
+            "title": "Audio Missing",
+            "type": "integer"
+          },
+          "blocked": {
+            "default": 0,
+            "title": "Blocked",
+            "type": "integer"
+          },
+          "considered": {
+            "default": 0,
+            "title": "Considered",
+            "type": "integer"
+          },
+          "expired": {
+            "default": 0,
+            "title": "Expired",
+            "type": "integer"
+          },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "sent": {
+            "default": 0,
+            "title": "Sent",
+            "type": "integer"
+          },
+          "sent_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Sent Ids",
+            "type": "array"
+          },
+          "skipped": {
+            "default": 0,
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "stale_claims_failed": {
+            "default": 0,
+            "title": "Stale Claims Failed",
+            "type": "integer"
+          },
+          "suppressed": {
+            "default": 0,
+            "title": "Suppressed",
+            "type": "integer"
+          }
+        },
+        "title": "DispatchSummary",
+        "type": "object"
+      },
+      "FeatureImportance": {
+        "description": "One of the most important features.\n\nAttributes:\n    feature: BRFSS column name.\n    importance: Drop in average precision when the feature is shuffled.",
+        "properties": {
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "importance": {
+            "title": "Importance",
+            "type": "number"
+          }
+        },
+        "required": [
+          "feature",
+          "importance"
+        ],
+        "title": "FeatureImportance",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandoffDetailOut": {
+        "description": "One handoff with the patient's conversation (practitioner view).\n\nAttributes:\n    handoff: The handoff.\n    messages: The patient's recent conversation, oldest first.",
+        "properties": {
+          "handoff": {
+            "$ref": "#/components/schemas/HandoffSummary"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "handoff",
+          "messages"
+        ],
+        "title": "HandoffDetailOut",
+        "type": "object"
+      },
+      "HandoffOut": {
+        "description": "A handoff as the patient sees it.\n\nAttributes:\n    id: Handoff id.\n    status: ``open``, ``assigned`` or ``resolved``.\n    trigger: Why it was opened.\n    has_practitioner: A practitioner is linked to the patient *now* (current\n        assignment, not the handoff's state when it was opened).\n    practitioner_name: Who joined the chat (``assigned`` handoffs only).",
+        "properties": {
+          "has_practitioner": {
+            "title": "Has Practitioner",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "practitioner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practitioner Name"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "assigned",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "practitioner_request",
+              "red_flag",
+              "breach_escalation"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "trigger",
+          "has_practitioner"
+        ],
+        "title": "HandoffOut",
+        "type": "object"
+      },
+      "HandoffSummary": {
+        "description": "One handoff in the practitioner's list.\n\nAttributes:\n    id: Handoff id.\n    patient_id: Patient.\n    patient_name: ``profiles.full_name`` (assigned patients only).\n    status: Status.\n    trigger: Why it was opened.\n    reason: Fixed reason text.\n    practitioner_id: Practitioner it is routed to (the claimer once assigned).\n    practitioner_name: That practitioner's name.\n    opened_at: Opened.\n    assigned_at: Claimed (Claim button or first reply).\n    resolved_at: Resolved.\n    last_message_at: Latest turn in the handoff.",
+        "properties": {
+          "assigned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "patient_id": {
+            "format": "uuid",
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "patient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Name"
+          },
+          "practitioner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practitioner Id"
+          },
+          "practitioner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practitioner Name"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "assigned",
+              "resolved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "practitioner_request",
+              "red_flag",
+              "breach_escalation"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "patient_id",
+          "patient_name",
+          "status",
+          "trigger",
+          "reason",
+          "opened_at",
+          "assigned_at",
+          "resolved_at",
+          "last_message_at"
+        ],
+        "title": "HandoffSummary",
+        "type": "object"
+      },
+      "KbDraftIn": {
+        "additionalProperties": false,
+        "description": "Body of ``PUT /api/practitioner/kb/{id}``.\n\nAttributes:\n    title: Entry title (shown to patients once approved).\n    body: Entry text; may stay empty while drafting, required to approve.\n    source_citation: Where the text comes from; required to approve.",
+        "properties": {
+          "body": {
+            "default": "",
+            "maxLength": 6000,
+            "title": "Body",
+            "type": "string"
+          },
+          "source_citation": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Citation"
+          },
+          "title": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "KbDraftIn",
+        "type": "object"
+      },
+      "KbEntryView": {
+        "description": "One knowledge-base row as the practitioner page shows it.\n\nAttributes:\n    id: ``kb_entries.id``.\n    entry_key: Stable key across versions.\n    title: Title (for a proposed draft, the patient's question).\n    body: Patient-facing text (empty until a practitioner writes it).\n    language: Entry language.\n    status: ``draft``, ``approved`` or ``retired``.\n    kb_version: KB release (approved and retired rows).\n    source_citation: Where the text comes from.\n    origin: ``manual`` or ``proposed_from_review``.\n    review_hint: Why the job proposed it (staff only; drafts only).\n    priority: Proposed from an answer marked unsafe; listed first.\n    supersedes_id: The approved row this draft replaces.\n    supersedes_version: That row's ``kb_version``.\n    proposed_from_turn_id: The reviewed turn a proposed draft came from.\n    source_turn: That turn, when the viewer may see its patient; else ``None``.\n    open_draft_id: For an approved row, the draft currently editing it.\n    created_by_name: Practitioner who started the draft (``None`` for the job).\n    approved_by_name: Practitioner who approved it.\n    approved_at: When it was approved.\n    created_at: When the row was created.\n    updated_at: Last change.",
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By Name"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "entry_key": {
+            "title": "Entry Key",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kb_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Version"
+          },
+          "language": {
+            "enum": [
+              "en",
+              "ta",
+              "hi"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "open_draft_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Draft Id"
+          },
+          "origin": {
+            "enum": [
+              "manual",
+              "proposed_from_review"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "boolean"
+          },
+          "proposed_from_turn_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed From Turn Id"
+          },
+          "review_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Hint"
+          },
+          "source_citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Citation"
+          },
+          "source_turn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceTurn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "approved",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supersedes_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Id"
+          },
+          "supersedes_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Version"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "entry_key",
+          "title",
+          "body",
+          "language",
+          "status",
+          "kb_version",
+          "source_citation",
+          "origin",
+          "review_hint",
+          "priority",
+          "supersedes_id",
+          "supersedes_version",
+          "proposed_from_turn_id",
+          "source_turn",
+          "open_draft_id",
+          "created_by_name",
+          "approved_by_name",
+          "approved_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "KbEntryView",
+        "type": "object"
+      },
+      "KbListing": {
+        "description": "The practitioner KB tab.\n\nAttributes:\n    drafts: Drafts awaiting approval, newest first.\n    approved: Entries being served now, by title.",
+        "properties": {
+          "approved": {
+            "items": {
+              "$ref": "#/components/schemas/KbEntryView"
+            },
+            "title": "Approved",
+            "type": "array"
+          },
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/KbEntryView"
+            },
+            "title": "Drafts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "drafts",
+          "approved"
+        ],
+        "title": "KbListing",
+        "type": "object"
+      },
+      "KbSource": {
+        "description": "A knowledge-base entry an answer came from.\n\nAttributes:\n    id: ``kb_entries.id``.\n    entry_key: Stable key across versions.\n    title: Entry title.\n    kb_version: KB release of that entry.\n    source_citation: Where the text comes from (e.g. ADA Standards of Care).",
+        "properties": {
+          "entry_key": {
+            "title": "Entry Key",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kb_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Version"
+          },
+          "source_citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Citation"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "entry_key",
+          "title",
+          "kb_version",
+          "source_citation"
+        ],
+        "title": "KbSource",
+        "type": "object"
+      },
+      "KbStatusCounts": {
+        "description": "Knowledge-base status for the Audit tab.\n\nAttributes:\n    approved: Entries being served.\n    drafts: Drafts awaiting a practitioner.\n    priority_drafts: Drafts from answers marked unsafe, out of ``drafts``.\n    approved_by_seed_account: Approved entries whose approver is the seed's demo\n        practitioner, out of ``approved``: clinical review still pending.\n    approved_by_others: Approved by anyone else, out of ``approved``.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "approved_by_others": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "approved_by_seed_account": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "drafts": {
+            "title": "Drafts",
+            "type": "integer"
+          },
+          "priority_drafts": {
+            "$ref": "#/components/schemas/CountRate"
+          }
+        },
+        "required": [
+          "approved",
+          "drafts",
+          "priority_drafts",
+          "approved_by_seed_account",
+          "approved_by_others"
+        ],
+        "title": "KbStatusCounts",
+        "type": "object"
+      },
+      "KbUpgradeSummary": {
+        "description": "Result of one run; also the body of ``POST /admin/kb-upgrade-run``.\n\nAttributes:\n    run_id: ``batch_runs.id``.\n    status: ``succeeded`` or ``failed``.\n    triggered_by: Who started the run.\n    window_start: Start of the lookback for unanswered questions.\n    window_end: When the run started (database clock).\n    candidates: Distinct questions considered.\n    drafts_proposed: Drafts inserted.\n    skipped: Candidates not proposed (open draft, already proposed, no text).\n    promoted: Open drafts marked priority because an unsafe review matched them.\n    draft_ids: Ids of the new drafts.\n    error: Failure summary (exception class only), or ``None``.",
+        "properties": {
+          "candidates": {
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "draft_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Draft Ids",
+            "type": "array"
+          },
+          "drafts_proposed": {
+            "title": "Drafts Proposed",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "promoted": {
+            "title": "Promoted",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "triggered_by": {
+            "enum": [
+              "scheduler",
+              "admin_api",
+              "manual"
+            ],
+            "title": "Triggered By",
+            "type": "string"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "triggered_by",
+          "window_start",
+          "window_end",
+          "candidates",
+          "drafts_proposed",
+          "skipped",
+          "promoted",
+          "draft_ids",
+          "error"
+        ],
+        "title": "KbUpgradeSummary",
+        "type": "object"
+      },
+      "KbVersionCounts": {
+        "description": "Counts of the replies one KB release gave.\n\nAttributes:\n    kb_version: ``conversation_turns.kb_version``; ``None`` for replies that used\n        no KB (readings, red flags, the guard, handoff requests).\n    counts: The counts.",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/AnswerCounts"
+          },
+          "kb_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Version"
+          }
+        },
+        "required": [
+          "kb_version",
+          "counts"
+        ],
+        "title": "KbVersionCounts",
+        "type": "object"
+      },
+      "LastReading": {
+        "description": "A patient's most recent reading.\n\nAttributes:\n    value_mg_dl: Glucose.\n    context: ``fasting``, ``post_meal`` or ``random``.\n    measured_at: When it was measured.\n    band_state: R3 band state against the limits in effect then; ``None`` if the\n        patient had no limits yet.",
+        "properties": {
+          "band_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal",
+                  "pre_breach_high",
+                  "pre_breach_low",
+                  "breach_high",
+                  "breach_low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band State"
+          },
+          "context": {
+            "enum": [
+              "fasting",
+              "post_meal",
+              "random"
+            ],
+            "title": "Context",
+            "type": "string"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "value_mg_dl": {
+            "title": "Value Mg Dl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "value_mg_dl",
+          "context",
+          "measured_at",
+          "band_state"
+        ],
+        "title": "LastReading",
+        "type": "object"
+      },
+      "MeOut": {
+        "description": "Which app a login belongs to.\n\nAttributes:\n    role: ``patient`` or ``practitioner``.\n    user_id: ``users.id``.\n    name: Practitioner's display name (patients: ``None``).",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "enum": [
+              "patient",
+              "practitioner"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "user_id"
+        ],
+        "title": "MeOut",
+        "type": "object"
+      },
+      "MetricsSnapshot": {
+        "description": "One model's test-set scores, as recorded for a run.\n\nAttributes:\n    version: Model version.\n    precision: Test precision at its decision threshold.\n    recall: Test recall at its decision threshold.\n    f1: Test F1.\n    roc_auc: Test ROC-AUC (always recorded with precision and recall).\n    pr_auc: Test average precision.\n    brier: Test Brier score.",
+        "properties": {
+          "brier": {
+            "title": "Brier",
+            "type": "number"
+          },
+          "f1": {
+            "title": "F1",
+            "type": "number"
+          },
+          "pr_auc": {
+            "title": "Pr Auc",
+            "type": "number"
+          },
+          "precision": {
+            "title": "Precision",
+            "type": "number"
+          },
+          "recall": {
+            "title": "Recall",
+            "type": "number"
+          },
+          "roc_auc": {
+            "title": "Roc Auc",
+            "type": "number"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "precision",
+          "recall",
+          "f1",
+          "roc_auc",
+          "pr_auc",
+          "brier"
+        ],
+        "title": "MetricsSnapshot",
+        "type": "object"
+      },
+      "ModelCardOut": {
+        "description": "Body of ``GET /api/practitioner/model-card``: the card plus recent retrains.\n\nAttributes:\n    recent_retrains: The last :data:`app.jobs.retrain.RECENT_RUNS` retrain runs,\n        newest first.",
+        "properties": {
+          "confusion": {
+            "$ref": "#/components/schemas/ConfusionMatrix"
+          },
+          "decision_threshold": {
+            "title": "Decision Threshold",
+            "type": "number"
+          },
+          "flagged_without_diabetes": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "model_name": {
+            "title": "Model Name",
+            "type": "string"
+          },
+          "prevalence": {
+            "title": "Prevalence",
+            "type": "number"
+          },
+          "recent_retrains": {
+            "items": {
+              "$ref": "#/components/schemas/RetrainRunView"
+            },
+            "title": "Recent Retrains",
+            "type": "array"
+          },
+          "test_metrics": {
+            "$ref": "#/components/schemas/CardMetrics"
+          },
+          "test_rows": {
+            "title": "Test Rows",
+            "type": "integer"
+          },
+          "tier_cutoffs": {
+            "$ref": "#/components/schemas/TierCutoffs"
+          },
+          "top_features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureImportance"
+            },
+            "title": "Top Features",
+            "type": "array"
+          },
+          "trained_at": {
+            "title": "Trained At",
+            "type": "string"
+          },
+          "training_rows": {
+            "title": "Training Rows",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "trained_at",
+          "model_name",
+          "training_rows",
+          "prevalence",
+          "test_rows",
+          "test_metrics",
+          "confusion",
+          "flagged_without_diabetes",
+          "decision_threshold",
+          "tier_cutoffs",
+          "top_features",
+          "limitations",
+          "recent_retrains"
+        ],
+        "title": "ModelCardOut",
+        "type": "object"
+      },
+      "Overview": {
+        "description": "Dashboard KPI tiles (R6).\n\nAttributes:\n    readings_window: Window of ``readings`` (default: today, clinic time).\n    alerts_window: Window of the alert counts, ``below_54_readings`` and\n        ``delivery`` (default: the last 24 hours). All are on reading time.\n    active_patients: Visible patients whose login is active.\n    readings: Readings measured in ``readings_window``.\n    pre_breach_alerts: Pre-breach advisories for readings in ``alerts_window``.\n    breaches: Breach advisories for readings in ``alerts_window``.\n    below_54_readings: Readings under 54 mg/dL (Level 2 hypoglycaemia) in\n        ``alerts_window``.\n    open_handoffs: Handoffs waiting to be claimed (now).\n    claimed_handoffs: Handoffs claimed and not resolved (now).\n    delivery: Advisory delivery states in ``alerts_window``.\n    last_batch_run: Latest threshold batch run; ``None`` if it never ran.",
+        "properties": {
+          "active_patients": {
+            "title": "Active Patients",
+            "type": "integer"
+          },
+          "alerts_window": {
+            "$ref": "#/components/schemas/TimeWindow"
+          },
+          "below_54_readings": {
+            "title": "Below 54 Readings",
+            "type": "integer"
+          },
+          "breaches": {
+            "title": "Breaches",
+            "type": "integer"
+          },
+          "claimed_handoffs": {
+            "title": "Claimed Handoffs",
+            "type": "integer"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/DeliveryCounts"
+          },
+          "last_batch_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchRunInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open_handoffs": {
+            "title": "Open Handoffs",
+            "type": "integer"
+          },
+          "pre_breach_alerts": {
+            "title": "Pre Breach Alerts",
+            "type": "integer"
+          },
+          "readings": {
+            "title": "Readings",
+            "type": "integer"
+          },
+          "readings_window": {
+            "$ref": "#/components/schemas/TimeWindow"
+          }
+        },
+        "required": [
+          "readings_window",
+          "alerts_window",
+          "active_patients",
+          "readings",
+          "pre_breach_alerts",
+          "breaches",
+          "below_54_readings",
+          "open_handoffs",
+          "claimed_handoffs",
+          "delivery",
+          "last_batch_run"
+        ],
+        "title": "Overview",
+        "type": "object"
+      },
+      "OwnHealth": {
+        "description": "A patient's own limits, readings and alerts (the patient app's R6 view).\n\nDeliberately narrower than :class:`PatientDetail`: no risk assessment (the\nsurvey-based risk is never shown to patients) and no threshold components, only\nthe current limits.\n\nAttributes:\n    window: The readings' time range.\n    pre_breach_band: Band fraction from settings.\n    limits: Current limits (the latest row of each kind).\n    readings: Readings in the window, oldest first, with their band state.\n    advisories: Last :data:`RECENT_ADVISORIES` advisories, newest first.",
+        "properties": {
+          "advisories": {
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryRow"
+            },
+            "title": "Advisories",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/CurrentLimits"
+          },
+          "pre_breach_band": {
+            "title": "Pre Breach Band",
+            "type": "number"
+          },
+          "readings": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPointOut"
+            },
+            "title": "Readings",
+            "type": "array"
+          },
+          "window": {
+            "$ref": "#/components/schemas/TimeWindow"
+          }
+        },
+        "required": [
+          "window",
+          "pre_breach_band",
+          "limits",
+          "readings",
+          "advisories"
+        ],
+        "title": "OwnHealth",
+        "type": "object"
+      },
+      "PatientDetail": {
+        "description": "Everything the patient detail view draws.\n\nAttributes:\n    user_id: Patient id.\n    first_name: First name.\n    age_band: Age band.\n    diabetes_status: Diabetes status.\n    window: The readings' time range.\n    pre_breach_band: Band fraction from settings (0.05 = within 5 % of a limit).\n    readings: Readings in the window, oldest first.\n    thresholds: Threshold rows that apply in the window (the one in effect at its\n        start, then every later one), by kind, oldest first.\n    risk: Latest risk assessment, or ``None``.\n    advisories: Last :data:`RECENT_ADVISORIES` advisories, newest first.",
+        "properties": {
+          "advisories": {
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryRow"
+            },
+            "title": "Advisories",
+            "type": "array"
+          },
+          "age_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Band"
+          },
+          "diabetes_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "diabetes",
+                  "no_diabetes"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diabetes Status"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "pre_breach_band": {
+            "title": "Pre Breach Band",
+            "type": "number"
+          },
+          "readings": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPointOut"
+            },
+            "title": "Readings",
+            "type": "array"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thresholds": {
+            "items": {
+              "$ref": "#/components/schemas/ThresholdStep"
+            },
+            "title": "Thresholds",
+            "type": "array"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "window": {
+            "$ref": "#/components/schemas/TimeWindow"
+          }
+        },
+        "required": [
+          "user_id",
+          "first_name",
+          "age_band",
+          "diabetes_status",
+          "window",
+          "pre_breach_band",
+          "readings",
+          "thresholds",
+          "risk",
+          "advisories"
+        ],
+        "title": "PatientDetail",
+        "type": "object"
+      },
+      "PatientPage": {
+        "description": "One page of the patient list.\n\nAttributes:\n    items: Patients, by id.\n    next_cursor: Pass back as ``cursor``; ``None`` on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PatientRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "PatientPage",
+        "type": "object"
+      },
+      "PatientRow": {
+        "description": "One row of the patient list. No contact details.\n\nAttributes:\n    user_id: Patient id (to open the detail view).\n    first_name: First word of the stored name, or ``None``.\n    age_band: e.g. ``\"50-59\"``; ``None`` when no age is stored.\n    diabetes_status: ``diabetes`` or ``no_diabetes``; ``None`` before onboarding.\n    risk: Latest risk assessment, or ``None``.\n    limits: Current personal limits.\n    last_reading: Most recent reading, or ``None``.\n    alerts_7d: Advisories for readings in the last 7 days.\n    breach_7d: At least one of those is a breach.\n    live_handoff: ``open`` or ``assigned`` handoff, or ``None``.",
+        "properties": {
+          "age_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Band"
+          },
+          "alerts_7d": {
+            "title": "Alerts 7D",
+            "type": "integer"
+          },
+          "breach_7d": {
+            "title": "Breach 7D",
+            "type": "boolean"
+          },
+          "diabetes_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "diabetes",
+                  "no_diabetes"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diabetes Status"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_reading": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastReading"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limits": {
+            "$ref": "#/components/schemas/CurrentLimits"
+          },
+          "live_handoff": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "assigned",
+                  "resolved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Handoff"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "first_name",
+          "age_band",
+          "diabetes_status",
+          "risk",
+          "limits",
+          "last_reading",
+          "alerts_7d",
+          "breach_7d",
+          "live_handoff"
+        ],
+        "title": "PatientRow",
+        "type": "object"
+      },
+      "PractitionerMessageIn": {
+        "description": "Body of a practitioner reply.",
+        "properties": {
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "PractitionerMessageIn",
+        "type": "object"
+      },
+      "PublicKeyOut": {
+        "description": "VAPID public key for ``pushManager.subscribe``.",
+        "properties": {
+          "public_key": {
+            "title": "Public Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "public_key"
+        ],
+        "title": "PublicKeyOut",
+        "type": "object"
+      },
+      "ReadingPointOut": {
+        "description": "One reading on the patient chart.\n\nAttributes:\n    id: ``readings.id``.\n    measured_at: When it was measured.\n    value_mg_dl: Glucose.\n    context: Reading context.\n    band_state: R3 band state against the limits in effect then; ``None`` when\n        the patient has no limit the reading needs.\n    limit_kind: The limit that state refers to (``None`` when normal).\n    before_first_limit: Taken before the first limit was computed, so judged\n        against that first limit (as the batch job does with a backlog).",
+        "properties": {
+          "band_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal",
+                  "pre_breach_high",
+                  "pre_breach_low",
+                  "breach_high",
+                  "breach_low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Band State"
+          },
+          "before_first_limit": {
+            "title": "Before First Limit",
+            "type": "boolean"
+          },
+          "context": {
+            "enum": [
+              "fasting",
+              "post_meal",
+              "random"
+            ],
+            "title": "Context",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limit_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fasting_high",
+                  "post_meal_high",
+                  "low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Kind"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "value_mg_dl": {
+            "title": "Value Mg Dl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "measured_at",
+          "value_mg_dl",
+          "context",
+          "band_state",
+          "limit_kind",
+          "before_first_limit"
+        ],
+        "title": "ReadingPointOut",
+        "type": "object"
+      },
+      "ResolveIn": {
+        "description": "Body of a resolve call.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "ResolveIn",
+        "type": "object"
+      },
+      "RetrainReport": {
+        "description": "What a run did; stored in ``batch_runs.retrain_report``.\n\nAttributes:\n    dry_run: ``--dry-run``: compared but never promoted.\n    sample_frac: Share of rows trained on, or ``None`` for all.\n    old: The model that was current when the run started.\n    new: The candidate, or ``None`` if training failed.\n    reasons: Why it was promoted or kept.\n    candidate_dir: Candidate folder, relative to ``models/``.\n    backup_dir: Backup of the previous model, relative to ``models/`` (promotions).",
+        "properties": {
+          "backup_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Dir"
+          },
+          "candidate_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Dir"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "new": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricsSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "old": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricsSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "sample_frac": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Frac"
+          }
+        },
+        "required": [
+          "dry_run",
+          "sample_frac",
+          "old",
+          "new",
+          "reasons"
+        ],
+        "title": "RetrainReport",
+        "type": "object"
+      },
+      "RetrainRunView": {
+        "description": "One past retrain run, for the model card.\n\nAttributes:\n    run_id: ``batch_runs.id``.\n    status: ``running``, ``succeeded`` or ``failed``.\n    triggered_by: Who started it.\n    started_at: Start.\n    finished_at: End, or ``None`` while running.\n    decision: ``promoted``, ``kept`` or ``dry_run`` (``None`` while running).\n    report: Metrics and reasons (``None`` while running or if unreadable).\n    error: Failure summary.",
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "promoted",
+                  "kept",
+                  "dry_run"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetrainReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "triggered_by": {
+            "enum": [
+              "scheduler",
+              "admin_api",
+              "manual"
+            ],
+            "title": "Triggered By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "triggered_by",
+          "started_at",
+          "finished_at",
+          "decision",
+          "report",
+          "error"
+        ],
+        "title": "RetrainRunView",
+        "type": "object"
+      },
+      "RetrainSummary": {
+        "description": "Result of one run; also the body of ``POST /admin/retrain-run``.\n\nAttributes:\n    run_id: ``batch_runs.id``.\n    status: ``succeeded`` (training finished) or ``failed``.\n    triggered_by: Who started the run.\n    decision: ``promoted``, ``kept`` or ``dry_run``.\n    current_version: Model version in ``models/`` after the run.\n    report: Metrics and reasons.\n    error: Failure summary (exception class only), or ``None``.",
+        "properties": {
+          "current_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version"
+          },
+          "decision": {
+            "enum": [
+              "promoted",
+              "kept",
+              "dry_run"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "report": {
+            "$ref": "#/components/schemas/RetrainReport"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "triggered_by": {
+            "enum": [
+              "scheduler",
+              "admin_api",
+              "manual"
+            ],
+            "title": "Triggered By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "triggered_by",
+          "decision",
+          "current_version",
+          "report",
+          "error"
+        ],
+        "title": "RetrainSummary",
+        "type": "object"
+      },
+      "ReviewIn": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/practitioner/turns/{turn_id}/review``.\n\nAttributes:\n    verdict: ``correct``, ``incorrect``, ``unsafe`` or ``needs_kb_update``.\n    note: What is wrong or what the KB should say; required unless ``correct``.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "verdict": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "unsafe",
+              "needs_kb_update"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict"
+        ],
+        "title": "ReviewIn",
+        "type": "object"
+      },
+      "ReviewRecord": {
+        "description": "One stored review.\n\nAttributes:\n    id: ``turn_reviews.id``.\n    turn_id: Reviewed turn.\n    verdict: The verdict.\n    note: Reviewer's note.\n    reviewer_id: ``practitioners.id`` of the reviewer.\n    reviewer_name: Reviewer's display name.\n    created_at: When it was recorded.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reviewer_id": {
+            "format": "uuid",
+            "title": "Reviewer Id",
+            "type": "string"
+          },
+          "reviewer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Name"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "unsafe",
+              "needs_kb_update"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "turn_id",
+          "verdict",
+          "note",
+          "reviewer_id",
+          "reviewer_name",
+          "created_at"
+        ],
+        "title": "ReviewRecord",
+        "type": "object"
+      },
+      "ReviewableTurn": {
+        "description": "One advisor reply in the review list.\n\nOnly the patient's first name is included; never a phone number, push endpoint or\nother contact detail.\n\nAttributes:\n    turn_id: ``conversation_turns.id``.\n    created_at: When the patient wrote.\n    patient_first_name: First word of ``profiles.full_name``, or ``None``.\n    question: What the patient wrote or said.\n    spoken: The patient used voice (``question`` is the transcript).\n    answer: The advisor's reply.\n    intent: Classified intent.\n    model: ``rules``, ``tfidf`` or an LLM name.\n    model_version: Version of that model.\n    escalated: A practitioner was brought in.\n    unanswered: The advisor said it did not know.\n    low_confidence: Answered from the KB with similarity below the review cutoff.\n    retrieval_confidence: Best KB similarity (questions only).\n    kb_version: KB release that answered.\n    sources: KB entries the answer came from.\n    current_review: The latest review, or ``None`` if never reviewed.\n    review_count: How many reviews the turn has (the history is kept).",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "escalated": {
+            "title": "Escalated",
+            "type": "boolean"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "enum": [
+                  "reading_report",
+                  "question",
+                  "symptom_red_flag",
+                  "practitioner_request",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent"
+          },
+          "kb_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Version"
+          },
+          "low_confidence": {
+            "title": "Low Confidence",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "patient_first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient First Name"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "retrieval_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Confidence"
+          },
+          "review_count": {
+            "title": "Review Count",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/KbSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "spoken": {
+            "title": "Spoken",
+            "type": "boolean"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "unanswered": {
+            "title": "Unanswered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "turn_id",
+          "created_at",
+          "patient_first_name",
+          "question",
+          "spoken",
+          "answer",
+          "intent",
+          "model",
+          "model_version",
+          "escalated",
+          "unanswered",
+          "low_confidence",
+          "retrieval_confidence",
+          "kb_version",
+          "sources",
+          "current_review",
+          "review_count"
+        ],
+        "title": "ReviewableTurn",
+        "type": "object"
+      },
+      "RiskInfo": {
+        "description": "The latest survey-based risk assessment (information only; moves no limit).\n\nAttributes:\n    tier: ``low``, ``moderate`` or ``high``.\n    score: Model probability, 0 to 1.\n    flagged: At or above the model's decision threshold.\n    model_version: Model that scored it.\n    assessed_at: When it was scored.",
+        "properties": {
+          "assessed_at": {
+            "format": "date-time",
+            "title": "Assessed At",
+            "type": "string"
+          },
+          "flagged": {
+            "title": "Flagged",
+            "type": "boolean"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "tier": {
+            "enum": [
+              "low",
+              "moderate",
+              "high"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier",
+          "score",
+          "flagged",
+          "model_version",
+          "assessed_at"
+        ],
+        "title": "RiskInfo",
+        "type": "object"
+      },
+      "SourceTurn": {
+        "description": "The conversation turn a draft was proposed from.\n\nAttributes:\n    turn_id: ``conversation_turns.id``.\n    asked_at: When the patient asked.\n    question: What the patient wrote or said.\n    answer: What the advisor replied.",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "asked_at": {
+            "format": "date-time",
+            "title": "Asked At",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "asked_at",
+          "question",
+          "answer"
+        ],
+        "title": "SourceTurn",
+        "type": "object"
+      },
+      "SubscribeOut": {
+        "description": "Result of a subscribe call.",
+        "properties": {
+          "subscription_id": {
+            "format": "uuid",
+            "title": "Subscription Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subscription_id"
+        ],
+        "title": "SubscribeOut",
+        "type": "object"
+      },
+      "SubscriptionIn": {
+        "description": "Body of ``POST /api/push/subscribe`` (``PushSubscription.toJSON()``).\n\n``expirationTime`` is accepted and ignored: Chrome and Firefox send ``null``, and\nan expired subscription is detected anyway when the push service answers 404/410.",
+        "properties": {
+          "endpoint": {
+            "maxLength": 2048,
+            "pattern": "^https://\\S+$",
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "expirationTime": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expirationtime"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/SubscriptionKeys"
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ],
+        "title": "SubscriptionIn",
+        "type": "object"
+      },
+      "SubscriptionKeys": {
+        "description": "``keys`` of ``PushSubscription.toJSON()``.",
+        "properties": {
+          "auth": {
+            "maxLength": 32,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9_-]+={0,2}$",
+            "title": "Auth",
+            "type": "string"
+          },
+          "p256dh": {
+            "maxLength": 100,
+            "minLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+={0,2}$",
+            "title": "P256Dh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "p256dh",
+          "auth"
+        ],
+        "title": "SubscriptionKeys",
+        "type": "object"
+      },
+      "ThresholdStep": {
+        "description": "One stored threshold with every component that produced it (R2).\n\n``value = clamp(base + demo_adj + risk_adj + trend_adj, hard_min, hard_max)``.\n\nAttributes:\n    id: ``thresholds_history.id``.\n    limit_kind: Which limit.\n    direction: ``upper`` or ``lower``.\n    effective_from: When it took effect (the step of the chart line).\n    base_mg_dl: Cited published value.\n    demo_adj_mg_dl: Bounded age/sex adjustment.\n    risk_adj_mg_dl: Risk-tier adjustment (0 since commit 6f54669: the survey\n        score never moves a limit).\n    trend_adj_mg_dl: Bounded trend revision.\n    unclamped_mg_dl: The sum before clamping.\n    hard_min_mg_dl: Clamp floor.\n    hard_max_mg_dl: Clamp ceiling.\n    value_mg_dl: The limit.\n    reason: Why this row was written.\n    source_citation: Where the base and clamp come from.\n    model_version: Engine/model version that wrote it.",
+        "properties": {
+          "base_mg_dl": {
+            "title": "Base Mg Dl",
+            "type": "number"
+          },
+          "demo_adj_mg_dl": {
+            "title": "Demo Adj Mg Dl",
+            "type": "number"
+          },
+          "direction": {
+            "enum": [
+              "upper",
+              "lower"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "effective_from": {
+            "format": "date-time",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "hard_max_mg_dl": {
+            "title": "Hard Max Mg Dl",
+            "type": "number"
+          },
+          "hard_min_mg_dl": {
+            "title": "Hard Min Mg Dl",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limit_kind": {
+            "enum": [
+              "fasting_high",
+              "post_meal_high",
+              "low"
+            ],
+            "title": "Limit Kind",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "initial",
+              "batch",
+              "trend_revision",
+              "profile_change"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "risk_adj_mg_dl": {
+            "title": "Risk Adj Mg Dl",
+            "type": "number"
+          },
+          "source_citation": {
+            "title": "Source Citation",
+            "type": "string"
+          },
+          "trend_adj_mg_dl": {
+            "title": "Trend Adj Mg Dl",
+            "type": "number"
+          },
+          "unclamped_mg_dl": {
+            "title": "Unclamped Mg Dl",
+            "type": "number"
+          },
+          "value_mg_dl": {
+            "title": "Value Mg Dl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "limit_kind",
+          "direction",
+          "effective_from",
+          "base_mg_dl",
+          "demo_adj_mg_dl",
+          "risk_adj_mg_dl",
+          "trend_adj_mg_dl",
+          "unclamped_mg_dl",
+          "hard_min_mg_dl",
+          "hard_max_mg_dl",
+          "value_mg_dl",
+          "reason",
+          "source_citation",
+          "model_version"
+        ],
+        "title": "ThresholdStep",
+        "type": "object"
+      },
+      "TierCutoffs": {
+        "description": "Probability boundaries for the low / moderate / high risk tiers.\n\nAttributes:\n    moderate: Probabilities at or above this are at least ``moderate``.\n    high: Probabilities at or above this are ``high``.",
+        "properties": {
+          "high": {
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "High",
+            "type": "number"
+          },
+          "moderate": {
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Moderate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "moderate",
+          "high"
+        ],
+        "title": "TierCutoffs",
+        "type": "object"
+      },
+      "TimeWindow": {
+        "description": "A half-open time range ``[since, until)``.\n\nAttributes:\n    since: Inclusive start.\n    until: Exclusive end.",
+        "properties": {
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until"
+        ],
+        "title": "TimeWindow",
+        "type": "object"
+      },
+      "TurnPage": {
+        "description": "One page of the review list.\n\nAttributes:\n    items: Turns, newest first.\n    next_cursor: Pass back as ``cursor`` for the next page; ``None`` on the last.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewableTurn"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "TurnPage",
+        "type": "object"
+      },
+      "UnsubscribeIn": {
+        "description": "Body of ``DELETE /api/push/subscribe``.",
+        "properties": {
+          "endpoint": {
+            "maxLength": 2048,
+            "pattern": "^https://\\S+$",
+            "title": "Endpoint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "endpoint"
+        ],
+        "title": "UnsubscribeIn",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VerdictCounts": {
+        "description": "Current verdicts (latest review per turn), each out of the reviewed answers.\n\nAttributes:\n    correct: Marked correct.\n    incorrect: Marked incorrect.\n    unsafe: Marked unsafe.\n    needs_kb_update: Marked as needing a KB change.",
+        "properties": {
+          "correct": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "incorrect": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "needs_kb_update": {
+            "$ref": "#/components/schemas/CountRate"
+          },
+          "unsafe": {
+            "$ref": "#/components/schemas/CountRate"
+          }
+        },
+        "required": [
+          "correct",
+          "incorrect",
+          "unsafe",
+          "needs_kb_update"
+        ],
+        "title": "VerdictCounts",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Virtual Diabetes Advisor",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/admin/batch-run": {
+      "post": {
+        "description": "Run the batch update now, then dispatch new advisories, and return the batch summary.\n\nRuns synchronously (FastAPI executes plain ``def`` routes in a worker thread). A\nrun with failed users still returns 200; check ``status`` and ``failed_user_ids``.\nThe dispatch outcome is logged (``POST /admin/dispatch-run`` returns it).\n\nReturns:\n    Counts and status of the run.\n\nRaises:\n    HTTPException: 409 if a batch update is already in progress.",
+        "operationId": "trigger_batch_run_admin_batch_run_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Admin-Api-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Batch Run",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/dispatch-run": {
+      "post": {
+        "description": "Deliver queued advisories now (R3) and return what happened.\n\nReturns:\n    Counts of sent, failed, expired, suppressed and blocked advisories.\n\nRaises:\n    HTTPException: 503 if Web Push is not configured, 409 if a dispatch is\n        already running in this process.",
+        "operationId": "trigger_dispatch_run_admin_dispatch_run_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Admin-Api-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Dispatch Run",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/kb-upgrade-run": {
+      "post": {
+        "description": "Run the knowledge-base upgrade job now (R5) and return what it proposed.\n\nIt only inserts empty DRAFT entries for practitioners to write and approve; it\nnever publishes anything. A run that failed still returns 200 with ``status``\n``failed`` (the error is in ``batch_runs`` and the log).\n\nReturns:\n    Counts, status and the ids of the new drafts.\n\nRaises:\n    HTTPException: 409 if a KB upgrade run is already in progress.",
+        "operationId": "trigger_kb_upgrade_run_admin_kb_upgrade_run_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Admin-Api-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbUpgradeSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Kb Upgrade Run",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/retrain-run": {
+      "post": {
+        "description": "Retrain the risk model now (R5) and return the promote/keep decision.\n\nRuns synchronously: a full training takes a few minutes (``sample`` makes it\nquicker). The candidate replaces the live model only if its test recall and\nprecision hold up; thresholds are never touched. A run whose training failed\nstill returns 200 with ``status`` ``failed`` and decision ``kept``.\n\nArgs:\n    dry_run: Train and report, never promote.\n    sample: Share of rows to train on, e.g. ``0.2``.\n\nReturns:\n    Status, decision, old and new metrics.\n\nRaises:\n    HTTPException: 503 if the BRFSS CSVs are missing, 409 if a retrain is\n        already in progress.",
+        "operationId": "trigger_retrain_run_admin_retrain_run_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sample",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sample"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Admin-Api-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetrainSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger Retrain Run",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/advisories/{advisory_id}": {
+      "get": {
+        "description": "Return the signed-in patient's advisory and record that they opened it.\n\nArgs:\n    advisory_id: Advisory to show.\n    auth_user: Verified Supabase user.\n    session_factory: Database sessions.\n    audio_store: Signs the voice recording URL.\n    settings: Supplies the signed-URL lifetime.\n\nReturns:\n    The advisory with a short-lived audio URL (``None`` if there is no recording\n    or signing failed; the page then uses the browser's speech synthesis).\n\nRaises:\n    HTTPException: 401 without a session, 403 if the login is not linked or the\n        advisory belongs to another patient, 404 if it does not exist.",
+        "operationId": "get_advisory_api_advisories__advisory_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advisory_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advisory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvisoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Advisory",
+        "tags": [
+          "advisories"
+        ]
+      }
+    },
+    "/api/app-config": {
+      "get": {
+        "description": "Return the public configuration for the patient web app.\n\nIt is the first call both pages make, so it also checks (cached, bounded by the\nconnect timeout) that the database is reachable: the page then shows the reason\ninstead of every later call hanging.\n\nArgs:\n    settings: Application settings.\n    db_health: Cached database reachability check.\n\nReturns:\n    Supabase URL, publishable key and VAPID public key.\n\nRaises:\n    HTTPException: 503 if ``SUPABASE_ANON_KEY`` is not set, or if the database is\n        unreachable (detail \"database unreachable (port 5432 blocked?)\").",
+        "operationId": "app_config_api_app_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppConfigOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "App Config",
+        "tags": [
+          "patient-app"
+        ]
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "description": "Handle one patient message (typed or spoken) and audit the turn.\n\nArgs:\n    background: Post-commit tasks (notifications, advisory dispatch).\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings.\n    kb_cache: TF-IDF index cache.\n    rephraser: Optional LLM rephraser.\n    transcriber: Speech-to-text.\n    synthesizer: Text-to-speech for spoken replies.\n    audio_store: Private audio storage.\n    notifier: Push + Realtime.\n    text: Typed message.\n    audio: Recorded voice message.\n    message_id: Client-generated id (retries return the stored reply).\n    request_practitioner: The \"Talk to a doctor\" button was used.\n    advisory_id: Advisory the button was on.\n\nReturns:\n    The reply.\n\nRaises:\n    HTTPException: 401/403 without a linked patient login, 413/415/422 for bad\n        audio, 422 for an empty message, 503 if transcription is unavailable.",
+        "operationId": "post_chat_api_chat_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_chat_api_chat_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatReplyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Chat",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/chat/messages": {
+      "get": {
+        "description": "Return the signed-in patient's recent conversation.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (URL lifetime).\n    audio_store: Private audio storage (spoken replies).\n\nReturns:\n    Messages (own turns only) and the live handoff.\n\nRaises:\n    HTTPException: 401/403 without a linked patient login.",
+        "operationId": "get_messages_api_chat_messages_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Messages",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/dashboard/alerts": {
+      "get": {
+        "description": "Advisories of the caller's patients, newest reading first.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    limit: Page size.\n    cursor: ``next_cursor`` of the previous page.\n    state: Band state.\n    escalated: Escalated or not.\n    delivery_status: Delivery state.\n    since: Readings measured at or after this.\n    until: Readings measured before this.\n\nReturns:\n    One page.\n\nRaises:\n    HTTPException: 401, 403, or 422 for a bad filter, cursor or range.",
+        "operationId": "get_alerts_api_dashboard_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pre_breach_high",
+                    "pre_breach_low",
+                    "breach_high",
+                    "breach_low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "escalated",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Escalated"
+            }
+          },
+          {
+            "in": "query",
+            "name": "delivery_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "sent",
+                    "opened",
+                    "failed",
+                    "expired",
+                    "suppressed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Delivery Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Alerts",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/dashboard/overview": {
+      "get": {
+        "description": "KPI tiles for the caller's patients.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (clinic timezone).\n    since: Inclusive start of every count (default: see module docstring).\n    until: Exclusive end (default: now).\n\nReturns:\n    The counts, with the windows they cover.\n\nRaises:\n    HTTPException: 401 without a login, 403 without a practitioner login, 422 for a\n        naive timestamp or ``since`` not before ``until``.",
+        "operationId": "get_overview_api_dashboard_overview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Overview",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/dashboard/patients": {
+      "get": {
+        "description": "One row per visible patient, by id.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (pre-breach band).\n    limit: Page size.\n    cursor: ``next_cursor`` of the previous page.\n    band_state: Band state of the last reading.\n    breach_7d: Has (or has not) a breach in the last 7 days.\n    live_handoff: Has (or has not) an open or claimed handoff.\n\nReturns:\n    One page.\n\nRaises:\n    HTTPException: 401, 403, or 422 for a bad filter or cursor.",
+        "operationId": "get_patients_api_dashboard_patients_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "band_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "normal",
+                    "pre_breach_high",
+                    "pre_breach_low",
+                    "breach_high",
+                    "breach_low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Band State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "breach_7d",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Breach 7D"
+            }
+          },
+          {
+            "in": "query",
+            "name": "live_handoff",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Live Handoff"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Patients",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/dashboard/patients/{user_id}": {
+      "get": {
+        "description": "Chart data for one patient.\n\nArgs:\n    user_id: Patient.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (pre-breach band).\n    days: Days of readings.\n\nReturns:\n    The detail.\n\nRaises:\n    HTTPException: 401, 403, 404 when the patient is unknown or not visible, 422\n        for ``days`` out of range.",
+        "operationId": "get_patient_api_dashboard_patients__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Patient",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/me": {
+      "get": {
+        "description": "Tell the web app whether this login is a patient or a practitioner.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n\nReturns:\n    The role.\n\nRaises:\n    HTTPException: 403 if the login is linked to neither.",
+        "operationId": "me_api_me_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/me/health": {
+      "get": {
+        "description": "Return the signed-in patient's current limits, recent readings and alerts.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (pre-breach band).\n    days: Days of readings.\n\nReturns:\n    The patient's own view.\n\nRaises:\n    HTTPException: 401 without a login, 403 if the login is not a patient, 422 for\n        ``days`` out of range.",
+        "operationId": "get_own_health_api_me_health_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnHealth"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Own Health",
+        "tags": [
+          "patient-app"
+        ]
+      }
+    },
+    "/api/practitioner/audit/summary": {
+      "get": {
+        "description": "Count advisor replies to the caller's patients, overall and per KB version.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    since: Inclusive start (default: 30 days before ``until``).\n    until: Exclusive end (default: now, on the database clock).\n\nReturns:\n    Counts with rates, and the KB status.\n\nRaises:\n    HTTPException: 401 without a valid login, 403 without a practitioner login,\n        422 for a naive timestamp or ``since`` not before ``until``.",
+        "operationId": "audit_summary_api_practitioner_audit_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Audit Summary",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/practitioner/handoffs": {
+      "get": {
+        "description": "List handoffs of the practitioner's assigned patients.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n\nReturns:\n    Live handoffs first, then recently resolved ones.\n\nRaises:\n    HTTPException: 401/403 without a linked practitioner login.",
+        "operationId": "list_handoffs_api_practitioner_handoffs_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HandoffSummary"
+                  },
+                  "title": "Response List Handoffs Api Practitioner Handoffs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Handoffs",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/practitioner/handoffs/{handoff_id}": {
+      "get": {
+        "description": "Return one handoff with the patient's recent conversation.\n\nArgs:\n    handoff_id: Handoff.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n\nReturns:\n    The handoff and messages.\n\nRaises:\n    HTTPException: 403 without a practitioner login, 404 if the handoff does not\n        exist or its patient is not assigned to this practitioner.",
+        "operationId": "get_handoff_api_practitioner_handoffs__handoff_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handoff_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Handoff Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Handoff",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/practitioner/handoffs/{handoff_id}/claim": {
+      "post": {
+        "description": "Claim a handoff (``open -> assigned``): the patient's messages now come to you.\n\nIdempotent for the practitioner who already claimed it.\n\nArgs:\n    handoff_id: Handoff.\n    background: Post-commit Realtime ping to the patient (status changes).\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    notifier: Realtime.\n\nReturns:\n    The updated handoff.\n\nRaises:\n    HTTPException: 403 without a practitioner login, 404 if not theirs, 409 if\n        resolved or claimed by another practitioner.",
+        "operationId": "claim_api_practitioner_handoffs__handoff_id__claim_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handoff_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Handoff Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/practitioner/handoffs/{handoff_id}/messages": {
+      "post": {
+        "description": "Send a practitioner reply to the patient (first reply: ``open -> assigned``).\n\nArgs:\n    handoff_id: Handoff.\n    body: Reply text.\n    background: Post-commit notification.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    notifier: Push + Realtime.\n\nReturns:\n    The stored reply.\n\nRaises:\n    HTTPException: 403 without a practitioner login, 404 if not theirs, 409 if the\n        handoff is resolved.",
+        "operationId": "reply_to_handoff_api_practitioner_handoffs__handoff_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handoff_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Handoff Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PractitionerMessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reply To Handoff",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/practitioner/handoffs/{handoff_id}/resolve": {
+      "post": {
+        "description": "Resolve a handoff (``open``/``assigned`` -> ``resolved``).\n\nArgs:\n    handoff_id: Handoff.\n    body: Optional resolution note.\n    background: Post-commit Realtime ping to the patient.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    notifier: Realtime.\n\nReturns:\n    The updated handoff.\n\nRaises:\n    HTTPException: 403 without a practitioner login, 404 if not theirs, 409 if\n        already resolved.",
+        "operationId": "resolve_api_practitioner_handoffs__handoff_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handoff_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Handoff Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/practitioner/kb": {
+      "get": {
+        "description": "List drafts awaiting approval and the entries being served.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n\nReturns:\n    Drafts (newest first) and approved entries (by title).\n\nRaises:\n    HTTPException: 401 without a valid login, 403 without a practitioner login.",
+        "operationId": "get_kb_api_practitioner_kb_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbListing"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Kb",
+        "tags": [
+          "knowledge base"
+        ]
+      }
+    },
+    "/api/practitioner/kb/{entry_id}": {
+      "put": {
+        "description": "Save a draft (only drafts may be edited).\n\nArgs:\n    entry_id: The draft.\n    body: New title, body and citation.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n\nReturns:\n    The saved draft.\n\nRaises:\n    HTTPException: 401/403 as above, 404 for an unknown id, 409 when the entry\n        is approved or retired, 422 for a bad body.",
+        "operationId": "put_draft_api_practitioner_kb__entry_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KbDraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Draft",
+        "tags": [
+          "knowledge base"
+        ]
+      }
+    },
+    "/api/practitioner/kb/{entry_id}/approve": {
+      "post": {
+        "description": "Approve a draft: it is served to patients from the next question on.\n\nArgs:\n    entry_id: The draft.\n    auth_user: Verified login (recorded as ``approved_by``).\n    session_factory: Database sessions.\n\nReturns:\n    The approved entry with its new ``kb_version``.\n\nRaises:\n    HTTPException: 401/403 as above, 404 for an unknown id, 409 when the entry\n        is not a draft or its superseded entry changed, 422 without a body or a\n        source citation.",
+        "operationId": "approve_api_practitioner_kb__entry_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve",
+        "tags": [
+          "knowledge base"
+        ]
+      }
+    },
+    "/api/practitioner/kb/{entry_id}/edit": {
+      "post": {
+        "description": "Open a draft that supersedes an approved entry, starting from its text.\n\nArgs:\n    entry_id: The approved entry.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    response: Set to 200 when a draft was already open.\n\nReturns:\n    The draft (``supersedes_id`` = ``entry_id``).\n\nRaises:\n    HTTPException: 401/403 as above, 404 for an unknown id, 409 when the entry\n        is not approved.",
+        "operationId": "edit_approved_api_practitioner_kb__entry_id__edit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Approved",
+        "tags": [
+          "knowledge base"
+        ]
+      }
+    },
+    "/api/practitioner/kb/{entry_id}/reject": {
+      "post": {
+        "description": "Reject a draft (retired, kept for the record, never served).\n\nArgs:\n    entry_id: The draft.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n\nReturns:\n    The retired row.\n\nRaises:\n    HTTPException: 401/403 as above, 404 for an unknown id, 409 when the entry\n        is not a draft.",
+        "operationId": "reject_api_practitioner_kb__entry_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KbEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject",
+        "tags": [
+          "knowledge base"
+        ]
+      }
+    },
+    "/api/practitioner/model-card": {
+      "get": {
+        "description": "Describe the live risk model honestly (R5).\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    models: Folder of the live model.\n\nReturns:\n    The card and the last retrain runs.\n\nRaises:\n    HTTPException: 401 without a valid login, 403 without a practitioner login,\n        503 when no model is installed, 500 when its metadata is invalid (logged).",
+        "operationId": "model_card_api_practitioner_model_card_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Card",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/practitioner/turns": {
+      "get": {
+        "description": "List advisor replies to the practitioner's patients for review.\n\nArgs:\n    auth_user: Verified login.\n    session_factory: Database sessions.\n    settings: Settings (low-confidence cutoff).\n    review_filter: Which turns.\n    limit: Page size.\n    cursor: ``next_cursor`` from the previous page.\n\nReturns:\n    One page, newest first.\n\nRaises:\n    HTTPException: 401 without a valid login, 403 without a practitioner login,\n        422 for an unknown filter or a malformed cursor.",
+        "operationId": "list_turns_api_practitioner_turns_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "unreviewed",
+                "escalated",
+                "low_confidence",
+                "unanswered"
+              ],
+              "title": "Filter",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Turns",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/practitioner/turns/{turn_id}/review": {
+      "post": {
+        "description": "Record a verdict on an advisor reply (append-only; the latest is current).\n\nArgs:\n    turn_id: Turn being reviewed.\n    body: Verdict and note.\n    auth_user: Verified login.\n    session_factory: Database sessions.\n\nReturns:\n    The stored review.\n\nRaises:\n    HTTPException: 401 without a valid login, 403 without a practitioner login,\n        404 if the turn does not exist, is not an advisor reply, or belongs to a\n        patient this practitioner may not see, 422 for a bad body (including a\n        missing note).",
+        "operationId": "review_turn_api_practitioner_turns__turn_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Turn",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/push/public-key": {
+      "get": {
+        "description": "Return the VAPID public key.\n\nArgs:\n    settings: Application settings.\n\nReturns:\n    The key.\n\nRaises:\n    HTTPException: 503 if the VAPID keys are not configured.",
+        "operationId": "public_key_api_push_public_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicKeyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Public Key",
+        "tags": [
+          "push"
+        ]
+      }
+    },
+    "/api/push/subscribe": {
+      "delete": {
+        "description": "Revoke this browser's subscription. Idempotent: unknown endpoints also get 204.\n\nArgs:\n    body: The endpoint to revoke.\n    auth_user: Verified Supabase user.\n    session_factory: Database sessions.\n\nReturns:\n    An empty 204 response.\n\nRaises:\n    HTTPException: 401 without a valid session, 403 if the login is not linked.",
+        "operationId": "unsubscribe_api_push_subscribe_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnsubscribeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "push"
+        ]
+      },
+      "post": {
+        "description": "Save this browser's push subscription for the signed-in patient.\n\nArgs:\n    body: The browser's subscription.\n    auth_user: Verified Supabase user.\n    session_factory: Database sessions.\n    user_agent: Browser user agent (stored for the dashboard, truncated).\n\nReturns:\n    The subscription id.\n\nRaises:\n    HTTPException: 401 without a valid session, 403 if the login is not linked.",
+        "operationId": "subscribe_api_push_subscribe_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User-Agent"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscribeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Subscribe",
+        "tags": [
+          "push"
+        ]
+      }
+    }
+  }
+}
