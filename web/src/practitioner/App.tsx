@@ -1,12 +1,13 @@
 /**
  * Practitioner app routes and the sign-in gate. Patients who sign in here are sent to
- * the patient app. Opening /app/practitioner/ goes back to the section last used
- * (deep links always win).
+ * the patient app. Opening /app/practitioner/ goes back to the sidebar section last
+ * used (deep links always win).
  */
 import { useEffect, useRef, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 
 import { Layout } from "@/practitioner/Layout";
+import { SECTIONS, sectionOf } from "@/practitioner/nav";
 import { AlertsPage } from "@/practitioner/pages/AlertsPage";
 import { AuditPage } from "@/practitioner/pages/AuditPage";
 import { HandoffsPage } from "@/practitioner/pages/HandoffsPage";
@@ -23,22 +24,26 @@ import { ThemeToggle } from "@/shared/theme";
 
 const LAST_PATH = "practitioner:last-path";
 
-/** Remembers the current path, and on a fresh load of "/" returns to the last one. */
-function useLastPath() {
+/**
+ * Remembers the sidebar section in use (not a patient, tab or filter), and on a
+ * fresh load of "/" returns to it.
+ */
+function useLastSection() {
   const location = useLocation();
   const navigate = useNavigate();
   const first = useRef(true);
   useEffect(() => {
-    const here = `${location.pathname}${location.search}`;
+    const section = sectionOf(location.pathname).to;
     if (first.current) {
       first.current = false;
       const last = load<string>(LAST_PATH, "/");
-      if (location.pathname === "/" && !location.search && last !== "/" && last.startsWith("/")) {
+      const known = SECTIONS.some((s) => s.to === last);
+      if (location.pathname === "/" && !location.search && last !== "/" && known) {
         void navigate(last, { replace: true });
         return;
       }
     }
-    save(LAST_PATH, here);
+    save(LAST_PATH, section);
   }, [location.pathname, location.search, navigate]);
 }
 
@@ -83,7 +88,7 @@ function Gate({ children }: { children: ReactNode }) {
   const { state, retry } = useAuth();
   const signedIn = state.status === "signed-in";
   const me = useMe(signedIn);
-  useLastPath();
+  useLastSection();
 
   useEffect(() => {
     if (me.data?.role === "patient") location.replace("/app/");

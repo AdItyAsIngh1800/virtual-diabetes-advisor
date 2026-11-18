@@ -25,11 +25,12 @@ import { useStored } from "@/shared/lib/storage";
 import { Button } from "@/shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
+// [tab, label, short label for phones]
 const TABS = [
-  ["readings", "Readings"],
-  ["limits", "Limits"],
-  ["alerts", "Alerts"],
-  ["conversation", "Conversation"],
+  ["readings", "Readings", "Readings"],
+  ["limits", "Limits", "Limits"],
+  ["alerts", "Alerts", "Alerts"],
+  ["conversation", "Conversation", "Chat"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 const isTab = (v: unknown): v is Tab => TABS.some(([t]) => t === v);
@@ -39,9 +40,9 @@ const isDays = (v: unknown): v is number => DAYS.includes(v as 7);
 export function PatientDetailPage() {
   const { id = "", tab: tabParam } = useParams();
   const navigate = useNavigate();
-  const [lastTab, setLastTab] = useStored<Tab>("practitioner:patient-tab", "readings", isTab);
   const [days, setDays] = useStored<number>("practitioner:patient-days", 30, isDays);
-  const tab: Tab = isTab(tabParam) ? tabParam : lastTab;
+  // Each patient opens on Readings; a deep link (/patients/<id>/limits) opens its tab.
+  const tab: Tab = isTab(tabParam) ? tabParam : "readings";
   const valid = UUID_RE.test(id);
   const detail = usePatient(id, days);
 
@@ -51,7 +52,6 @@ export function PatientDetailPage() {
 
   const select = (t: string) => {
     if (!isTab(t)) return;
-    setLastTab(t);
     void navigate(`/patients/${id}/${t}`, { replace: true });
   };
   const d = detail.data;
@@ -85,10 +85,12 @@ export function PatientDetailPage() {
       {detail.isError && <ErrorState message={detail.error.message} onRetry={() => void detail.refetch()} />}
       {d && (
         <Tabs value={tab} onValueChange={select}>
-          <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
-            {TABS.map(([t, label]) => (
-              <TabsTrigger key={t} value={t} className="min-h-10 px-4">
-                {label}
+          {/* Four equal columns: every tab fits at 390 px without sideways scroll. */}
+          <TabsList className="mb-4 grid h-auto w-full grid-cols-4 sm:inline-flex sm:w-auto">
+            {TABS.map(([t, label, short]) => (
+              <TabsTrigger key={t} value={t} className="min-h-10 min-w-0 px-1 sm:px-4">
+                <span className="sm:hidden">{short}</span>
+                <span className="hidden sm:inline">{label}</span>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -136,7 +138,12 @@ function ReadingsTab({ d }: { d: S["PatientDetail"] }) {
                 <Td num>{mgdl(r.value_mg_dl)}</Td>
                 <Td>
                   <Tag tone={bandTone(r.band_state)}>{bandLabel(r.band_state)}</Tag>
-                  {r.before_first_limit && <span className="ml-2 text-sm text-muted-foreground">judged by the first limit</span>}
+                  {r.before_first_limit && (
+                    <>
+                      {" "}
+                      <span className="mt-1 block text-sm text-muted-foreground">Judged by the first limit</span>
+                    </>
+                  )}
                 </Td>
               </tr>
             ))}
