@@ -1,0 +1,601 @@
+patient_key,scenario,diabetes_status,day,context,value_mg_dl,high_limit_mg_dl,low_limit_mg_dl,band_state
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,0,fasting,111.5,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,1,fasting,112.7,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,2,fasting,115.1,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,3,fasting,112.5,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,4,fasting,108.8,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,5,fasting,114.1,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,6,fasting,115.5,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,7,fasting,115.7,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,8,fasting,113.2,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,9,fasting,114.3,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,10,fasting,116.5,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,11,fasting,117.8,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,12,fasting,116.3,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,13,fasting,119.5,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,14,fasting,117.4,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,15,fasting,116.0,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,16,fasting,116.0,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,17,fasting,120.1,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,18,fasting,118.4,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,19,fasting,117.1,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,20,fasting,119.4,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,21,fasting,118.9,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,22,fasting,116.8,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,23,fasting,117.0,126.7,70.0,normal
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,24,fasting,120.7,126.7,70.0,pre_breach_high
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,25,fasting,125.4,126.7,70.0,pre_breach_high
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,26,fasting,122.2,126.7,70.0,pre_breach_high
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,27,fasting,122.7,126.7,70.0,pre_breach_high
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,28,fasting,123.7,126.7,70.0,pre_breach_high
+meera,fasting drifts up into the pre-breach band (~121-127 vs limit 130),diabetes,29,fasting,120.9,126.7,70.0,pre_breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,0,fasting,120.0,122.2,70.0,pre_breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,1,fasting,110.2,122.2,70.0,normal
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,2,fasting,115.8,122.2,70.0,normal
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,3,fasting,124.4,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,4,fasting,127.3,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,5,fasting,114.3,122.2,70.0,normal
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,6,fasting,122.2,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,7,fasting,120.3,122.2,70.0,pre_breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,8,fasting,128.5,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,9,fasting,122.1,122.2,70.0,pre_breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,10,fasting,130.8,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,11,fasting,138.6,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,12,fasting,136.7,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,13,fasting,136.9,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,14,fasting,135.2,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,15,fasting,132.2,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,16,fasting,142.5,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,17,fasting,140.4,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,18,fasting,150.3,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,19,fasting,144.1,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,20,fasting,147.5,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,21,fasting,146.3,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,22,fasting,153.7,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,23,fasting,155.3,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,24,fasting,145.8,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,25,fasting,153.4,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,26,fasting,153.9,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,27,fasting,160.1,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,28,fasting,156.1,122.2,70.0,breach_high
+rohan,significant rising trend; trend revision tightens both upper limits,diabetes,29,fasting,153.8,122.2,70.0,breach_high
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,0,fasting,102.4,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,1,fasting,111.5,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,2,fasting,98.3,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,3,fasting,99.2,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,4,fasting,103.6,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,5,fasting,102.4,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,6,fasting,106.2,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,7,fasting,107.9,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,8,fasting,100.5,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,9,fasting,102.0,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,10,fasting,99.5,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,11,fasting,104.9,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,12,fasting,97.1,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,13,fasting,97.6,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,14,fasting,93.0,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,15,fasting,100.6,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,16,fasting,105.0,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,17,fasting,98.9,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,18,fasting,52.0,130.0,70.0,breach_low
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,19,fasting,89.7,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,20,fasting,99.0,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,21,fasting,106.2,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,22,fasting,94.7,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,23,fasting,100.6,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,24,fasting,93.1,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,25,fasting,48.5,130.0,70.0,breach_low
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,26,fasting,103.8,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,27,fasting,97.6,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,28,fasting,98.4,130.0,70.0,normal
+priya,"two fasting readings below 54 mg/dL (Level 2 hypoglycaemia, escalated)",diabetes,29,fasting,91.9,130.0,70.0,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,0,fasting,73.3,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,1,fasting,75.7,130.0,71.1,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,2,fasting,73.3,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,3,fasting,76.0,130.0,71.1,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,4,fasting,72.8,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,5,fasting,75.0,130.0,71.1,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,6,fasting,75.4,130.0,71.1,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,7,fasting,75.6,130.0,71.1,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,8,fasting,75.7,130.0,71.1,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,9,fasting,74.4,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,10,fasting,74.6,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,11,fasting,73.7,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,12,fasting,74.2,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,13,fasting,71.1,130.0,71.1,breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,14,fasting,73.9,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,15,fasting,71.5,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,16,fasting,73.4,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,17,fasting,73.4,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,18,fasting,74.4,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,19,fasting,74.7,130.0,71.1,normal
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,20,fasting,72.0,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,21,fasting,71.7,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,22,fasting,72.0,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,23,fasting,73.6,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,24,fasting,72.3,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,25,fasting,72.0,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,26,fasting,72.3,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,27,fasting,74.2,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,28,fasting,71.7,130.0,71.1,pre_breach_low
+kavya,"fasting slides toward the low limit (pre-breach low, some breaches)",diabetes,29,fasting,70.6,130.0,71.1,breach_low
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,0,fasting,121.1,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,1,fasting,119.6,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,2,fasting,119.8,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,3,fasting,116.4,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,4,fasting,126.3,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,5,fasting,124.4,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,6,fasting,118.9,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,7,fasting,126.9,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,8,fasting,122.1,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,9,fasting,127.8,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,10,fasting,124.5,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,11,fasting,121.9,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,12,fasting,127.0,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,13,fasting,126.1,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,14,fasting,122.0,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,15,fasting,126.0,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,16,fasting,127.4,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,17,fasting,127.3,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,18,fasting,130.3,130.0,70.0,breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,19,fasting,127.4,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,20,fasting,122.9,130.0,70.0,normal
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,21,fasting,125.9,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,22,fasting,124.1,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,23,fasting,125.1,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,24,fasting,124.8,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,25,fasting,131.1,130.0,70.0,breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,26,fasting,130.1,130.0,70.0,breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,27,fasting,123.8,130.0,70.0,pre_breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,28,fasting,130.1,130.0,70.0,breach_high
+imran,"post-meal above 180 (breach high), fasting near 130",diabetes,29,fasting,120.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,0,fasting,102.1,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,1,fasting,108.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,2,fasting,110.9,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,3,fasting,99.9,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,4,fasting,109.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,5,fasting,121.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,6,fasting,114.1,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,7,fasting,113.6,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,8,fasting,103.3,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,9,fasting,116.0,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,10,fasting,105.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,11,fasting,105.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,12,fasting,105.2,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,13,fasting,111.9,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,14,fasting,108.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,15,fasting,117.7,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,16,fasting,104.1,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,17,fasting,113.1,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,18,fasting,109.1,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,19,fasting,108.6,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,20,fasting,108.4,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,21,fasting,106.7,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,22,fasting,100.2,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,23,fasting,115.6,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,24,fasting,105.3,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,25,fasting,109.1,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,26,fasting,109.5,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,27,fasting,106.8,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,28,fasting,105.9,130.0,70.0,normal
+nandini,post-meal steady in the pre-breach band (171-180),diabetes,29,fasting,104.9,130.0,70.0,normal
+aarav,well controlled,diabetes,0,fasting,105.2,130.0,70.0,normal
+aarav,well controlled,diabetes,1,fasting,113.0,130.0,70.0,normal
+aarav,well controlled,diabetes,2,fasting,107.8,130.0,70.0,normal
+aarav,well controlled,diabetes,3,fasting,107.7,130.0,70.0,normal
+aarav,well controlled,diabetes,4,fasting,105.2,130.0,70.0,normal
+aarav,well controlled,diabetes,5,fasting,110.7,130.0,70.0,normal
+aarav,well controlled,diabetes,6,fasting,91.5,130.0,70.0,normal
+aarav,well controlled,diabetes,7,fasting,97.8,130.0,70.0,normal
+aarav,well controlled,diabetes,8,fasting,107.7,130.0,70.0,normal
+aarav,well controlled,diabetes,9,fasting,104.0,130.0,70.0,normal
+aarav,well controlled,diabetes,10,fasting,108.7,130.0,70.0,normal
+aarav,well controlled,diabetes,11,fasting,101.8,130.0,70.0,normal
+aarav,well controlled,diabetes,12,fasting,105.5,130.0,70.0,normal
+aarav,well controlled,diabetes,13,fasting,108.8,130.0,70.0,normal
+aarav,well controlled,diabetes,14,fasting,98.0,130.0,70.0,normal
+aarav,well controlled,diabetes,15,fasting,108.3,130.0,70.0,normal
+aarav,well controlled,diabetes,16,fasting,103.8,130.0,70.0,normal
+aarav,well controlled,diabetes,17,fasting,106.3,130.0,70.0,normal
+aarav,well controlled,diabetes,18,fasting,101.7,130.0,70.0,normal
+aarav,well controlled,diabetes,19,fasting,99.2,130.0,70.0,normal
+aarav,well controlled,diabetes,20,fasting,101.5,130.0,70.0,normal
+aarav,well controlled,diabetes,21,fasting,108.3,130.0,70.0,normal
+aarav,well controlled,diabetes,22,fasting,109.6,130.0,70.0,normal
+aarav,well controlled,diabetes,23,fasting,105.3,130.0,70.0,normal
+aarav,well controlled,diabetes,24,fasting,103.6,130.0,70.0,normal
+aarav,well controlled,diabetes,25,fasting,105.9,130.0,70.0,normal
+aarav,well controlled,diabetes,26,fasting,106.0,130.0,70.0,normal
+aarav,well controlled,diabetes,27,fasting,97.8,130.0,70.0,normal
+aarav,well controlled,diabetes,28,fasting,104.8,130.0,70.0,normal
+aarav,well controlled,diabetes,29,fasting,101.5,130.0,70.0,normal
+rahul,well controlled,diabetes,0,fasting,99.4,130.0,70.0,normal
+rahul,well controlled,diabetes,1,fasting,103.2,130.0,70.0,normal
+rahul,well controlled,diabetes,2,fasting,90.7,130.0,70.0,normal
+rahul,well controlled,diabetes,3,fasting,107.7,130.0,70.0,normal
+rahul,well controlled,diabetes,4,fasting,95.3,130.0,70.0,normal
+rahul,well controlled,diabetes,5,fasting,106.0,130.0,70.0,normal
+rahul,well controlled,diabetes,6,fasting,104.9,130.0,70.0,normal
+rahul,well controlled,diabetes,7,fasting,100.9,130.0,70.0,normal
+rahul,well controlled,diabetes,8,fasting,104.9,130.0,70.0,normal
+rahul,well controlled,diabetes,9,fasting,100.7,130.0,70.0,normal
+rahul,well controlled,diabetes,10,fasting,107.5,130.0,70.0,normal
+rahul,well controlled,diabetes,11,fasting,96.0,130.0,70.0,normal
+rahul,well controlled,diabetes,12,fasting,103.2,130.0,70.0,normal
+rahul,well controlled,diabetes,13,fasting,102.6,130.0,70.0,normal
+rahul,well controlled,diabetes,14,fasting,100.6,130.0,70.0,normal
+rahul,well controlled,diabetes,15,fasting,105.4,130.0,70.0,normal
+rahul,well controlled,diabetes,16,fasting,97.7,130.0,70.0,normal
+rahul,well controlled,diabetes,17,fasting,89.1,130.0,70.0,normal
+rahul,well controlled,diabetes,18,fasting,107.6,130.0,70.0,normal
+rahul,well controlled,diabetes,19,fasting,97.1,130.0,70.0,normal
+rahul,well controlled,diabetes,20,fasting,96.7,130.0,70.0,normal
+rahul,well controlled,diabetes,21,fasting,107.1,130.0,70.0,normal
+rahul,well controlled,diabetes,22,fasting,110.6,130.0,70.0,normal
+rahul,well controlled,diabetes,23,fasting,98.4,130.0,70.0,normal
+rahul,well controlled,diabetes,24,fasting,104.3,130.0,70.0,normal
+rahul,well controlled,diabetes,25,fasting,102.9,130.0,70.0,normal
+rahul,well controlled,diabetes,26,fasting,93.1,130.0,70.0,normal
+rahul,well controlled,diabetes,27,fasting,101.7,130.0,70.0,normal
+rahul,well controlled,diabetes,28,fasting,104.7,130.0,70.0,normal
+rahul,well controlled,diabetes,29,fasting,103.1,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,0,fasting,118.7,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,1,fasting,116.0,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,2,fasting,113.0,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,3,fasting,114.1,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,4,fasting,108.3,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,5,fasting,104.4,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,6,fasting,121.5,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,7,fasting,115.1,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,8,fasting,113.3,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,9,fasting,121.9,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,10,fasting,113.2,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,11,fasting,114.0,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,12,fasting,117.1,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,13,fasting,93.4,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,14,fasting,109.0,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,15,fasting,101.4,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,16,fasting,119.6,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,17,fasting,101.4,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,18,fasting,108.2,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,19,fasting,108.0,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,20,fasting,103.6,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,21,fasting,112.7,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,22,fasting,107.7,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,23,fasting,102.8,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,24,fasting,109.8,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,25,fasting,109.2,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,26,fasting,104.0,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,27,fasting,118.1,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,28,fasting,109.5,130.0,70.0,normal
+lakshmi,healthy older adult (no proxy conditions): standard limits,diabetes,29,fasting,109.9,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,0,fasting,116.8,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,1,fasting,116.2,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,2,fasting,125.4,130.0,70.0,pre_breach_high
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,3,fasting,122.0,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,4,fasting,116.8,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,5,fasting,118.5,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,6,fasting,114.5,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,7,fasting,117.7,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,8,fasting,118.5,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,9,fasting,114.9,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,10,fasting,118.8,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,11,fasting,125.0,130.0,70.0,pre_breach_high
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,12,fasting,119.2,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,13,fasting,118.9,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,14,fasting,119.4,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,15,fasting,117.0,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,16,fasting,115.9,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,17,fasting,120.2,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,18,fasting,122.9,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,19,fasting,118.8,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,20,fasting,119.4,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,21,fasting,118.4,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,22,fasting,119.7,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,23,fasting,119.4,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,24,fasting,113.8,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,25,fasting,121.7,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,26,fasting,120.4,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,27,fasting,114.3,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,28,fasting,113.8,130.0,70.0,normal
+mohan,"healthy older adult (1 condition): standard limits, occasional pre-breach",diabetes,29,fasting,112.2,130.0,70.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,0,fasting,134.5,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,1,fasting,134.8,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,2,fasting,134.1,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,3,fasting,137.2,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,4,fasting,134.7,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,5,fasting,136.4,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,6,fasting,131.9,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,7,fasting,132.8,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,8,fasting,131.7,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,9,fasting,135.1,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,10,fasting,136.1,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,11,fasting,131.8,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,12,fasting,131.6,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,13,fasting,131.6,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,14,fasting,134.2,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,15,fasting,135.1,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,16,fasting,134.1,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,17,fasting,132.7,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,18,fasting,127.5,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,19,fasting,138.4,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,20,fasting,134.8,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,21,fasting,133.4,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,22,fasting,133.4,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,23,fasting,134.8,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,24,fasting,135.2,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,25,fasting,132.7,140.0,75.0,normal
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,26,fasting,135.7,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,27,fasting,135.4,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,28,fasting,135.1,140.0,75.0,pre_breach_high
+gopal,complex older adult: fasting ~134 is pre-breach of the relaxed 140 limit,diabetes,29,fasting,136.1,140.0,75.0,pre_breach_high
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,0,fasting,77.1,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,1,fasting,76.9,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,2,fasting,80.4,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,3,fasting,79.4,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,4,fasting,81.6,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,5,fasting,80.2,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,6,fasting,77.7,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,7,fasting,76.6,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,8,fasting,78.2,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,9,fasting,75.7,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,10,fasting,79.5,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,11,fasting,76.6,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,12,fasting,75.9,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,13,fasting,75.7,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,14,fasting,78.4,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,15,fasting,79.7,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,16,fasting,78.7,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,17,fasting,80.4,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,18,fasting,77.1,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,19,fasting,80.4,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,20,fasting,78.8,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,21,fasting,78.7,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,22,fasting,80.5,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,23,fasting,75.6,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,24,fasting,79.5,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,25,fasting,79.7,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,26,fasting,78.5,140.0,75.0,pre_breach_low
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,27,fasting,80.5,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,28,fasting,79.6,140.0,75.0,normal
+saroja,complex older adult: fasting ~79 is pre-breach of the raised 75 low limit,diabetes,29,fasting,78.4,140.0,75.0,pre_breach_low
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,0,fasting,107.0,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,1,fasting,109.8,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,2,fasting,107.9,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,3,fasting,107.9,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,4,fasting,109.3,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,5,fasting,107.6,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,6,fasting,107.9,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,7,fasting,108.1,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,8,fasting,108.2,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,9,fasting,107.4,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,10,fasting,107.1,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,11,fasting,108.5,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,12,fasting,108.4,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,13,fasting,108.8,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,14,fasting,109.1,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,15,fasting,108.9,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,16,fasting,107.5,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,17,fasting,111.3,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,18,fasting,108.6,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,19,fasting,111.5,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,20,fasting,106.9,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,21,fasting,108.2,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,22,fasting,109.1,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,23,fasting,109.1,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,24,fasting,108.9,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,25,fasting,108.5,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,26,fasting,108.2,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,27,fasting,108.1,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,28,fasting,110.0,112.0,70.0,pre_breach_high
+vikram,fasting ~108 is pre-breach of the 112 limit,no_diabetes,29,fasting,106.7,112.0,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,0,fasting,98.1,108.8,70.0,normal
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,1,fasting,97.0,108.8,70.0,normal
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,2,fasting,101.3,108.8,70.0,normal
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,3,fasting,100.1,108.8,70.0,normal
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,4,fasting,100.8,108.8,70.0,normal
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,5,fasting,104.1,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,6,fasting,104.4,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,7,fasting,105.7,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,8,fasting,106.1,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,9,fasting,104.6,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,10,fasting,104.2,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,11,fasting,106.8,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,12,fasting,102.6,108.8,70.0,normal
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,13,fasting,107.7,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,14,fasting,109.0,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,15,fasting,107.3,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,16,fasting,106.8,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,17,fasting,108.5,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,18,fasting,114.8,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,19,fasting,106.0,108.8,70.0,pre_breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,20,fasting,112.4,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,21,fasting,112.0,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,22,fasting,111.0,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,23,fasting,112.0,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,24,fasting,114.5,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,25,fasting,111.6,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,26,fasting,110.0,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,27,fasting,114.8,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,28,fasting,116.2,108.8,70.0,breach_high
+arjun,fasting rises 100 -> 116 past the 112 limit,no_diabetes,29,fasting,113.8,108.8,70.0,breach_high
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,0,fasting,92.2,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,1,fasting,98.6,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,2,fasting,94.6,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,3,fasting,91.6,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,4,fasting,95.5,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,5,fasting,100.1,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,6,fasting,98.8,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,7,fasting,96.3,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,8,fasting,95.2,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,9,fasting,91.1,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,10,fasting,94.2,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,11,fasting,98.7,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,12,fasting,91.4,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,13,fasting,96.4,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,14,fasting,95.3,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,15,fasting,94.7,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,16,fasting,92.3,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,17,fasting,102.1,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,18,fasting,94.5,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,19,fasting,92.9,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,20,fasting,90.0,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,21,fasting,100.3,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,22,fasting,93.8,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,23,fasting,93.5,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,24,fasting,93.2,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,25,fasting,98.3,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,26,fasting,93.7,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,27,fasting,97.9,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,28,fasting,90.9,112.0,70.0,normal
+suresh,post-meal ~155 in the pre-breach band of the 160 limit,no_diabetes,29,fasting,91.3,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,0,fasting,99.4,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,1,fasting,91.7,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,2,fasting,89.3,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,3,fasting,95.1,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,4,fasting,93.2,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,5,fasting,86.1,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,6,fasting,90.2,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,7,fasting,89.0,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,8,fasting,91.5,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,9,fasting,94.8,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,10,fasting,93.1,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,11,fasting,94.0,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,12,fasting,95.6,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,13,fasting,90.4,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,14,fasting,93.5,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,15,fasting,96.0,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,16,fasting,89.0,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,17,fasting,95.0,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,18,fasting,91.0,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,19,fasting,99.2,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,20,fasting,93.3,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,21,fasting,92.7,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,22,fasting,93.3,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,23,fasting,91.0,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,24,fasting,93.3,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,25,fasting,88.2,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,26,fasting,95.6,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,27,fasting,93.1,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,28,fasting,92.7,112.0,70.0,normal
+deepa,mostly normal readings,no_diabetes,29,fasting,91.1,112.0,70.0,normal
+ananya,normal readings,no_diabetes,0,fasting,86.6,108.9,70.0,normal
+ananya,normal readings,no_diabetes,1,fasting,87.7,108.9,70.0,normal
+ananya,normal readings,no_diabetes,2,fasting,85.5,108.9,70.0,normal
+ananya,normal readings,no_diabetes,3,fasting,83.9,108.9,70.0,normal
+ananya,normal readings,no_diabetes,4,fasting,80.7,108.9,70.0,normal
+ananya,normal readings,no_diabetes,5,fasting,83.8,108.9,70.0,normal
+ananya,normal readings,no_diabetes,6,fasting,84.1,108.9,70.0,normal
+ananya,normal readings,no_diabetes,7,fasting,92.3,108.9,70.0,normal
+ananya,normal readings,no_diabetes,8,fasting,87.2,108.9,70.0,normal
+ananya,normal readings,no_diabetes,9,fasting,89.9,108.9,70.0,normal
+ananya,normal readings,no_diabetes,10,fasting,88.0,108.9,70.0,normal
+ananya,normal readings,no_diabetes,11,fasting,82.5,108.9,70.0,normal
+ananya,normal readings,no_diabetes,12,fasting,91.3,108.9,70.0,normal
+ananya,normal readings,no_diabetes,13,fasting,83.9,108.9,70.0,normal
+ananya,normal readings,no_diabetes,14,fasting,88.2,108.9,70.0,normal
+ananya,normal readings,no_diabetes,15,fasting,93.1,108.9,70.0,normal
+ananya,normal readings,no_diabetes,16,fasting,83.0,108.9,70.0,normal
+ananya,normal readings,no_diabetes,17,fasting,84.7,108.9,70.0,normal
+ananya,normal readings,no_diabetes,18,fasting,81.2,108.9,70.0,normal
+ananya,normal readings,no_diabetes,19,fasting,86.9,108.9,70.0,normal
+ananya,normal readings,no_diabetes,20,fasting,89.6,108.9,70.0,normal
+ananya,normal readings,no_diabetes,21,fasting,91.6,108.9,70.0,normal
+ananya,normal readings,no_diabetes,22,fasting,93.3,108.9,70.0,normal
+ananya,normal readings,no_diabetes,23,fasting,89.5,108.9,70.0,normal
+ananya,normal readings,no_diabetes,24,fasting,89.6,108.9,70.0,normal
+ananya,normal readings,no_diabetes,25,fasting,87.8,108.9,70.0,normal
+ananya,normal readings,no_diabetes,26,fasting,87.1,108.9,70.0,normal
+ananya,normal readings,no_diabetes,27,fasting,90.1,108.9,70.0,normal
+ananya,normal readings,no_diabetes,28,fasting,87.5,108.9,70.0,normal
+ananya,normal readings,no_diabetes,29,fasting,91.4,108.9,70.0,normal
+fatima,normal readings,no_diabetes,0,fasting,88.4,112.0,70.0,normal
+fatima,normal readings,no_diabetes,1,fasting,93.0,112.0,70.0,normal
+fatima,normal readings,no_diabetes,2,fasting,78.9,112.0,70.0,normal
+fatima,normal readings,no_diabetes,3,fasting,87.9,112.0,70.0,normal
+fatima,normal readings,no_diabetes,4,fasting,86.5,112.0,70.0,normal
+fatima,normal readings,no_diabetes,5,fasting,86.1,112.0,70.0,normal
+fatima,normal readings,no_diabetes,6,fasting,92.4,112.0,70.0,normal
+fatima,normal readings,no_diabetes,7,fasting,91.7,112.0,70.0,normal
+fatima,normal readings,no_diabetes,8,fasting,88.6,112.0,70.0,normal
+fatima,normal readings,no_diabetes,9,fasting,84.0,112.0,70.0,normal
+fatima,normal readings,no_diabetes,10,fasting,94.7,112.0,70.0,normal
+fatima,normal readings,no_diabetes,11,fasting,89.3,112.0,70.0,normal
+fatima,normal readings,no_diabetes,12,fasting,81.2,112.0,70.0,normal
+fatima,normal readings,no_diabetes,13,fasting,85.3,112.0,70.0,normal
+fatima,normal readings,no_diabetes,14,fasting,93.1,112.0,70.0,normal
+fatima,normal readings,no_diabetes,15,fasting,89.3,112.0,70.0,normal
+fatima,normal readings,no_diabetes,16,fasting,87.8,112.0,70.0,normal
+fatima,normal readings,no_diabetes,17,fasting,88.0,112.0,70.0,normal
+fatima,normal readings,no_diabetes,18,fasting,86.4,112.0,70.0,normal
+fatima,normal readings,no_diabetes,19,fasting,87.0,112.0,70.0,normal
+fatima,normal readings,no_diabetes,20,fasting,91.5,112.0,70.0,normal
+fatima,normal readings,no_diabetes,21,fasting,91.6,112.0,70.0,normal
+fatima,normal readings,no_diabetes,22,fasting,94.5,112.0,70.0,normal
+fatima,normal readings,no_diabetes,23,fasting,89.3,112.0,70.0,normal
+fatima,normal readings,no_diabetes,24,fasting,95.4,112.0,70.0,normal
+fatima,normal readings,no_diabetes,25,fasting,89.1,112.0,70.0,normal
+fatima,normal readings,no_diabetes,26,fasting,89.7,112.0,70.0,normal
+fatima,normal readings,no_diabetes,27,fasting,82.2,112.0,70.0,normal
+fatima,normal readings,no_diabetes,28,fasting,86.5,112.0,70.0,normal
+fatima,normal readings,no_diabetes,29,fasting,89.3,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,0,fasting,88.9,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,1,fasting,88.9,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,2,fasting,83.2,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,3,fasting,83.2,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,4,fasting,81.8,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,5,fasting,87.9,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,6,fasting,83.3,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,7,fasting,82.7,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,8,fasting,79.9,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,9,fasting,83.6,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,10,fasting,87.7,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,11,fasting,78.8,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,12,fasting,90.2,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,13,fasting,82.3,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,14,fasting,84.3,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,15,fasting,85.9,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,16,fasting,80.7,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,17,fasting,87.7,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,18,fasting,87.5,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,19,fasting,85.8,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,20,fasting,84.8,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,21,fasting,81.6,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,22,fasting,66.0,112.0,70.0,breach_low
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,23,fasting,81.8,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,24,fasting,86.9,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,25,fasting,85.2,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,26,fasting,83.5,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,27,fasting,82.0,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,28,fasting,87.3,112.0,70.0,normal
+sneha,"normal, with one fasting reading of 66 (breach low)",no_diabetes,29,fasting,81.7,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,0,fasting,89.0,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,1,fasting,90.4,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,2,fasting,90.4,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,3,fasting,88.7,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,4,fasting,90.6,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,5,fasting,87.8,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,6,fasting,90.7,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,7,fasting,84.6,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,8,fasting,89.0,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,9,fasting,85.9,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,10,fasting,89.3,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,11,fasting,88.6,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,12,fasting,92.0,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,13,fasting,89.2,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,14,fasting,84.0,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,15,fasting,90.6,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,16,fasting,88.6,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,17,fasting,88.4,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,18,fasting,89.0,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,19,fasting,87.6,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,20,fasting,87.9,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,21,fasting,88.4,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,22,fasting,89.2,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,23,fasting,85.8,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,24,fasting,88.4,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,25,fasting,91.7,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,26,fasting,90.9,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,27,fasting,87.9,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,28,fasting,92.3,112.0,70.0,normal
+joseph,high risk tier (limits unchanged); readings mostly normal,no_diabetes,29,fasting,87.1,112.0,70.0,normal
